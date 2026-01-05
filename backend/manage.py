@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 import os
 import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 
 def main() -> None:
+    # Charge le .env à la racine du projet (../..)
+    project_root = Path(__file__).resolve().parent.parent
+    load_dotenv(project_root / ".env")
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "pharmapocket.settings")
     try:
         from django.core.management import execute_from_command_line
