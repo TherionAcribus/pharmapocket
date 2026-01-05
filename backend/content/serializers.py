@@ -12,6 +12,13 @@ class MicroArticleListSerializer(serializers.Serializer):
     key_points = serializers.ListField(child=serializers.CharField())
     cover_image_url = serializers.CharField(allow_null=True)
     tags = serializers.ListField(child=serializers.CharField())
+    tags_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    categories_pharmacologie_payload = serializers.ListField(
+        child=serializers.DictField(), required=False
+    )
+    categories_maladies_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    categories_classes_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    published_at = serializers.DateTimeField(allow_null=True, required=False)
 
 
 class MicroArticleDetailSerializer(serializers.Serializer):
@@ -28,3 +35,11 @@ class MicroArticleDetailSerializer(serializers.Serializer):
     categories_pharmacologie = serializers.ListField(child=serializers.CharField())
     categories_maladies = serializers.ListField(child=serializers.CharField())
     categories_classes = serializers.ListField(child=serializers.CharField())
+    tags_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    categories_pharmacologie_payload = serializers.ListField(
+        child=serializers.DictField(), required=False
+    )
+    categories_maladies_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    categories_classes_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    questions = serializers.ListField(child=serializers.DictField(), required=False)
+    published_at = serializers.DateTimeField(allow_null=True, required=False)

@@ -104,6 +104,8 @@ SITE_ID = int(os.environ.get("DJANGO_SITE_ID", "1"))
 
 WAGTAIL_SITE_NAME = "PharmaPocket"
 
+WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "http://localhost:8000")
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
