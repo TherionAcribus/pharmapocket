@@ -1,0 +1,30 @@
+# Environnements
+.venv/
+env/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+
+# Django/Wagtail
+db.sqlite3
+media/
+staticfiles/
+collectstatic/
+*.log
+
+# VS Code / IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Tests
+htmlcov/
+.coverage*
+.pytest_cache/
