@@ -3,7 +3,7 @@ from django.core.validators import MaxLengthValidator, MaxValueValidator, MinVal
 from django.db import models
 from django.utils.text import slugify
 
-from modelcluster.fields import ParentalKey
+from modelcluster.fields import ParentalKey, ParentalManyToManyField
 from modelcluster.contrib.taggit import ClusterTaggableManager
 from rest_framework import serializers
 from taggit.models import TaggedItemBase
@@ -133,12 +133,19 @@ class MicroArticleQuestion(Orderable):
 
 class MicroArticlePage(Page):
     title_question = models.CharField(max_length=160)
-    answer_express = models.TextField(validators=[MaxLengthValidator(350)])
+    answer_express = models.TextField(
+        blank=True,
+        help_text="Réponse courte recommandée (~350 caractères), non bloquante.",
+    )
+    answer_detail = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Réponse longue optionnelle pour approfondir.",
+    )
     key_points = StreamField(
         [("point", blocks.CharBlock(max_length=90))],
         use_json_field=True,
-        min_num=3,
-        max_num=5,
+        blank=True,
     )
     takeaway = models.CharField(max_length=140, blank=True)
     cover_image = models.ForeignKey(
@@ -170,7 +177,7 @@ class MicroArticlePage(Page):
         blank=True,
         max_num=5,
     )
-    related_articles = models.ManyToManyField(
+    related_articles = ParentalManyToManyField(
         "self",
         blank=True,
         symmetrical=False,
@@ -220,17 +227,17 @@ class MicroArticlePage(Page):
         blank=True,
     )
 
-    categories_pharmacologie = models.ManyToManyField(
+    categories_pharmacologie = ParentalManyToManyField(
         "content.CategoryPharmacologie",
         blank=True,
         related_name="microarticles",
     )
-    categories_maladies = models.ManyToManyField(
+    categories_maladies = ParentalManyToManyField(
         "content.CategoryMaladies",
         blank=True,
         related_name="microarticles",
     )
-    categories_classes = models.ManyToManyField(
+    categories_classes = ParentalManyToManyField(
         "content.CategoryClasses",
         blank=True,
         related_name="microarticles",
@@ -243,6 +250,7 @@ class MicroArticlePage(Page):
             [
                 FieldPanel("title_question"),
                 FieldPanel("answer_express"),
+                FieldPanel("answer_detail"),
                 FieldPanel("key_points"),
                 FieldPanel("takeaway"),
                 FieldPanel("cover_image"),
