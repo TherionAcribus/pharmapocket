@@ -377,3 +377,10 @@ class MicroArticlePage(Page):
 
         if self.links and len(self.links) > 5:
             raise ValidationError({"links": "Max 5 liens."})
+
+    def save(self, *args, **kwargs):
+        # Normalise systématiquement le slug pour supprimer les accents/espaces.
+        base_slug = self.slug or self.title_question
+        if base_slug:
+            self.slug = slugify(base_slug)
+        return super().save(*args, **kwargs)

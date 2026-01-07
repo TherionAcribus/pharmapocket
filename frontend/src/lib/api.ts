@@ -8,10 +8,19 @@ import {
 
 function getApiBaseUrl(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!base) {
+  const fallback = "http://127.0.0.1:8000";
+
+  const raw = (base && base.trim()) || (process.env.NODE_ENV !== "production" ? fallback : "");
+  if (!raw) {
     throw new Error("NEXT_PUBLIC_API_BASE_URL is not set");
   }
-  return base.replace(/\/$/, "");
+
+  // On Windows, `localhost` can resolve to IPv6 (::1). Django's devserver often
+  // listens on 127.0.0.1, which makes server-side fetches fail without any Django log.
+  // Only normalize on the server to avoid surprising browser behavior.
+  const normalized = typeof window === "undefined" ? raw.replace("//localhost", "//127.0.0.1") : raw;
+
+  return normalized.replace(/\/$/, "");
 }
 
 async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
@@ -72,7 +81,9 @@ export async function fetchFeed(query: FeedQuery): Promise<CursorPage<MicroArtic
 }
 
 export async function fetchMicroArticle(slug: string): Promise<MicroArticleDetail> {
-  return apiGet<MicroArticleDetail>(`/api/v1/content/microarticles/${slug}/`);
+  return apiGet<MicroArticleDetail>(
+    `/api/v1/content/microarticles/${encodeURIComponent(slug)}/`
+  );
 }
 
 export async function fetchTaxonomyTree(

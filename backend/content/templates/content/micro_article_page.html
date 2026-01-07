@@ -1,0 +1,27 @@
+{% load wagtailcore_tags wagtailimages_tags %}
+
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ page.seo_title|default:page.title }}</title>
+  </head>
+  <body>
+    <main>
+      <h1>{{ page.title_question }}</h1>
+
+      {% if page.answer_express %}
+        <p>{{ page.answer_express }}</p>
+      {% endif %}
+
+      {% if page.answer_detail %}
+        <div>{{ page.answer_detail|richtext }}</div>
+      {% endif %}
+
+      {% if page.cover_image %}
+        {% image page.cover_image fill-800x450 %}
+      {% endif %}
+    </main>
+  </body>
+</html>

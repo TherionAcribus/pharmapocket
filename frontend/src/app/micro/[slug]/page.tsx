@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { notFound } from "next/navigation";
+
 import { FilterSheet } from "@/components/FilterSheet";
 import { SeeMoreRenderer } from "@/components/SeeMoreRenderer";
 import { Badge } from "@/components/ui/badge";
@@ -11,10 +13,22 @@ import { fetchMicroArticle } from "@/lib/api";
 export default async function MicroArticlePage({
   params,
 }: {
-  params: { slug: string };
+  params: { slug: string } | Promise<{ slug: string }>;
 }) {
-  const { slug } = params;
-  const data = await fetchMicroArticle(slug);
+  const { slug } = await Promise.resolve(params);
+  if (!slug || slug === "undefined") {
+    notFound();
+  }
+  let data;
+  try {
+    data = await fetchMicroArticle(slug);
+  } catch (e) {
+    console.error("fetchMicroArticle failed", { slug, error: e });
+    if (process.env.NODE_ENV !== "production") {
+      throw e;
+    }
+    notFound();
+  }
 
   return (
     <div className="min-h-screen bg-background">
