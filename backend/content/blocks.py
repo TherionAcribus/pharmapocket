@@ -1,6 +1,7 @@
 from wagtail import blocks
 from wagtail.documents.blocks import DocumentChooserBlock
 from wagtail.images.blocks import ImageChooserBlock
+from wagtail.snippets.blocks import SnippetChooserBlock
 
 
 class Mechanism3StepsBlock(blocks.StructBlock):
@@ -15,8 +16,7 @@ class ImageWithCaptionBlock(blocks.StructBlock):
 
 
 class ReferenceBlock(blocks.StructBlock):
-    title = blocks.CharBlock(required=True, max_length=200)
-    url = blocks.URLBlock(required=False)
-    source = blocks.CharBlock(required=False, max_length=200)
-    date = blocks.DateBlock(required=False)
+    source = SnippetChooserBlock("content.Source", required=True)
+    note = blocks.TextBlock(required=False, help_text="Contexte ou citation courte")
+    page = blocks.CharBlock(required=False, max_length=60, help_text="Page/chapitre")
     document = DocumentChooserBlock(required=False)

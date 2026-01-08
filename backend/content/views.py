@@ -1,10 +1,18 @@
 from django.db.models import Q
 from django.utils.text import slugify
-from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import CategoryClasses, CategoryMaladies, CategoryPharmacologie, MicroArticlePage
+from .models import (
+    CategoryClasses,
+    CategoryMaladies,
+    CategoryPharmacologie,
+    MicroArticlePage,
+    Source,
+)
 from .pagination import MicroArticleCursorPagination
 from .serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
 
@@ -212,3 +220,30 @@ class MicroArticleDetailView(RetrieveAPIView):
         }
         serializer = self.get_serializer(data)
         return Response(serializer.data)
+
+
+class SourceSearchSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    kind = serializers.CharField(allow_blank=True, allow_null=True)
+    url = serializers.URLField(allow_null=True, required=False)
+    publisher = serializers.CharField(allow_blank=True, required=False)
+    author = serializers.CharField(allow_blank=True, required=False)
+    publication_date = serializers.DateField(allow_null=True, required=False)
+    accessed_date = serializers.DateField(allow_null=True, required=False)
+
+
+class SourceSearchView(ListAPIView):
+    serializer_class = SourceSearchSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = Source.objects.all().order_by("name")
+        q = self.request.query_params.get("q")
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(publisher__icontains=q)
+                | Q(author__icontains=q)
+            )
+        return qs

@@ -50,6 +50,45 @@ class Question(models.Model):
         return self.prompt
 
 
+@register_snippet
+class Source(models.Model):
+    class SourceKind(models.TextChoices):
+        PRESS = "press", "Presse professionnelle"
+        INSTITUTIONAL = "institutional", "Site institutionnel"
+        BOOK = "book", "Livre"
+        SCIENTIFIC = "article", "Article scientifique"
+        OTHER = "other", "Autre"
+
+    name = models.CharField(max_length=200)
+    kind = models.CharField(max_length=32, choices=SourceKind.choices, blank=True)
+    url = models.URLField(blank=True)
+    publisher = models.CharField(max_length=200, blank=True)
+    author = models.CharField(max_length=200, blank=True)
+    publication_date = models.DateField(blank=True, null=True)
+    accessed_date = models.DateField(blank=True, null=True)
+    notes = models.TextField(blank=True)
+
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("kind"),
+        FieldPanel("url"),
+        FieldPanel("publisher"),
+        FieldPanel("author"),
+        FieldPanel("publication_date"),
+        FieldPanel("accessed_date"),
+        FieldPanel("notes"),
+    ]
+
+    search_fields = [
+        index.SearchField("name"),
+        index.SearchField("publisher"),
+        index.SearchField("author"),
+    ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class BaseCategory(MP_Node):
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=140, unique=True, blank=True)
