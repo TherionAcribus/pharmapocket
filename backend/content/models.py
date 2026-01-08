@@ -186,6 +186,13 @@ class MicroArticlePage(Page):
         use_json_field=True,
         blank=True,
     )
+    sources = StreamField(
+        [("reference", ReferenceBlock())],
+        use_json_field=True,
+        blank=True,
+        max_num=12,
+        help_text="Sources principales de l’article",
+    )
     takeaway = models.CharField(max_length=140, blank=True)
     cover_image = models.ForeignKey(
         get_image_model_string(),
@@ -291,6 +298,7 @@ class MicroArticlePage(Page):
                 FieldPanel("answer_express"),
                 FieldPanel("answer_detail"),
                 FieldPanel("key_points"),
+                FieldPanel("sources"),
                 FieldPanel("takeaway"),
                 FieldPanel("cover_image"),
                 FieldPanel("links"),
@@ -328,6 +336,9 @@ class MicroArticlePage(Page):
 
     def api_key_points(self) -> list[str]:
         return [block.value for block in self.key_points]
+
+    def api_sources(self) -> list[dict]:
+        return self.sources.stream_data if self.sources else []
 
     def api_cover(self) -> dict | None:
         if not self.cover_image_id:
@@ -387,6 +398,7 @@ class MicroArticlePage(Page):
         APIField("answer_express"),
         APIField("takeaway"),
         APIField("api_key_points", serializer=serializers.ListField(child=serializers.CharField())),
+        APIField("api_sources", serializer=serializers.ListField(child=serializers.DictField())),
         APIField("api_cover", serializer=serializers.DictField(allow_null=True)),
         APIField("api_links", serializer=serializers.ListField(child=serializers.DictField())),
         APIField("api_see_more", serializer=serializers.ListField(child=serializers.DictField())),
