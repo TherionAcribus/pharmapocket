@@ -42,7 +42,7 @@ export default function DiscoverClient() {
 
       <div className="space-y-3">
         <div className="text-sm font-semibold">Nouveautés</div>
-        <FeedClient basePath="/discover" embedded />
+        <FeedClient basePath="/discover" embedded showSearch={false} />
       </div>
     </MobileScaffold>
   );

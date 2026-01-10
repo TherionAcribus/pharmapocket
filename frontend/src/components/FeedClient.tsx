@@ -35,9 +35,11 @@ function cursorFromUrl(nextUrl: string | null): string | null {
 export function FeedClient({
   basePath = "/discover",
   embedded = false,
+  showSearch = true,
 }: {
   basePath?: string;
   embedded?: boolean;
+  showSearch?: boolean;
 }) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -174,32 +176,36 @@ export function FeedClient({
             <div className="flex-1" />
             <FilterSheet basePath={basePath} />
           </div>
-          <div className="mx-auto w-full max-w-3xl px-4 pb-3">
-            <form onSubmit={onSubmitSearch} className="flex gap-2">
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Rechercher (ex: metformine)…"
-              />
-              <Button type="submit">OK</Button>
-              <Button type="button" variant="outline" onClick={clearSearch}>
-                Effacer
-              </Button>
-            </form>
-          </div>
+          {showSearch ? (
+            <div className="mx-auto w-full max-w-3xl px-4 pb-3">
+              <form onSubmit={onSubmitSearch} className="flex gap-2">
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Rechercher (ex: metformine)…"
+                />
+                <Button type="submit">OK</Button>
+                <Button type="button" variant="outline" onClick={clearSearch}>
+                  Effacer
+                </Button>
+              </form>
+            </div>
+          ) : null}
         </header>
       ) : (
-        <form onSubmit={onSubmitSearch} className="flex gap-2">
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Rechercher (ex: metformine)…"
-          />
-          <Button type="submit">OK</Button>
-          <Button type="button" variant="outline" onClick={clearSearch}>
-            Effacer
-          </Button>
-        </form>
+        showSearch ? (
+          <form onSubmit={onSubmitSearch} className="flex gap-2">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Rechercher (ex: metformine)…"
+            />
+            <Button type="submit">OK</Button>
+            <Button type="button" variant="outline" onClick={clearSearch}>
+              Effacer
+            </Button>
+          </form>
+        ) : null
       )}
 
       <main

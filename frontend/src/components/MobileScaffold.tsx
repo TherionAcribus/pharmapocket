@@ -139,12 +139,12 @@ export function MobileScaffold({
 
   const goToTaxonomy = (t: Taxonomy) => {
     setTaxonomy(t);
-    router.push(`/discover?taxonomy=${encodeURIComponent(t)}&scope=subtree`);
+    router.push(`/library?taxonomy=${encodeURIComponent(t)}&scope=subtree`);
   };
 
   const goToNode = (id: number) => {
     router.push(
-      `/discover?taxonomy=${encodeURIComponent(taxonomy)}&node=${encodeURIComponent(
+      `/library?taxonomy=${encodeURIComponent(taxonomy)}&node=${encodeURIComponent(
         String(id)
       )}&scope=subtree`
     );

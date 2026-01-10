@@ -1,13 +1,17 @@
 "use client";
 
+import { FeedClient } from "@/components/FeedClient";
+import { FilterSheet } from "@/components/FilterSheet";
 import { MobileScaffold } from "@/components/MobileScaffold";
 
 export default function LibraryPage() {
   return (
-    <MobileScaffold title="Bibliothèque">
-      <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-        Bientôt disponible.
-      </div>
+    <MobileScaffold
+      title="Bibliothèque"
+      headerRight={<FilterSheet basePath="/library" />}
+      contentClassName="space-y-4"
+    >
+      <FeedClient basePath="/library" embedded />
     </MobileScaffold>
   );
 }
