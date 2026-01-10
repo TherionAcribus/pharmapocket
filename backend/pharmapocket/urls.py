@@ -11,6 +11,8 @@ from .wagtail_api import api_router
 
 urlpatterns = [
     path("django-admin/", admin.site.urls),
+    path("accounts/", include("allauth.urls")),
+    path("auth/", include("allauth.headless.urls")),
     path("cms/", include(wagtailadmin_urls)),
     path("documents/", include(wagtaildocs_urls)),
     path("api/v1/", include("pharmapocket.v1_urls")),

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -18,10 +19,15 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
+    "users.apps.UsersConfig",
+    "allauth",
+    "allauth.account",
+    "allauth.headless",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
     "treebeard",
     "corsheaders",
     "rest_framework",
-    "rest_framework.authtoken",
     "taggit",
     "modelcluster",
     "wagtail.contrib.forms",
@@ -48,6 +54,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "wagtail.contrib.redirects.middleware.RedirectMiddleware",
@@ -106,14 +113,49 @@ WAGTAIL_SITE_NAME = "PharmaPocket"
 
 WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "http://localhost:8000")
 
+DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@localhost")
+
+if DEBUG:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = os.environ.get(
+        "DJANGO_EMAIL_BACKEND",
+        "django.core.mail.backends.smtp.EmailBackend",
+    )
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.TokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
+}
+
+AUTH_USER_MODEL = "users.User"
+
+AUTHENTICATION_BACKENDS = (
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+)
+
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+
+HEADLESS_FRONTEND_URLS = {
+    "account_confirm_email": os.environ.get(
+        "HEADLESS_URL_ACCOUNT_CONFIRM_EMAIL",
+        "http://localhost:3000/account/verify-email/{key}",
+    ),
+    "account_reset_password_from_key": os.environ.get(
+        "HEADLESS_URL_ACCOUNT_RESET_PASSWORD_FROM_KEY",
+        "http://localhost:3000/account/password/reset/key/{key}",
+    ),
+    "account_signup": os.environ.get(
+        "HEADLESS_URL_ACCOUNT_SIGNUP",
+        "http://localhost:3000/account/signup",
+    ),
 }
 
 CORS_ALLOWED_ORIGINS = [
@@ -121,6 +163,10 @@ CORS_ALLOWED_ORIGINS = [
     for o in os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
     if o.strip()
 ]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = (*default_headers, "x-csrftoken")
 
 CSRF_TRUSTED_ORIGINS = [
     o.strip()

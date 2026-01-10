@@ -8,7 +8,7 @@ import {
 
 function getApiBaseUrl(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  const fallback = "http://127.0.0.1:8000";
+  const fallback = "http://localhost:8000";
 
   const raw = (base && base.trim()) || (process.env.NODE_ENV !== "production" ? fallback : "");
   if (!raw) {
@@ -23,16 +23,59 @@ function getApiBaseUrl(): string {
   return normalized.replace(/\/$/, "");
 }
 
-async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${getApiBaseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.headers ?? {}),
-    },
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const parts = document.cookie.split(";");
+  for (const part of parts) {
+    const [k, ...rest] = part.trim().split("=");
+    if (k === name) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
+const CSRF_COOKIE_NAME = "csrftoken";
+
+async function ensureCsrfCookie(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (getCookie(CSRF_COOKIE_NAME)) return;
+  await fetch(`${getApiBaseUrl()}/api/v1/auth/csrf/`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
     cache: "no-store",
   });
+}
+
+function isMutatingMethod(method: string | undefined): boolean {
+  const m = (method ?? "GET").toUpperCase();
+  return m !== "GET" && m !== "HEAD" && m !== "OPTIONS" && m !== "TRACE";
+}
+
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = `${getApiBaseUrl()}${path}`;
+  const method = init?.method ?? "GET";
+
+  const headers = new Headers(init?.headers ?? {});
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+
+  if (typeof window !== "undefined" && isMutatingMethod(method)) {
+    await ensureCsrfCookie();
+    const csrf = getCookie(CSRF_COOKIE_NAME);
+    if (csrf && !headers.has("X-CSRFToken")) {
+      headers.set("X-CSRFToken", csrf);
+    }
+  }
+
+  return fetch(url, {
+    ...init,
+    headers,
+    credentials: "include",
+    cache: "no-store",
+  });
+}
+
+async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await apiFetch(path, init);
 
   if (!res.ok) {
     let body: unknown = null;
@@ -44,6 +87,23 @@ async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`API ${res.status} on ${path}: ${JSON.stringify(body)}`);
   }
 
+  return (await res.json()) as T;
+}
+
+async function apiJson<T>(path: string, init: RequestInit): Promise<T> {
+  const res = await apiFetch(path, init);
+
+  if (!res.ok) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = await res.text();
+    }
+    throw new Error(`API ${res.status} on ${path}: ${JSON.stringify(body)}`);
+  }
+
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -96,4 +156,64 @@ export async function fetchTags(q?: string, limit = 200): Promise<TagPayload[]> 
   return apiGet<TagPayload[]>(
     `/api/v1/tags/${buildQuery({ q: q?.trim() ? q.trim() : undefined, limit: String(limit) })}`
   );
+}
+
+export type CurrentUser = {
+  id: number;
+  email: string;
+  username: string;
+  is_staff: boolean;
+  is_superuser: boolean;
+};
+
+export async function fetchMe(): Promise<CurrentUser> {
+  return apiGet<CurrentUser>("/api/v1/auth/me/");
+}
+
+const ALLAUTH_CLIENT = "browser";
+
+export async function authLogin(input: {
+  email: string;
+  password: string;
+}): Promise<unknown> {
+  return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email: input.email, password: input.password }),
+  });
+}
+
+export async function authSignup(input: {
+  email: string;
+  password: string;
+}): Promise<unknown> {
+  return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/signup`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email: input.email, password: input.password }),
+  });
+}
+
+export async function authLogout(): Promise<void> {
+  await apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/session`, {
+    method: "DELETE",
+  });
+}
+
+export async function authVerifyEmail(key: string): Promise<unknown> {
+  return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/email/verify`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ key }),
+  });
+}
+
+export async function ensureCsrf(): Promise<void> {
+  await ensureCsrfCookie();
 }

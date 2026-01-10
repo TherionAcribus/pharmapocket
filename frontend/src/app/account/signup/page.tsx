@@ -1,0 +1,148 @@
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+
+import { MobileScaffold } from "@/components/MobileScaffold";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { authSignup, ensureCsrf } from "@/lib/api";
+
+function getBackendBaseUrlClient(): string {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const fallback = "http://localhost:8000";
+  const raw = (base && base.trim()) || fallback;
+  return raw.replace(/\/$/, "");
+}
+
+function startProviderRedirect(provider: string, process: "login" | "connect", callbackUrl: string) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `${getBackendBaseUrlClient()}/auth/browser/v1/auth/provider/redirect`;
+
+  const csrf = (() => {
+    const parts = document.cookie.split(";");
+    for (const part of parts) {
+      const [k, ...rest] = part.trim().split("=");
+      if (k === "csrftoken") return decodeURIComponent(rest.join("="));
+    }
+    return null;
+  })();
+
+  const add = (name: string, value: string) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  };
+
+  if (csrf) add("csrfmiddlewaretoken", csrf);
+
+  add("provider", provider);
+  add("process", process);
+  add("callback_url", callbackUrl);
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
+function toErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
+export default function SignupPage() {
+  const router = useRouter();
+
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [done, setDone] = React.useState(false);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      await authSignup({ email: email.trim(), password });
+      setDone(true);
+    } catch (err: unknown) {
+      setError(toErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <MobileScaffold title="Inscription">
+      <div className="mx-auto w-full max-w-md space-y-4">
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={async () => {
+            await ensureCsrf();
+            startProviderRedirect(
+              "google",
+              "login",
+              `${window.location.origin}/account/oauth-callback?next=${encodeURIComponent(
+                "/discover"
+              )}`
+            );
+          }}
+        >
+          Continuer avec Google
+        </Button>
+
+        <div className="rounded-xl border bg-card p-4">
+          {done ? (
+            <div className="space-y-3">
+              <div className="text-sm">
+                Compte créé. Vérifie ta boîte mail pour confirmer ton adresse, puis connecte-toi.
+              </div>
+              <Button onClick={() => router.push("/account/login")}>
+                Aller à la connexion
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={onSubmit} className="space-y-3">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">Email</div>
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-sm font-medium">Mot de passe</div>
+                <Input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+
+              {error ? (
+                <div className="rounded-md border bg-destructive/5 p-2 text-sm text-destructive">
+                  {error}
+                </div>
+              ) : null}
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Création…" : "Créer mon compte"}
+              </Button>
+            </form>
+          )}
+        </div>
+      </div>
+    </MobileScaffold>
+  );
+}

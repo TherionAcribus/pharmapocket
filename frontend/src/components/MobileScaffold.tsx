@@ -8,7 +8,10 @@ import {
   Brain as BrainIcon,
   LayoutGrid as LayoutGridIcon,
   Layers as LayersIcon,
+  LogIn as LogInIcon,
+  LogOut as LogOutIcon,
   Menu as MenuIcon,
+  Settings as SettingsIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +26,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { fetchTaxonomyTree } from "@/lib/api";
+import { authLogout, fetchMe, fetchTaxonomyTree } from "@/lib/api";
 import type { TaxonomyNode, TaxonomyTreeResponse } from "@/lib/types";
 
 type TabItem = {
@@ -99,6 +102,8 @@ export function MobileScaffold({
   const [tree, setTree] = React.useState<TaxonomyTreeResponse | null>(null);
   const [loadingTree, setLoadingTree] = React.useState(false);
 
+  const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+
   React.useEffect(() => {
     let cancelled = false;
     setLoadingTree(true);
@@ -115,6 +120,22 @@ export function MobileScaffold({
       cancelled = true;
     };
   }, [taxonomy]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchMe()
+      .then((me) => {
+        if (cancelled) return;
+        setCurrentUserEmail(me.email || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCurrentUserEmail(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const goToTaxonomy = (t: Taxonomy) => {
     setTaxonomy(t);
@@ -198,7 +219,73 @@ export function MobileScaffold({
                     </div>
                   </div>
 
-                  <div className="h-8" />
+                  <Separator className="my-2" />
+
+                  <div className="space-y-1 p-2">
+                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
+                      Compte
+                    </div>
+
+                    {currentUserEmail ? (
+                      <div className="space-y-1">
+                        <div className="px-3 py-1 text-xs text-muted-foreground truncate">
+                          {currentUserEmail}
+                        </div>
+
+                        <SheetClose asChild>
+                          <Link
+                            href="/account/preferences"
+                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent"
+                          >
+                            <SettingsIcon className="size-4" />
+                            <span className="truncate">Préférences</span>
+                          </Link>
+                        </SheetClose>
+
+                        <SheetClose asChild>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
+                            onClick={() => {
+                              authLogout()
+                                .catch(() => {})
+                                .finally(() => {
+                                  setCurrentUserEmail(null);
+                                  router.push("/discover");
+                                });
+                            }}
+                          >
+                            <LogOutIcon className="size-4" />
+                            <span className="truncate">Déconnexion</span>
+                          </button>
+                        </SheetClose>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <SheetClose asChild>
+                          <Link
+                            href="/account/login"
+                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent"
+                          >
+                            <LogInIcon className="size-4" />
+                            <span className="truncate">Connexion</span>
+                          </Link>
+                        </SheetClose>
+
+                        <SheetClose asChild>
+                          <Link
+                            href="/account/signup"
+                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent"
+                          >
+                            <LogInIcon className="size-4" />
+                            <span className="truncate">Inscription</span>
+                          </Link>
+                        </SheetClose>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="h-4" />
                 </ScrollArea>
               </SheetContent>
             </Sheet>
