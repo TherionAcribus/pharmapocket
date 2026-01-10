@@ -121,24 +121,87 @@ export function SeeMoreRenderer({
             return (
               <div key={idx} className="rounded-xl border p-4">
                 <div className="text-sm font-semibold">{titleMap[b.type] ?? b.type}</div>
-                <ul className="mt-3 list-inside list-disc space-y-2 text-sm">
+                <ul className="mt-3 space-y-2 text-sm">
                   {rows.map((r, i) => {
-                    const text = typeof r === "string" ? r : JSON.stringify(r);
+                    const refObj = r && typeof r === "object" ? (r as Record<string, unknown>) : null;
+                    const source = refObj && typeof refObj.source === "object" ? (refObj.source as Record<string, unknown>) : null;
+                    const document =
+                      refObj && typeof refObj.document === "object" ? (refObj.document as Record<string, unknown>) : null;
+
+                    const title =
+                      (source?.name as string) ||
+                      (source?.title as string) ||
+                      (source?.publisher as string) ||
+                      (typeof r === "string" ? r : "Source");
+                    const url = typeof source?.url === "string" ? source.url : undefined;
+                    const publisher = typeof source?.publisher === "string" ? source.publisher : undefined;
+                    const author = typeof source?.author === "string" ? source.author : undefined;
+                    const pubDate = typeof source?.publication_date === "string" ? source.publication_date : undefined;
+                    const note = typeof refObj?.note === "string" ? refObj.note : undefined;
+                    const page = typeof refObj?.page === "string" ? refObj.page : undefined;
+                    const documentTitle = typeof document?.title === "string" ? document.title : undefined;
+                    const documentUrl = typeof document?.url === "string" ? document.url : undefined;
+
+                    const metaParts = [publisher, author, pubDate].filter(Boolean).join(" · ");
+                    const copyTextValue =
+                      [
+                        title,
+                        url ? `URL: ${url}` : null,
+                        publisher ? `Éditeur: ${publisher}` : null,
+                        author ? `Auteur: ${author}` : null,
+                        pubDate ? `Date: ${pubDate}` : null,
+                        page ? `Page: ${page}` : null,
+                        note ? `Note: ${note}` : null,
+                        documentTitle ? `Document: ${documentTitle}` : null,
+                        documentUrl ? `Document URL: ${documentUrl}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" | ") || (typeof r === "string" ? r : JSON.stringify(r));
+
                     return (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="flex-1">{text}</span>
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label="Copier"
-                          onClick={() => onCopy(text)}
-                        >
-                          <CopyIcon className="size-4" />
-                        </Button>
-                        {copied === text ? (
-                          <span className="text-xs text-muted-foreground">Copié</span>
-                        ) : null}
+                      <li key={i} className="rounded-lg border p-3">
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="text-sm font-semibold leading-tight">
+                              {url ? (
+                                <Link href={url} target="_blank" className="underline">
+                                  {title}
+                                </Link>
+                              ) : (
+                                title
+                              )}
+                            </div>
+                            {metaParts ? <div className="text-xs text-muted-foreground">{metaParts}</div> : null}
+                            {note ? <div className="text-xs text-muted-foreground">Note : {note}</div> : null}
+                            {page ? <div className="text-xs text-muted-foreground">Page : {page}</div> : null}
+                            {documentTitle || documentUrl ? (
+                              <div className="text-xs">
+                                {documentUrl ? (
+                                  <Link href={documentUrl} target="_blank" className="underline">
+                                    {documentTitle || documentUrl}
+                                  </Link>
+                                ) : (
+                                  documentTitle
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label="Copier la référence"
+                              onClick={() => onCopy(copyTextValue)}
+                            >
+                              <CopyIcon className="size-4" />
+                            </Button>
+                            {copied === copyTextValue ? (
+                              <span className="text-[11px] text-muted-foreground">Copié</span>
+                            ) : null}
+                          </div>
+                        </div>
                       </li>
                     );
                   })}
