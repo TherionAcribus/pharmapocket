@@ -11,7 +11,7 @@ from treebeard.mp_tree import MP_Node
 from wagtail import blocks
 from wagtail.admin.panels import FieldPanel, InlinePanel, MultiFieldPanel
 from wagtail.api import APIField
-from wagtail.fields import StreamField
+from wagtail.fields import RichTextField, StreamField
 from wagtail.images import get_image_model_string
 from wagtail.models import Orderable, Page
 from wagtail.search import index
@@ -172,14 +172,16 @@ class MicroArticleQuestion(Orderable):
 
 class MicroArticlePage(Page):
     title_question = models.CharField(max_length=160)
-    answer_express = models.TextField(
+    answer_express = RichTextField(
+        features=["bold", "italic", "link", "ol", "ul"],
         blank=True,
-        help_text="Réponse courte recommandée (~350 caractères), non bloquante.",
+        help_text="Réponse courte recommandée (~350 caractères), non bloquante. RichText autorisé (gras/italique/liens/listes).",
     )
-    answer_detail = models.TextField(
+    answer_detail = RichTextField(
+        features=["bold", "italic", "link", "ol", "ul"],
         blank=True,
         null=True,
-        help_text="Réponse longue optionnelle pour approfondir.",
+        help_text="Réponse longue optionnelle pour approfondir (RichText).",
     )
     key_points = StreamField(
         [("point", blocks.CharBlock(max_length=90))],
@@ -193,7 +195,11 @@ class MicroArticlePage(Page):
         max_num=12,
         help_text="Sources principales de l’article",
     )
-    takeaway = models.CharField(max_length=140, blank=True)
+    takeaway = RichTextField(
+        features=["bold", "italic", "link", "ol", "ul"],
+        blank=True,
+        help_text="Résumé essentiel (peut contenir gras/italique/liens/listes).",
+    )
     cover_image = models.ForeignKey(
         get_image_model_string(),
         null=True,

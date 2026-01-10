@@ -51,8 +51,8 @@ function writeDeckToSession(next: DeckState) {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(DECK_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // ignore
+  } catch (error) {
+    console.error("Error writing deck to session:", error);
   }
 }
 
@@ -216,6 +216,16 @@ export default function ReaderClient({
     else goRelative(-1);
   };
 
+  const RichText = ({ html, className }: { html?: string; className?: string }) => {
+    if (!html) return null;
+    return (
+      <div
+        className={className}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  };
+
   return (
     <div className="min-h-dvh bg-background" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
@@ -270,9 +280,10 @@ export default function ReaderClient({
           <div className="text-2xl font-semibold leading-snug">{data.title_question}</div>
 
           <div className="relative">
-            <div className="text-base text-muted-foreground line-clamp-4">
-              {data.answer_express}
-            </div>
+            <RichText
+              html={data.answer_express}
+              className="prose prose-zinc max-w-none text-base text-muted-foreground dark:prose-invert"
+            />
           </div>
 
           {data.key_points?.length ? (
@@ -336,7 +347,10 @@ export default function ReaderClient({
             <div className="space-y-6">
               <div className="space-y-2">
                 <div className="text-sm font-semibold">{data.title_question}</div>
-                <div className="text-sm text-muted-foreground">{data.takeaway}</div>
+                <RichText
+                  html={data.takeaway}
+                  className="prose prose-zinc max-w-none text-sm text-muted-foreground dark:prose-invert"
+                />
               </div>
 
               {hasLongContent ? (

@@ -42,8 +42,11 @@ export function MicroCard({
           <div className="line-clamp-2 text-base font-semibold leading-snug">
             {item.title_question}
           </div>
-          <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-            {item.answer_express}
+          <div className="mt-1 text-sm text-muted-foreground">
+            <div
+              className="prose prose-zinc max-w-none line-clamp-2 dark:prose-invert"
+              dangerouslySetInnerHTML={{ __html: item.answer_express }}
+            />
           </div>
 
           {item.key_points?.length ? (
