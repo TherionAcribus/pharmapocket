@@ -60,11 +60,16 @@ export default function LoginPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    void ensureCsrf();
+  }, []);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
+      await ensureCsrf();
       await authLogin({ email: email.trim(), password });
       await fetchMe();
       router.push("/discover");
