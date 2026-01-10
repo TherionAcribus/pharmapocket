@@ -1,6 +1,11 @@
+"use client";
+
+import * as React from "react";
 import Link from "next/link";
+import { Copy as CopyIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { StreamBlock } from "@/lib/types";
 
@@ -10,6 +15,25 @@ function asArray<T>(value: unknown, guard?: (v: unknown) => v is T): T[] {
   return value.filter(guard);
 }
 
+async function copyText(text: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  if (typeof document === "undefined") return;
+
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "true");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+}
+
 export function SeeMoreRenderer({
   seeMore,
   links,
@@ -17,6 +41,18 @@ export function SeeMoreRenderer({
   seeMore?: StreamBlock[];
   links?: StreamBlock[];
 }) {
+  const [copied, setCopied] = React.useState<string | null>(null);
+
+  const onCopy = async (value: string) => {
+    try {
+      await copyText(value);
+      setCopied(value);
+      window.setTimeout(() => setCopied((v) => (v === value ? null : v)), 1200);
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="space-y-6">
       {asArray<StreamBlock>(seeMore).map((b, idx) => {
@@ -80,6 +116,37 @@ export function SeeMoreRenderer({
           };
 
           const rows = asArray<unknown>(b.value);
+
+          if (b.type === "references") {
+            return (
+              <div key={idx} className="rounded-xl border p-4">
+                <div className="text-sm font-semibold">{titleMap[b.type] ?? b.type}</div>
+                <ul className="mt-3 list-inside list-disc space-y-2 text-sm">
+                  {rows.map((r, i) => {
+                    const text = typeof r === "string" ? r : JSON.stringify(r);
+                    return (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="flex-1">{text}</span>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label="Copier"
+                          onClick={() => onCopy(text)}
+                        >
+                          <CopyIcon className="size-4" />
+                        </Button>
+                        {copied === text ? (
+                          <span className="text-xs text-muted-foreground">Copié</span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          }
+
           return (
             <div key={idx} className="rounded-xl border p-4">
               <div className="text-sm font-semibold">{titleMap[b.type] ?? b.type}</div>
@@ -151,16 +218,30 @@ export function SeeMoreRenderer({
                 const v = (l.value as Record<string, unknown>) || {};
                 const url = typeof v.url === "string" ? v.url : undefined;
                 return (
-                  <div key={idx} className="text-sm">
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      {url ? (
+                        <Link href={url} target="_blank" className="underline">
+                          {typeof v.title === "string" ? v.title : url}
+                        </Link>
+                      ) : (
+                        <span>{typeof v.title === "string" ? v.title : "Lien"}</span>
+                      )}
+                      {typeof v.source === "string" ? (
+                        <span className="text-muted-foreground"> · {v.source}</span>
+                      ) : null}
+                    </div>
+
                     {url ? (
-                      <Link href={url} target="_blank" className="underline">
-                        {typeof v.title === "string" ? v.title : url}
-                      </Link>
-                    ) : (
-                      <span>{typeof v.title === "string" ? v.title : "Lien"}</span>
-                    )}
-                    {typeof v.source === "string" ? (
-                      <span className="text-muted-foreground"> · {v.source}</span>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Copier l'URL"
+                        onClick={() => onCopy(url)}
+                      >
+                        <CopyIcon className="size-4" />
+                      </Button>
                     ) : null}
                   </div>
                 );

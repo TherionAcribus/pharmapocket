@@ -85,6 +85,8 @@ export function FeedClient({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const deckSlugs = useMemo(() => items.map((i) => i.slug), [items]);
+
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   async function loadFirstPage() {
@@ -220,8 +222,8 @@ export function FeedClient({
         ) : null}
 
         <div className="space-y-3">
-          {items.map((item) => (
-            <MicroCard key={item.id} item={item} />
+          {items.map((item, index) => (
+            <MicroCard key={item.id} item={item} deckSlugs={deckSlugs} deckIndex={index} />
           ))}
         </div>
 

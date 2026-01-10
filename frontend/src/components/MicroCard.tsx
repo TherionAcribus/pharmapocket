@@ -1,14 +1,41 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { MicroArticleListItem } from "@/lib/types";
 
-export function MicroCard({ item }: { item: MicroArticleListItem }) {
+const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
+
+export function MicroCard({
+  item,
+  deckSlugs,
+  deckIndex,
+}: {
+  item: MicroArticleListItem;
+  deckSlugs?: string[];
+  deckIndex?: number;
+}) {
+  const onOpen = () => {
+    if (typeof window === "undefined") return;
+    if (!deckSlugs?.length) return;
+    const index = typeof deckIndex === "number" ? deckIndex : deckSlugs.indexOf(item.slug);
+    try {
+      window.sessionStorage.setItem(
+        DECK_STORAGE_KEY,
+        JSON.stringify({ slugs: deckSlugs, index, savedAt: Date.now() })
+      );
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <Link
       href={`/micro/${item.slug}`}
       className="block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent"
+      onClick={onOpen}
     >
       <div className="flex items-start gap-3 p-4">
         <div className="min-w-0 flex-1">
