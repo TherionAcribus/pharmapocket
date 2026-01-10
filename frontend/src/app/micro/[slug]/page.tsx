@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { Suspense } from "react";
+
 import { notFound } from "next/navigation";
 
 import { FilterSheet } from "@/components/FilterSheet";
@@ -35,10 +37,12 @@ export default async function MicroArticlePage({
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 py-3">
           <Button asChild variant="outline" size="sm">
-            <Link href="/">Retour</Link>
+            <Link href="/discover">Retour</Link>
           </Button>
           <div className="flex-1" />
-          <FilterSheet />
+          <Suspense>
+            <FilterSheet basePath="/discover" />
+          </Suspense>
         </div>
       </header>
 

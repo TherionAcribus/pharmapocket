@@ -32,7 +32,13 @@ function cursorFromUrl(nextUrl: string | null): string | null {
   }
 }
 
-export function FeedClient() {
+export function FeedClient({
+  basePath = "/discover",
+  embedded = false,
+}: {
+  basePath?: string;
+  embedded?: boolean;
+}) {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -146,7 +152,7 @@ export function FeedClient() {
     else next.delete("q");
     next.delete("cursor");
     const qs = next.toString();
-    router.push(qs ? `/?${qs}` : "/");
+    router.push(qs ? `${basePath}?${qs}` : basePath);
   };
 
   const clearSearch = () => {
@@ -154,33 +160,51 @@ export function FeedClient() {
     next.delete("q");
     next.delete("cursor");
     const qs = next.toString();
-    router.push(qs ? `/?${qs}` : "/");
+    router.push(qs ? `${basePath}?${qs}` : basePath);
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 py-3">
-          <div className="text-base font-semibold">PharmaPocket</div>
-          <div className="flex-1" />
-          <FilterSheet />
-        </div>
-        <div className="mx-auto w-full max-w-3xl px-4 pb-3">
-          <form onSubmit={onSubmitSearch} className="flex gap-2">
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Rechercher (ex: metformine)…"
-            />
-            <Button type="submit">OK</Button>
-            <Button type="button" variant="outline" onClick={clearSearch}>
-              Effacer
-            </Button>
-          </form>
-        </div>
-      </header>
+    <div className={embedded ? undefined : "min-h-screen bg-background"}>
+      {!embedded ? (
+        <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 py-3">
+            <div className="text-base font-semibold">PharmaPocket</div>
+            <div className="flex-1" />
+            <FilterSheet basePath={basePath} />
+          </div>
+          <div className="mx-auto w-full max-w-3xl px-4 pb-3">
+            <form onSubmit={onSubmitSearch} className="flex gap-2">
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Rechercher (ex: metformine)…"
+              />
+              <Button type="submit">OK</Button>
+              <Button type="button" variant="outline" onClick={clearSearch}>
+                Effacer
+              </Button>
+            </form>
+          </div>
+        </header>
+      ) : (
+        <form onSubmit={onSubmitSearch} className="flex gap-2">
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Rechercher (ex: metformine)…"
+          />
+          <Button type="submit">OK</Button>
+          <Button type="button" variant="outline" onClick={clearSearch}>
+            Effacer
+          </Button>
+        </form>
+      )}
 
-      <main className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
+      <main
+        className={
+          embedded ? "space-y-4" : "mx-auto w-full max-w-3xl space-y-4 px-4 py-6"
+        }
+      >
         {error ? (
           <div className="rounded-lg border bg-destructive/5 p-3 text-sm text-destructive">
             {error}

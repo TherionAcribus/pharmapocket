@@ -1,11 +1,5 @@
-import { Suspense } from "react";
-
-import { FeedClient } from "@/components/FeedClient";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return (
-    <Suspense>
-      <FeedClient />
-    </Suspense>
-  );
+  redirect("/discover");
 }

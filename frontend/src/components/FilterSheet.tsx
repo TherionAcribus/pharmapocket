@@ -51,7 +51,11 @@ function parseNode(sp: URLSearchParams): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function buildUrl(searchParams: URLSearchParams, updates: Record<string, string | null>): string {
+function buildUrl(
+  basePath: string,
+  searchParams: URLSearchParams,
+  updates: Record<string, string | null>
+): string {
   const next = new URLSearchParams(searchParams.toString());
   for (const [k, v] of Object.entries(updates)) {
     if (v === null || v === "") next.delete(k);
@@ -59,7 +63,7 @@ function buildUrl(searchParams: URLSearchParams, updates: Record<string, string 
   }
   next.delete("cursor");
   const qs = next.toString();
-  return qs ? `/?${qs}` : "/";
+  return qs ? `${basePath}?${qs}` : basePath;
 }
 
 function TaxonomyTree({
@@ -95,7 +99,7 @@ function TaxonomyTree({
   );
 }
 
-export function FilterSheet() {
+export function FilterSheet({ basePath = "/discover" }: { basePath?: string }) {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -151,19 +155,19 @@ export function FilterSheet() {
     const set = new Set(currentTags);
     if (set.has(slug)) set.delete(slug);
     else set.add(slug);
-    router.push(buildUrl(sp, { tags: Array.from(set).join(",") || null }));
+    router.push(buildUrl(basePath, sp, { tags: Array.from(set).join(",") || null }));
   };
 
   const setScope = (scope: Scope) => {
-    router.push(buildUrl(sp, { scope }));
+    router.push(buildUrl(basePath, sp, { scope }));
   };
 
   const setNode = (id: number) => {
-    router.push(buildUrl(sp, { taxonomy, node: String(id), scope: currentScope }));
+    router.push(buildUrl(basePath, sp, { taxonomy, node: String(id), scope: currentScope }));
   };
 
   const clearAll = () => {
-    router.push("/");
+    router.push(basePath);
   };
 
   const selectedTagBadges = currentTags.map((t) => (
@@ -240,7 +244,7 @@ export function FilterSheet() {
                 size="sm"
                 onClick={() => {
                   setTaxonomy(t);
-                  router.push(buildUrl(sp, { taxonomy: t }));
+                  router.push(buildUrl(basePath, sp, { taxonomy: t }));
                 }}
               >
                 {t}

@@ -10,19 +10,7 @@ export function MicroCard({ item }: { item: MicroArticleListItem }) {
       href={`/micro/${item.slug}`}
       className="block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent"
     >
-      <div className="flex gap-4 p-4">
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-muted">
-          {item.cover_image_url ? (
-            <Image
-              src={item.cover_image_url}
-              alt={item.title_question}
-              fill
-              className="object-cover"
-              sizes="80px"
-            />
-          ) : null}
-        </div>
-
+      <div className="flex items-start gap-3 p-4">
         <div className="min-w-0 flex-1">
           <div className="line-clamp-2 text-base font-semibold leading-snug">
             {item.title_question}
@@ -39,6 +27,18 @@ export function MicroCard({ item }: { item: MicroArticleListItem }) {
                 </Badge>
               ))}
             </div>
+          ) : null}
+        </div>
+
+        <div className="relative mt-0.5 h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted">
+          {item.cover_image_url ? (
+            <Image
+              src={item.cover_image_url}
+              alt={item.title_question}
+              fill
+              className="object-cover"
+              sizes="64px"
+            />
           ) : null}
         </div>
       </div>
