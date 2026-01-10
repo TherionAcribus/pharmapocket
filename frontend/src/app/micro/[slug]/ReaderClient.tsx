@@ -19,7 +19,12 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { fetchMe, saveMicroArticle, unsaveMicroArticle } from "@/lib/api";
+import {
+  fetchMe,
+  fetchMicroArticleSavedStatus,
+  saveMicroArticle,
+  unsaveMicroArticle,
+} from "@/lib/api";
 import type { MicroArticleDetail, StreamBlock } from "@/lib/types";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
@@ -100,6 +105,22 @@ export default function ReaderClient({
   React.useEffect(() => {
     setSaved(Boolean(data.is_saved));
   }, [data.slug, data.is_saved]);
+
+  React.useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    fetchMicroArticleSavedStatus(data.slug)
+      .then((res) => {
+        if (cancelled) return;
+        setSaved(Boolean(res.saved));
+      })
+      .catch(() => {
+        // ignore: keep current state
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, data.slug]);
 
   const toggleSaved = async (source: "button" | "double_tap") => {
     if (!isLoggedIn) {

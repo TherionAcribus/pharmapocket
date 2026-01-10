@@ -172,6 +172,12 @@ export async function saveMicroArticle(slug: string): Promise<{ saved: boolean }
   });
 }
 
+export async function fetchMicroArticleSavedStatus(
+  slug: string
+): Promise<{ saved: boolean }> {
+  return apiGet<{ saved: boolean }>(`/api/v1/content/saved/${encodeURIComponent(slug)}/`);
+}
+
 export async function unsaveMicroArticle(slug: string): Promise<void> {
   await apiJson<void>(`/api/v1/content/saved/${encodeURIComponent(slug)}/`, {
     method: "DELETE",
