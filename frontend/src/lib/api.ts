@@ -128,6 +128,22 @@ export type FeedQuery = {
   scope?: "exact" | "subtree";
 };
 
+type FeedItemPayload = {
+  id: number;
+  slug: string;
+  title_question: string;
+  answer_express: string;
+  takeaway: string;
+  key_points: string[];
+  cover_image_url: string | null;
+  tags: Array<{ id: number; name: string; slug: string }>;
+  categories_pharmacologie: Array<{ id: number; name: string; slug: string }>;
+  categories_maladies: Array<{ id: number; name: string; slug: string }>;
+  categories_classes: Array<{ id: number; name: string; slug: string }>;
+  published_at?: string | null;
+  progress?: unknown;
+};
+
 function buildQuery(params: Record<string, string | undefined>): string {
   const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -150,6 +166,41 @@ export async function fetchFeed(query: FeedQuery): Promise<CursorPage<MicroArtic
       scope: query.scope,
     })}`
   );
+}
+
+export async function fetchDiscoverFeed(query: FeedQuery): Promise<CursorPage<MicroArticleListItem>> {
+  const tagsValue = query.tags?.length ? query.tags.join(",") : undefined;
+
+  const page = await apiGet<CursorPage<FeedItemPayload>>(
+    `/api/v1/feed/${buildQuery({
+      cursor: query.cursor ?? undefined,
+      q: query.q ?? undefined,
+      tags: tagsValue,
+      taxonomy: query.taxonomy,
+      category: query.node != null ? String(query.node) : undefined,
+      scope: query.scope,
+    })}`
+  );
+
+  return {
+    next: page.next,
+    previous: page.previous,
+    results: page.results.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      title_question: r.title_question,
+      answer_express: r.answer_express,
+      takeaway: r.takeaway,
+      key_points: r.key_points,
+      cover_image_url: r.cover_image_url,
+      tags: r.tags.map((t) => t.name),
+      tags_payload: r.tags,
+      categories_pharmacologie_payload: r.categories_pharmacologie,
+      categories_maladies_payload: r.categories_maladies,
+      categories_classes_payload: r.categories_classes,
+      published_at: r.published_at ?? null,
+    })),
+  };
 }
 
 export async function fetchMicroArticle(slug: string): Promise<MicroArticleDetail> {

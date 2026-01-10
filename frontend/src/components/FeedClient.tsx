@@ -36,10 +36,12 @@ export function FeedClient({
   basePath = "/discover",
   embedded = false,
   showSearch = true,
+  fetchPage = fetchFeed,
 }: {
   basePath?: string;
   embedded?: boolean;
   showSearch?: boolean;
+  fetchPage?: (query: FeedQuery) => Promise<CursorPage<MicroArticleListItem>>;
 }) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -95,7 +97,7 @@ export function FeedClient({
     setLoading(true);
     setError(null);
     try {
-      const page = await fetchFeed({ ...feedQuery, cursor: null });
+      const page = await fetchPage({ ...feedQuery, cursor: null });
       setItems(page.results);
       setNextCursor(cursorFromUrl(page.next));
     } catch (e: unknown) {
@@ -112,7 +114,7 @@ export function FeedClient({
     setLoadingMore(true);
     setError(null);
     try {
-      const page: CursorPage<MicroArticleListItem> = await fetchFeed({
+      const page: CursorPage<MicroArticleListItem> = await fetchPage({
         ...feedQuery,
         cursor: nextCursor,
       });
