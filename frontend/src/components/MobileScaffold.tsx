@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen as BookOpenIcon,
   Brain as BrainIcon,
@@ -23,6 +23,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { fetchTaxonomyTree } from "@/lib/api";
+import type { TaxonomyNode, TaxonomyTreeResponse } from "@/lib/types";
 
 type TabItem = {
   href: string;
@@ -37,9 +39,46 @@ const tabs: TabItem[] = [
   { href: "/quiz", label: "Quiz", Icon: BrainIcon },
 ];
 
+type Taxonomy = "pharmacologie" | "maladies" | "classes";
+
 function isActivePath(pathname: string, href: string) {
   if (href === "/discover") return pathname === "/" || pathname.startsWith("/discover");
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function TaxonomyTreeNav({
+  nodes,
+  depth = 0,
+  onSelect,
+}: {
+  nodes: TaxonomyNode[];
+  depth?: number;
+  onSelect: (id: number) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      {nodes.map((n) => (
+        <div key={n.id} className="space-y-1">
+          <SheetClose asChild>
+            <button
+              type="button"
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-accent",
+                depth ? "text-muted-foreground" : ""
+              )}
+              style={{ paddingLeft: `${12 + depth * 12}px` }}
+              onClick={() => onSelect(n.id)}
+            >
+              <span className="truncate">{n.name}</span>
+            </button>
+          </SheetClose>
+          {n.children?.length ? (
+            <TaxonomyTreeNav nodes={n.children} depth={depth + 1} onSelect={onSelect} />
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function MobileScaffold({
@@ -54,6 +93,41 @@ export function MobileScaffold({
   contentClassName?: string;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const [taxonomy, setTaxonomy] = React.useState<Taxonomy>("pharmacologie");
+  const [tree, setTree] = React.useState<TaxonomyTreeResponse | null>(null);
+  const [loadingTree, setLoadingTree] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoadingTree(true);
+    fetchTaxonomyTree(taxonomy)
+      .then((t) => {
+        if (cancelled) return;
+        setTree(t);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoadingTree(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [taxonomy]);
+
+  const goToTaxonomy = (t: Taxonomy) => {
+    setTaxonomy(t);
+    router.push(`/discover?taxonomy=${encodeURIComponent(t)}&scope=subtree`);
+  };
+
+  const goToNode = (id: number) => {
+    router.push(
+      `/discover?taxonomy=${encodeURIComponent(taxonomy)}&node=${encodeURIComponent(
+        String(id)
+      )}&scope=subtree`
+    );
+  };
 
   return (
     <div className="min-h-dvh bg-background">
@@ -96,23 +170,32 @@ export function MobileScaffold({
                       Thèmes
                     </div>
 
-                    {[
-                      { label: "Pharmacologie", count: "12" },
-                      { label: "Maladies", count: "5" },
-                      { label: "Interactions", count: "3" },
-                    ].map((item) => (
-                      <SheetClose key={item.label} asChild>
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
-                        >
-                          <span className="truncate">{item.label}</span>
-                          <span className="ml-auto text-xs text-muted-foreground">
-                            {item.count}
-                          </span>
-                        </button>
-                      </SheetClose>
-                    ))}
+                    <div className="flex flex-wrap gap-2 px-2 pb-2">
+                      {(["pharmacologie", "maladies", "classes"] as Taxonomy[]).map((t) => (
+                        <SheetClose key={t} asChild>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={taxonomy === t ? "default" : "outline"}
+                            onClick={() => goToTaxonomy(t)}
+                          >
+                            {t}
+                          </Button>
+                        </SheetClose>
+                      ))}
+                    </div>
+
+                    <div className="px-2">
+                      {loadingTree ? (
+                        <div className="px-2 py-2 text-sm text-muted-foreground">Chargement…</div>
+                      ) : null}
+                      {!loadingTree && tree?.tree?.length ? (
+                        <TaxonomyTreeNav nodes={tree.tree} onSelect={goToNode} />
+                      ) : null}
+                      {!loadingTree && !tree?.tree?.length ? (
+                        <div className="px-2 py-2 text-sm text-muted-foreground">Aucune donnée.</div>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="h-8" />

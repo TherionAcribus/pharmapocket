@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { FeedClient } from "@/components/FeedClient";
 import { FilterSheet } from "@/components/FilterSheet";
 import { MobileScaffold } from "@/components/MobileScaffold";
@@ -19,8 +21,8 @@ export default function DiscoverClient() {
             Reprendre là où tu t’es arrêté.
           </div>
           <div className="mt-3">
-            <Button variant="secondary" className="w-full">
-              Continuer
+            <Button asChild variant="secondary" className="w-full">
+              <Link href="/resume">Continuer</Link>
             </Button>
           </div>
         </div>
@@ -31,8 +33,8 @@ export default function DiscoverClient() {
             Les cartes dues pour ta révision.
           </div>
           <div className="mt-3">
-            <Button variant="secondary" className="w-full">
-              Démarrer une session
+            <Button asChild variant="secondary" className="w-full">
+              <Link href="/review">Démarrer une session</Link>
             </Button>
           </div>
         </div>
