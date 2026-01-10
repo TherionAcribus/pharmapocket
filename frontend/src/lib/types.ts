@@ -44,6 +44,7 @@ export type MicroArticleDetail = {
   cover_image_url: string | null;
   links?: StreamBlock[];
   see_more?: StreamBlock[];
+  is_saved?: boolean;
   tags: string[];
   categories_pharmacologie: string[];
   categories_maladies: string[];

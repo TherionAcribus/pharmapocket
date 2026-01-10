@@ -8,6 +8,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from wagtail.documents.models import Document
 
@@ -16,6 +17,7 @@ from .models import (
     CategoryMaladies,
     CategoryPharmacologie,
     MicroArticlePage,
+    SavedMicroArticle,
     Source,
 )
 from .pagination import MicroArticleCursorPagination
@@ -329,8 +331,87 @@ class MicroArticleDetailView(RetrieveAPIView):
             "questions": _questions_payload(page),
             "published_at": page.first_published_at,
         }
+
+        if request.user.is_authenticated:
+            data["is_saved"] = SavedMicroArticle.objects.filter(
+                user=request.user,
+                microarticle_id=page.id,
+            ).exists()
+
         serializer = self.get_serializer(data)
         return Response(serializer.data)
+
+
+class SavedMicroArticleListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        rows = (
+            SavedMicroArticle.objects.filter(user=request.user)
+            .select_related("microarticle", "microarticle__cover_image")
+            .order_by("-created_at")
+        )
+
+        items = []
+        for r in rows:
+            p: MicroArticlePage = r.microarticle
+            items.append(
+                {
+                    "id": p.id,
+                    "slug": p.slug,
+                    "title_question": p.title_question,
+                    "answer_express": p.answer_express,
+                    "takeaway": p.takeaway,
+                    "key_points": _key_points(p),
+                    "cover_image_url": _cover_url(p),
+                    "tags": list(p.tags.values_list("name", flat=True)),
+                    "published_at": p.first_published_at,
+                }
+            )
+
+        return Response(items)
+
+    def post(self, request):
+        slug = request.data.get("slug") if isinstance(request.data, dict) else None
+        if not slug or not isinstance(slug, str):
+            raise DRFValidationError({"slug": "slug is required"})
+
+        page = (
+            MicroArticlePage.objects.live()
+            .public()
+            .filter(slug=slug)
+            .specific()
+            .first()
+        )
+        if page is None:
+            raise DRFValidationError({"slug": "Unknown microarticle"})
+
+        SavedMicroArticle.objects.get_or_create(user=request.user, microarticle=page)
+        return Response({"saved": True})
+
+
+class SavedMicroArticleDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug: str):
+        page = MicroArticlePage.objects.filter(slug=slug).first()
+        if page is None:
+            return Response({"saved": False})
+        return Response(
+            {
+                "saved": SavedMicroArticle.objects.filter(
+                    user=request.user,
+                    microarticle_id=page.id,
+                ).exists()
+            }
+        )
+
+    def delete(self, request, slug: str):
+        page = MicroArticlePage.objects.filter(slug=slug).first()
+        if page is None:
+            return Response(status=204)
+        SavedMicroArticle.objects.filter(user=request.user, microarticle_id=page.id).delete()
+        return Response(status=204)
 
 
 class SourceSearchSerializer(serializers.Serializer):

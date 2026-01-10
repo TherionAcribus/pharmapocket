@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { fetchMe, saveMicroArticle, unsaveMicroArticle } from "@/lib/api";
 import type { MicroArticleDetail, StreamBlock } from "@/lib/types";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
@@ -68,7 +69,58 @@ export default function ReaderClient({
   const [done, setDone] = React.useState(false);
   const [largeText, setLargeText] = React.useState(false);
 
+  const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState<string | null>(null);
+
   const [deck, setDeck] = React.useState<DeckState | null>(null);
+
+  const showMessage = (text: string) => {
+    setMessage(text);
+    window.setTimeout(() => setMessage(null), 1800);
+  };
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchMe()
+      .then((me) => {
+        if (cancelled) return;
+        setCurrentUserEmail(me.email || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCurrentUserEmail(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isLoggedIn = Boolean(currentUserEmail);
+
+  React.useEffect(() => {
+    setSaved(Boolean(data.is_saved));
+  }, [data.slug, data.is_saved]);
+
+  const toggleSaved = async (source: "button" | "double_tap") => {
+    if (!isLoggedIn) {
+      showMessage("Connecte-toi pour sauvegarder cette carte.");
+      return;
+    }
+
+    const next = !saved;
+    setSaved(next);
+    try {
+      if (next) await saveMicroArticle(data.slug);
+      else await unsaveMicroArticle(data.slug);
+    } catch {
+      setSaved(!next);
+      showMessage(
+        source === "button"
+          ? "Impossible de sauvegarder pour le moment."
+          : "Impossible de sauvegarder par double tap."
+      );
+    }
+  };
 
   React.useEffect(() => {
     const d = readDeckFromSession();
@@ -187,6 +239,7 @@ export default function ReaderClient({
   }, [openDetails, deck, data.slug]);
 
   const startRef = React.useRef<{ x: number; y: number; t: number } | null>(null);
+  const lastTapRef = React.useRef<{ x: number; y: number; t: number } | null>(null);
 
   const onTouchStart = (e: React.TouchEvent) => {
     if (openDetails) return;
@@ -208,6 +261,23 @@ export default function ReaderClient({
     const dy = t.clientY - start.y;
     const adx = Math.abs(dx);
     const ady = Math.abs(dy);
+
+    // Double tap to save (only when it's a tap, not a swipe)
+    if (adx < 10 && ady < 10) {
+      const now = Date.now();
+      const last = lastTapRef.current;
+      if (last && now - last.t < 320) {
+        const ddx = t.clientX - last.x;
+        const ddy = t.clientY - last.y;
+        if (Math.abs(ddx) < 30 && Math.abs(ddy) < 30) {
+          lastTapRef.current = null;
+          void toggleSaved("double_tap");
+          return;
+        }
+      }
+      lastTapRef.current = { x: t.clientX, y: t.clientY, t: now };
+      return;
+    }
 
     if (adx < 60) return;
     if (adx < ady * 1.2) return;
@@ -249,7 +319,8 @@ export default function ReaderClient({
             variant={saved ? "secondary" : "ghost"}
             size="icon"
             aria-label="Sauvegarder"
-            onClick={() => setSaved((v) => !v)}
+            className={!isLoggedIn ? "opacity-40" : ""}
+            onClick={() => void toggleSaved("button")}
           >
             <StarIcon className="size-5" fill={saved ? "currentColor" : "none"} />
           </Button>
@@ -273,6 +344,12 @@ export default function ReaderClient({
             <MoreHorizontalIcon className="size-5" />
           </Button>
         </div>
+
+        {message ? (
+          <div className="mx-auto w-full max-w-3xl px-4 pb-2 text-xs text-muted-foreground">
+            {message}
+          </div>
+        ) : null}
       </header>
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">

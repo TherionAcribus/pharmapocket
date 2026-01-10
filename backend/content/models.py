@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.db import models
@@ -441,3 +442,28 @@ class MicroArticlePage(Page):
         if base_slug:
             self.slug = slugify(base_slug)
         return super().save(*args, **kwargs)
+
+
+class SavedMicroArticle(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_microarticles",
+    )
+    microarticle = models.ForeignKey(
+        "content.MicroArticlePage",
+        on_delete=models.CASCADE,
+        related_name="saved_by",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "microarticle"],
+                name="uniq_saved_microarticle_user_microarticle",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "created_at"]),
+        ]

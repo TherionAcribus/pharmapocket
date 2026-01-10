@@ -31,13 +31,14 @@ class MicroArticleDetailSerializer(serializers.Serializer):
     cover_image_url = serializers.CharField(allow_null=True)
     links = serializers.ListField(child=serializers.DictField(), required=False)
     see_more = serializers.ListField(child=serializers.DictField(), required=False)
+    is_saved = serializers.BooleanField(required=False)
     tags = serializers.ListField(child=serializers.CharField())
     categories_pharmacologie = serializers.ListField(child=serializers.CharField())
     categories_maladies = serializers.ListField(child=serializers.CharField())
     categories_classes = serializers.ListField(child=serializers.CharField())
     tags_payload = serializers.ListField(child=serializers.DictField(), required=False)
     categories_pharmacologie_payload = serializers.ListField(
-        child=serializers.DictField(), required=False
+      child=serializers.DictField(), required=False
     )
     categories_maladies_payload = serializers.ListField(child=serializers.DictField(), required=False)
     categories_classes_payload = serializers.ListField(child=serializers.DictField(), required=False)

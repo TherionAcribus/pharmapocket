@@ -158,6 +158,26 @@ export async function fetchMicroArticle(slug: string): Promise<MicroArticleDetai
   );
 }
 
+export async function fetchSavedMicroArticles(): Promise<MicroArticleListItem[]> {
+  return apiGet<MicroArticleListItem[]>(`/api/v1/content/saved/`);
+}
+
+export async function saveMicroArticle(slug: string): Promise<{ saved: boolean }> {
+  return apiJson<{ saved: boolean }>(`/api/v1/content/saved/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ slug }),
+  });
+}
+
+export async function unsaveMicroArticle(slug: string): Promise<void> {
+  await apiJson<void>(`/api/v1/content/saved/${encodeURIComponent(slug)}/`, {
+    method: "DELETE",
+  });
+}
+
 export async function fetchTaxonomyTree(
   taxonomy: "pharmacologie" | "maladies" | "classes"
 ): Promise<TaxonomyTreeResponse> {
