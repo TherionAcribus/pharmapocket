@@ -110,6 +110,47 @@ export default function ReaderClient({
   const hasExtra = extraBlocks.length > 0;
   const hasDetails = hasLongContent || hasSources || hasExtra;
 
+  React.useEffect(() => {
+    const seeMoreTypes = Array.isArray(data.see_more)
+      ? (data.see_more as StreamBlock[])
+          .map((b) => (b && typeof b === "object" ? b.type : "unknown"))
+          .filter(Boolean)
+      : [];
+
+    console.debug("[ReaderClient] micro payload", {
+      slug: data.slug,
+      title: data.title_question,
+      seeMoreTypes,
+      detailCount: detailBlocks.length,
+      referenceCount: referenceBlocks.length,
+      extraCount: extraBlocks.length,
+      linksCount: data.links?.length ?? 0,
+      hasLongContent,
+      hasSources,
+      hasExtra,
+      hasDetails,
+    });
+
+    if (data.see_more) {
+      console.debug("[ReaderClient] see_more raw", data.see_more);
+    }
+    if (data.links) {
+      console.debug("[ReaderClient] links raw", data.links);
+    }
+  }, [
+    data.slug,
+    data.title_question,
+    data.see_more,
+    data.links,
+    detailBlocks.length,
+    referenceBlocks.length,
+    extraBlocks.length,
+    hasLongContent,
+    hasSources,
+    hasExtra,
+    hasDetails,
+  ]);
+
   const goRelative = (delta: number) => {
     if (!deck?.slugs?.length) return;
     const idx = deck.slugs.indexOf(data.slug);

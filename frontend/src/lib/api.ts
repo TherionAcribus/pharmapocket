@@ -78,13 +78,19 @@ async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await apiFetch(path, init);
 
   if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      body = await res.text();
+    const contentType = res.headers.get("content-type") ?? "";
+    const raw = await res.text();
+    let parsed: unknown = raw;
+    if (contentType.includes("application/json")) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = raw;
+      }
     }
-    throw new Error(`API ${res.status} on ${path}: ${JSON.stringify(body)}`);
+    throw new Error(
+      `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(parsed)}`
+    );
   }
 
   return (await res.json()) as T;
@@ -94,13 +100,19 @@ async function apiJson<T>(path: string, init: RequestInit): Promise<T> {
   const res = await apiFetch(path, init);
 
   if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      body = await res.text();
+    const contentType = res.headers.get("content-type") ?? "";
+    const raw = await res.text();
+    let parsed: unknown = raw;
+    if (contentType.includes("application/json")) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = raw;
+      }
     }
-    throw new Error(`API ${res.status} on ${path}: ${JSON.stringify(body)}`);
+    throw new Error(
+      `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(parsed)}`
+    );
   }
 
   if (res.status === 204) return undefined as T;
