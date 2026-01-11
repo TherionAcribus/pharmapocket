@@ -12,11 +12,11 @@ from .models import CategoryMaladies, CategoryMedicament, CategoryTheme
 
 
 def _taxonomy_model(taxonomy: str):
-    if taxonomy == "theme":
+    if taxonomy in ("theme", "classes"):
         return CategoryTheme
     if taxonomy == "maladies":
         return CategoryMaladies
-    if taxonomy == "medicament":
+    if taxonomy in ("medicament", "pharmacologie"):
         return CategoryMedicament
     return None
 

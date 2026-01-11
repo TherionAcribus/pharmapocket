@@ -12,7 +12,15 @@ from rest_framework.views import APIView
 
 from wagtail.documents.models import Document
 
-from .models import CategoryMedicament, CategoryMaladies, CategoryTheme, MicroArticlePage, SavedMicroArticle, Source
+from .models import (
+    CategoryMedicament,
+    CategoryMaladies,
+    CategoryTheme,
+    MicroArticlePage,
+    MicroArticleReadState,
+    SavedMicroArticle,
+    Source,
+)
 from .pagination import MicroArticleCursorPagination
 from .serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
 
@@ -405,6 +413,66 @@ class SavedMicroArticleDetailView(APIView):
             return Response(status=204)
         SavedMicroArticle.objects.filter(user=request.user, microarticle_id=page.id).delete()
         return Response(status=204)
+
+
+class MicroArticleReadStateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        slugs_param = request.query_params.get("slugs")
+        if not slugs_param or not isinstance(slugs_param, str):
+            raise DRFValidationError({"slugs": "slugs is required (comma-separated)"})
+
+        slugs = [s.strip() for s in slugs_param.split(",") if s.strip()]
+        if not slugs:
+            return Response({"items": {}})
+
+        pages = MicroArticlePage.objects.live().public().filter(slug__in=slugs)
+        slug_by_id = {p.id: p.slug for p in pages}
+        if not slug_by_id:
+            return Response({"items": {}})
+
+        rows = MicroArticleReadState.objects.filter(
+            user=request.user,
+            microarticle_id__in=list(slug_by_id.keys()),
+        ).values_list("microarticle_id", "is_read")
+
+        items = {slug_by_id[mid]: bool(is_read) for (mid, is_read) in rows if mid in slug_by_id}
+        # Default to false for missing state
+        for slug in slugs:
+            if slug not in items:
+                items[slug] = False
+
+        return Response({"items": items})
+
+    def post(self, request):
+        slug = request.data.get("slug") if isinstance(request.data, dict) else None
+        is_read = request.data.get("is_read") if isinstance(request.data, dict) else None
+        if not slug or not isinstance(slug, str):
+            raise DRFValidationError({"slug": "slug is required"})
+        if not isinstance(is_read, bool):
+            raise DRFValidationError({"is_read": "is_read must be a boolean"})
+
+        page = (
+            MicroArticlePage.objects.live()
+            .public()
+            .filter(slug=slug)
+            .specific()
+            .first()
+        )
+        if page is None:
+            raise DRFValidationError({"slug": "Unknown microarticle"})
+
+        obj, _ = MicroArticleReadState.objects.get_or_create(
+            user=request.user,
+            microarticle_id=page.id,
+            defaults={"is_read": is_read},
+        )
+        if obj.is_read != is_read:
+            obj.is_read = is_read
+            obj.save(update_fields=["is_read", "updated_at"])
+
+        return Response({"slug": page.slug, "is_read": bool(obj.is_read)})
 
 
 class SourceSearchSerializer(serializers.Serializer):

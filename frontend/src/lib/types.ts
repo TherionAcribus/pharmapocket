@@ -45,6 +45,7 @@ export type MicroArticleDetail = {
   links?: StreamBlock[];
   see_more?: StreamBlock[];
   is_saved?: boolean;
+  is_read?: boolean;
   tags: string[];
   categories_pharmacologie: string[];
   categories_maladies: string[];

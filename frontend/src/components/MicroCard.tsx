@@ -12,10 +12,12 @@ export function MicroCard({
   item,
   deckSlugs,
   deckIndex,
+  isRead,
 }: {
   item: MicroArticleListItem;
   deckSlugs?: string[];
   deckIndex?: number;
+  isRead?: boolean;
 }) {
   const onOpen = () => {
     if (typeof window === "undefined") return;
@@ -34,7 +36,11 @@ export function MicroCard({
   return (
     <Link
       href={`/micro/${item.slug}`}
-      className="block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent"
+      className={
+        isRead
+          ? "block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent opacity-70"
+          : "block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent"
+      }
       onClick={onOpen}
     >
       <div className="flex items-start gap-3 p-4">

@@ -235,6 +235,32 @@ export async function unsaveMicroArticle(slug: string): Promise<void> {
   });
 }
 
+export async function fetchMicroArticleReadStates(
+  slugs: string[]
+): Promise<{ items: Record<string, boolean> }> {
+  const value = slugs
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => encodeURIComponent(s))
+    .join(",");
+  return apiGet<{ items: Record<string, boolean> }>(
+    `/api/v1/content/read-state/?slugs=${value}`
+  );
+}
+
+export async function setMicroArticleReadState(
+  slug: string,
+  is_read: boolean
+): Promise<{ slug: string; is_read: boolean }> {
+  return apiJson<{ slug: string; is_read: boolean }>(`/api/v1/content/read-state/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ slug, is_read }),
+  });
+}
+
 export async function fetchTaxonomyTree(
   taxonomy: "pharmacologie" | "maladies" | "classes"
 ): Promise<TaxonomyTreeResponse> {

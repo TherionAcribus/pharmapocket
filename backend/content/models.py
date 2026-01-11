@@ -474,3 +474,30 @@ class SavedMicroArticle(models.Model):
         indexes = [
             models.Index(fields=["user", "created_at"]),
         ]
+
+
+class MicroArticleReadState(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="microarticle_read_states",
+    )
+    microarticle = models.ForeignKey(
+        "content.MicroArticlePage",
+        on_delete=models.CASCADE,
+        related_name="read_states",
+    )
+    is_read = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "microarticle"],
+                name="uniq_microarticle_read_state_user_microarticle",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "updated_at"]),
+        ]

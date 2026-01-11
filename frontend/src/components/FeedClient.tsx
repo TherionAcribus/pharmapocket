@@ -7,7 +7,7 @@ import { FilterSheet } from "@/components/FilterSheet";
 import { MicroCard } from "@/components/MicroCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchFeed } from "@/lib/api";
+import { fetchFeed, fetchMe, fetchMicroArticleReadStates } from "@/lib/api";
 import type { FeedQuery } from "@/lib/api";
 import type { CursorPage, MicroArticleListItem } from "@/lib/types";
 
@@ -89,9 +89,28 @@ export function FeedClient({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [readMap, setReadMap] = useState<Record<string, boolean>>({});
+
   const deckSlugs = useMemo(() => items.map((i) => i.slug), [items]);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMe()
+      .then(() => {
+        if (cancelled) return;
+        setIsLoggedIn(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsLoggedIn(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function loadFirstPage() {
     setLoading(true);
@@ -131,6 +150,32 @@ export function FeedClient({
     loadFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryKey]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setReadMap({});
+      return;
+    }
+    if (!items.length) {
+      setReadMap({});
+      return;
+    }
+
+    let cancelled = false;
+    const slugs = items.map((i) => i.slug);
+    fetchMicroArticleReadStates(slugs)
+      .then((res) => {
+        if (cancelled) return;
+        setReadMap(res.items ?? {});
+      })
+      .catch(() => {
+        // ignore
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, items]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -231,7 +276,13 @@ export function FeedClient({
 
         <div className="space-y-3">
           {items.map((item, index) => (
-            <MicroCard key={item.id} item={item} deckSlugs={deckSlugs} deckIndex={index} />
+            <MicroCard
+              key={item.id}
+              item={item}
+              deckSlugs={deckSlugs}
+              deckIndex={index}
+              isRead={Boolean(readMap[item.slug])}
+            />
           ))}
         </div>
 

@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     MicroArticleDetailView,
     MicroArticleListView,
+    MicroArticleReadStateView,
     SavedMicroArticleDetailView,
     SavedMicroArticleListView,
     SourceSearchView,
@@ -18,5 +19,6 @@ urlpatterns = [
         SavedMicroArticleDetailView.as_view(),
         name="saved-microarticle-detail",
     ),
+    path("read-state/", MicroArticleReadStateView.as_view(), name="microarticle-read-state"),
     path("sources/search/", SourceSearchView.as_view(), name="source-search"),
 ]

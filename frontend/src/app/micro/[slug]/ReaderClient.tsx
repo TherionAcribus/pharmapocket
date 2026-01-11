@@ -4,13 +4,14 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Check as CheckIcon,
   ChevronUp as ChevronUpIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   MoreHorizontal as MoreHorizontalIcon,
   Star as StarIcon,
   Text as TextIcon,
+  Book as BookIcon,
+  BookOpen as BookOpenIcon,
 } from "lucide-react";
 
 import { SeeMoreRenderer } from "@/components/SeeMoreRenderer";
@@ -24,6 +25,7 @@ import {
   fetchMe,
   fetchMicroArticleSavedStatus,
   saveMicroArticle,
+  setMicroArticleReadState,
   unsaveMicroArticle,
 } from "@/lib/api";
 import type { MicroArticleDetail, StreamBlock } from "@/lib/types";
@@ -63,6 +65,11 @@ function writeDeckToSession(next: DeckState) {
   }
 }
 
+function RichText({ html, className }: { html?: string; className?: string }) {
+  if (!html) return null;
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 export default function ReaderClient({
   data,
 }: {
@@ -72,7 +79,8 @@ export default function ReaderClient({
 
   const [openDetails, setOpenDetails] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
-  const [done, setDone] = React.useState(false);
+  const [isRead, setIsRead] = React.useState(false);
+  const [isReadLoading, setIsReadLoading] = React.useState(false);
   const [largeText, setLargeText] = React.useState(false);
 
   const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
@@ -108,6 +116,10 @@ export default function ReaderClient({
   }, [data.slug, data.is_saved]);
 
   React.useEffect(() => {
+    setIsRead(Boolean(data.is_read));
+  }, [data.slug, data.is_read]);
+
+  React.useEffect(() => {
     if (!isLoggedIn) return;
     let cancelled = false;
     fetchMicroArticleSavedStatus(data.slug)
@@ -118,6 +130,19 @@ export default function ReaderClient({
       .catch(() => {
         // ignore: keep current state
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, data.slug]);
+
+  React.useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    setIsRead(true);
+    setMicroArticleReadState(data.slug, true).catch(() => {
+      if (cancelled) return;
+      // ignore: keep optimistic state
+    });
     return () => {
       cancelled = true;
     };
@@ -141,6 +166,27 @@ export default function ReaderClient({
           ? "Impossible de sauvegarder pour le moment."
           : "Impossible de sauvegarder par double tap."
       );
+    }
+  };
+
+  const toggleRead = async () => {
+    if (!isLoggedIn) {
+      showMessage("Connecte-toi pour marquer lu / non lu.");
+      return;
+    }
+
+    if (isReadLoading) return;
+    const next = !isRead;
+    setIsRead(next);
+    setIsReadLoading(true);
+    try {
+      await setMicroArticleReadState(data.slug, next);
+      showMessage(next ? "Carte marquée comme lue." : "Carte marquée comme non lue.");
+    } catch {
+      setIsRead(!next);
+      showMessage("Impossible de mettre à jour l'état lu.");
+    } finally {
+      setIsReadLoading(false);
     }
   };
 
@@ -168,7 +214,7 @@ export default function ReaderClient({
     return `${current + 1}/${deck.slugs.length}`;
   }, [deck, data.slug]);
 
-  const blocks = (data.see_more ?? []) as StreamBlock[];
+  const blocks = React.useMemo(() => (data.see_more ?? []) as StreamBlock[], [data.see_more]);
   const detailBlocks = React.useMemo(() => blocks.filter((b) => b?.type === "detail"), [blocks]);
   const referenceBlocks = React.useMemo(
     () => blocks.filter((b) => b?.type === "references"),
@@ -225,21 +271,24 @@ export default function ReaderClient({
     hasDetails,
   ]);
 
-  const goRelative = (delta: number) => {
-    if (!deck?.slugs?.length) return;
-    const idx = deck.slugs.indexOf(data.slug);
-    const current = idx >= 0 ? idx : deck.index;
-    const nextIndex = current + delta;
-    if (nextIndex < 0 || nextIndex >= deck.slugs.length) return;
-    const nextSlug = deck.slugs[nextIndex];
-    if (!nextSlug) return;
+  const goRelative = React.useCallback(
+    (delta: number) => {
+      if (!deck?.slugs?.length) return;
+      const idx = deck.slugs.indexOf(data.slug);
+      const current = idx >= 0 ? idx : deck.index;
+      const nextIndex = current + delta;
+      if (nextIndex < 0 || nextIndex >= deck.slugs.length) return;
+      const nextSlug = deck.slugs[nextIndex];
+      if (!nextSlug) return;
 
-    const nextDeck = { ...deck, index: nextIndex };
-    setDeck(nextDeck);
-    writeDeckToSession(nextDeck);
+      const nextDeck = { ...deck, index: nextIndex };
+      setDeck(nextDeck);
+      writeDeckToSession(nextDeck);
 
-    router.push(`/micro/${encodeURIComponent(nextSlug)}`);
-  };
+      router.push(`/micro/${encodeURIComponent(nextSlug)}`);
+    },
+    [deck, data.slug, router]
+  );
 
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -258,7 +307,7 @@ export default function ReaderClient({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [openDetails, deck, data.slug]);
+  }, [openDetails, goRelative]);
 
   const startRef = React.useRef<{ x: number; y: number; t: number } | null>(null);
   const lastTapRef = React.useRef<{ x: number; y: number; t: number } | null>(null);
@@ -308,16 +357,6 @@ export default function ReaderClient({
     else goRelative(-1);
   };
 
-  const RichText = ({ html, className }: { html?: string; className?: string }) => {
-    if (!html) return null;
-    return (
-      <div
-        className={className}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    );
-  };
-
   return (
     <div className="min-h-dvh bg-background" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
@@ -348,12 +387,15 @@ export default function ReaderClient({
           </Button>
 
           <Button
-            variant={done ? "secondary" : "ghost"}
+            variant={isRead ? "secondary" : "ghost"}
             size="icon"
-            aria-label="Marquer comme fait"
-            onClick={() => setDone((v) => !v)}
+            aria-label="Marquer comme lu"
+            className={!isLoggedIn ? "opacity-40" : ""}
+            title={isRead ? "Marquer comme non lue" : "Marquer comme lue"}
+            onClick={() => void toggleRead()}
+            disabled={isReadLoading}
           >
-            <CheckIcon className="size-5" />
+            {isRead ? <BookIcon className="size-5" /> : <BookOpenIcon className="size-5" />}
           </Button>
 
           <Button
