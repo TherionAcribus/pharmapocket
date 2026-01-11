@@ -40,7 +40,7 @@ export function MicroCard({
       <div className="flex items-start gap-3 p-4">
         <div className="min-w-0 flex-1">
           <div className="line-clamp-2 text-base font-semibold leading-snug">
-            {item.title_question}
+            {item.title}
           </div>
           <div className="mt-1 text-sm text-muted-foreground">
             <div
@@ -64,7 +64,7 @@ export function MicroCard({
           {item.cover_image_url ? (
             <Image
               src={item.cover_image_url}
-              alt={item.title_question}
+              alt={item.title}
               fill
               className="object-cover"
               sizes="64px"

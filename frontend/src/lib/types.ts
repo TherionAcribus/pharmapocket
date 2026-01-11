@@ -19,7 +19,7 @@ export type CategoryPayload = {
 export type MicroArticleListItem = {
   id: number;
   slug: string;
-  title_question: string;
+  title: string;
   answer_express: string;
   takeaway: string;
   key_points: string[];
@@ -37,7 +37,7 @@ export type StreamBlock = { type: string; value: unknown };
 export type MicroArticleDetail = {
   id: number;
   slug: string;
-  title_question: string;
+  title: string;
   answer_express: string;
   takeaway: string;
   key_points: string[];

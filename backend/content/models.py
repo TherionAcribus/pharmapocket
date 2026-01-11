@@ -181,7 +181,6 @@ class MicroArticleQuestion(Orderable):
 
 
 class MicroArticlePage(Page):
-    title_question = models.CharField(max_length=160)
     answer_express = RichTextField(
         features=["bold", "italic", "link", "ol", "ul"],
         blank=True,
@@ -310,7 +309,6 @@ class MicroArticlePage(Page):
     content_panels = Page.content_panels + [
         MultiFieldPanel(
             [
-                FieldPanel("title_question"),
                 FieldPanel("answer_express"),
                 FieldPanel("answer_detail"),
                 FieldPanel("key_points"),
@@ -346,7 +344,7 @@ class MicroArticlePage(Page):
     ]
 
     search_fields = Page.search_fields + [
-        index.SearchField("title_question"),
+        index.SearchField("title"),
         index.SearchField("answer_express"),
     ]
 
@@ -410,7 +408,7 @@ class MicroArticlePage(Page):
         ]
 
     api_fields = [
-        APIField("title_question"),
+        APIField("title"),
         APIField("answer_express"),
         APIField("takeaway"),
         APIField("api_key_points", serializer=serializers.ListField(child=serializers.CharField())),
@@ -447,7 +445,7 @@ class MicroArticlePage(Page):
 
     def save(self, *args, **kwargs):
         # Normalise systématiquement le slug pour supprimer les accents/espaces.
-        base_slug = self.slug or self.title_question
+        base_slug = self.slug or self.title
         if base_slug:
             self.slug = slugify(base_slug)
         return super().save(*args, **kwargs)

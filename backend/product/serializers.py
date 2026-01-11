@@ -15,7 +15,7 @@ class ProgressSerializer(serializers.Serializer):
 class FeedItemSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     slug = serializers.CharField()
-    title_question = serializers.CharField()
+    title = serializers.CharField()
     answer_express = serializers.CharField()
     takeaway = serializers.CharField(allow_blank=True)
     key_points = serializers.ListField(child=serializers.CharField())
@@ -31,7 +31,7 @@ class FeedItemSerializer(serializers.Serializer):
 class MicroDetailSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     slug = serializers.CharField()
-    title_question = serializers.CharField()
+    title = serializers.CharField()
     answer_express = serializers.CharField()
     takeaway = serializers.CharField(allow_blank=True)
     key_points = serializers.ListField(child=serializers.CharField())

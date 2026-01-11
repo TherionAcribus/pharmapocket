@@ -6,7 +6,7 @@ from .models import MicroArticlePage
 class MicroArticleListSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     slug = serializers.CharField()
-    title_question = serializers.CharField()
+    title = serializers.CharField()
     answer_express = serializers.CharField()
     takeaway = serializers.CharField(allow_blank=True)
     key_points = serializers.ListField(child=serializers.CharField())
@@ -22,7 +22,7 @@ class MicroArticleListSerializer(serializers.Serializer):
 class MicroArticleDetailSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     slug = serializers.CharField()
-    title_question = serializers.CharField()
+    title = serializers.CharField()
     answer_express = serializers.CharField()
     takeaway = serializers.CharField(allow_blank=True)
     key_points = serializers.ListField(child=serializers.CharField())

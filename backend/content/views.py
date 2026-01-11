@@ -184,7 +184,7 @@ class MicroArticleListView(ListAPIView):
 
         q = self.request.query_params.get("q")
         if q:
-            qs = qs.filter(Q(title_question__icontains=q) | Q(answer_express__icontains=q))
+            qs = qs.filter(Q(title__icontains=q) | Q(answer_express__icontains=q))
 
         tags = self.request.query_params.get("tags")
         if tags:
@@ -226,7 +226,7 @@ class MicroArticleListView(ListAPIView):
             {
                 "id": p.id,
                 "slug": p.slug,
-                "title_question": p.title_question,
+                "title": p.title,
                 "answer_express": p.answer_express,
                 "takeaway": p.takeaway,
                 "key_points": _key_points(p),
@@ -306,7 +306,7 @@ class MicroArticleDetailView(RetrieveAPIView):
         data = {
             "id": page.id,
             "slug": page.slug,
-            "title_question": page.title_question,
+            "title": page.title,
             "answer_express": page.answer_express,
             "takeaway": page.takeaway,
             "key_points": _key_points(page),
@@ -352,7 +352,7 @@ class SavedMicroArticleListView(APIView):
                 {
                     "id": p.id,
                     "slug": p.slug,
-                    "title_question": p.title_question,
+                    "title": p.title,
                     "answer_express": p.answer_express,
                     "takeaway": p.takeaway,
                     "key_points": _key_points(p),

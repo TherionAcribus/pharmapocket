@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 import {
   fetchMe,
   fetchMicroArticleSavedStatus,
@@ -192,7 +193,7 @@ export default function ReaderClient({
 
     console.debug("[ReaderClient] micro payload", {
       slug: data.slug,
-      title: data.title_question,
+      title: data.title,
       seeMoreTypes,
       detailCount: detailBlocks.length,
       referenceCount: referenceBlocks.length,
@@ -212,7 +213,7 @@ export default function ReaderClient({
     }
   }, [
     data.slug,
-    data.title_question,
+    data.title,
     data.see_more,
     data.links,
     detailBlocks.length,
@@ -375,12 +376,14 @@ export default function ReaderClient({
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <div className={largeText ? "space-y-3 text-[1.05rem]" : "space-y-3"}>
-          <div className="text-2xl font-semibold leading-snug">{data.title_question}</div>
+          <div className="text-2xl font-semibold leading-snug">{data.title}</div>
 
           <div className="relative">
             <RichText
               html={data.answer_express}
-              className="prose prose-zinc max-w-none text-base text-muted-foreground dark:prose-invert"
+              className={cn(
+                "prose prose-zinc max-w-none text-base text-muted-foreground dark:prose-invert"
+              )}
             />
           </div>
 
@@ -444,7 +447,7 @@ export default function ReaderClient({
           <ScrollArea className="h-[calc(85dvh-4.5rem)] px-4 pb-6">
             <div className="space-y-6">
               <div className="space-y-2">
-                <div className="text-sm font-semibold">{data.title_question}</div>
+                <div className="text-sm font-semibold">{data.title}</div>
                 <RichText
                   html={data.takeaway}
                   className="prose prose-zinc max-w-none text-sm text-muted-foreground dark:prose-invert"

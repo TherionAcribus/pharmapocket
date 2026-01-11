@@ -131,7 +131,7 @@ export type FeedQuery = {
 type FeedItemPayload = {
   id: number;
   slug: string;
-  title_question: string;
+  title: string;
   answer_express: string;
   takeaway: string;
   key_points: string[];
@@ -188,7 +188,7 @@ export async function fetchDiscoverFeed(query: FeedQuery): Promise<CursorPage<Mi
     results: page.results.map((r) => ({
       id: r.id,
       slug: r.slug,
-      title_question: r.title_question,
+      title: r.title,
       answer_express: r.answer_express,
       takeaway: r.takeaway,
       key_points: r.key_points,
