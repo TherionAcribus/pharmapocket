@@ -52,7 +52,7 @@ class Question(models.Model):
 
 
 @register_snippet
-class Source(models.Model):
+class Source(index.Indexed, models.Model):
     class SourceKind(models.TextChoices):
         PRESS = "press", "Presse professionnelle"
         INSTITUTIONAL = "institutional", "Site institutionnel"
