@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { Copy as CopyIcon } from "lucide-react";
 
@@ -246,13 +247,27 @@ export function SeeMoreRenderer({
 
         if (b.type === "image") {
           const v = (b.value as Record<string, unknown>) || {};
+          const image = v.image && typeof v.image === "object" ? (v.image as Record<string, unknown>) : null;
+          const url = image && typeof image.url === "string" ? image.url : null;
+          const title = image && typeof image.title === "string" ? image.title : null;
+          const caption = typeof v.caption === "string" ? v.caption : null;
           return (
             <div key={idx} className="rounded-xl border p-4">
               <div className="text-sm font-semibold">Image</div>
-              <div className="mt-2 text-sm text-muted-foreground">
-                Image id: {String(v.image ?? "—")}
-              </div>
-              {v.caption ? <div className="mt-2 text-sm">{String(v.caption)}</div> : null}
+              {url ? (
+                <div className="relative mt-3 aspect-video overflow-hidden rounded-lg bg-muted">
+                  <Image
+                    src={url}
+                    alt={caption || title || "Illustration"}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, 768px"
+                  />
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-muted-foreground">Image id: {String(v.image ?? "—")}</div>
+              )}
+              {caption ? <div className="mt-2 text-sm">{caption}</div> : null}
             </div>
           );
         }

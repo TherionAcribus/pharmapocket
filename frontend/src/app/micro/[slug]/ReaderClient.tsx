@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -37,6 +38,18 @@ type DeckState = {
   index: number;
   savedAt: number;
 };
+
+const LONG_PREVIEW_MAX_HEIGHT = 120;
+const API_BASE =
+  (process.env.NEXT_PUBLIC_API_BASE_URL && process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "")) ||
+  "";
+
+function normalizeImageUrl(url?: string | null) {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (!API_BASE) return url;
+  return `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`;
+}
 
 function readDeckFromSession(): DeckState | null {
   if (typeof window === "undefined") return null;
@@ -230,6 +243,57 @@ export default function ReaderClient({
   const hasExtra = extraBlocks.length > 0;
   const hasDetails = hasLongContent || hasSources || hasExtra;
 
+  const inlineIllustrationUrl = React.useMemo(() => {
+    if (data.cover_image_url) return normalizeImageUrl(data.cover_image_url);
+    const imageBlock = blocks.find((b) => b?.type === "image");
+    const v = imageBlock && typeof imageBlock.value === "object" ? (imageBlock.value as Record<string, unknown>) : null;
+    const image = v && typeof v.image === "object" ? (v.image as Record<string, unknown>) : null;
+    const url = image && typeof image.url === "string" ? normalizeImageUrl(image.url) : null;
+    return url;
+  }, [blocks, data.cover_image_url]);
+
+  const primaryCategory = React.useMemo(() => {
+    const fromPayload =
+      data.categories_pharmacologie_payload?.[0] ||
+      data.categories_maladies_payload?.[0] ||
+      data.categories_classes_payload?.[0];
+    if (fromPayload?.name) return fromPayload.name;
+
+    const fromStrings =
+      data.categories_pharmacologie?.[0] || data.categories_maladies?.[0] || data.categories_classes?.[0];
+    return fromStrings || null;
+  }, [
+    data.categories_classes,
+    data.categories_classes_payload,
+    data.categories_maladies,
+    data.categories_maladies_payload,
+    data.categories_pharmacologie,
+    data.categories_pharmacologie_payload,
+  ]);
+
+  const longPreviewHtml = React.useMemo(() => {
+    const firstDetail = detailBlocks.find((b) => b?.type === "detail");
+    if (firstDetail && typeof firstDetail.value === "string" && firstDetail.value.trim()) {
+      return firstDetail.value;
+    }
+    return data.takeaway;
+  }, [detailBlocks, data.takeaway]);
+
+  const hasLongPreview = Boolean(longPreviewHtml);
+
+  const longPreviewRef = React.useRef<HTMLDivElement | null>(null);
+  const [longPreviewMaxHeight, setLongPreviewMaxHeight] = React.useState<number | null>(
+    LONG_PREVIEW_MAX_HEIGHT
+  );
+  const [longPreviewIsTruncated, setLongPreviewIsTruncated] = React.useState(false);
+
+  const publishedLabel = React.useMemo(() => {
+    if (!data.published_at) return null;
+    const dt = new Date(data.published_at);
+    if (Number.isNaN(dt.getTime())) return null;
+    return dt.toLocaleDateString();
+  }, [data.published_at]);
+
   React.useEffect(() => {
     const seeMoreTypes = Array.isArray(data.see_more)
       ? (data.see_more as StreamBlock[])
@@ -271,6 +335,26 @@ export default function ReaderClient({
     hasDetails,
   ]);
 
+  React.useEffect(() => {
+    const el = longPreviewRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      setLongPreviewMaxHeight(LONG_PREVIEW_MAX_HEIGHT);
+      requestAnimationFrame(() => {
+        const nextEl = longPreviewRef.current;
+        if (!nextEl) return;
+        const isOverflowing = nextEl.scrollHeight > nextEl.clientHeight + 1;
+        setLongPreviewIsTruncated(isOverflowing);
+        if (!isOverflowing) setLongPreviewMaxHeight(null);
+      });
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [data.slug, longPreviewHtml, largeText]);
+
   const goRelative = React.useCallback(
     (delta: number) => {
       if (!deck?.slugs?.length) return;
@@ -292,6 +376,10 @@ export default function ReaderClient({
 
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpenDetails(false);
+        return;
+      }
       if (openDetails) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -301,9 +389,6 @@ export default function ReaderClient({
         e.preventDefault();
         goRelative(+1);
       }
-      if (e.key === "Escape") {
-        setOpenDetails(false);
-      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -311,6 +396,8 @@ export default function ReaderClient({
 
   const startRef = React.useRef<{ x: number; y: number; t: number } | null>(null);
   const lastTapRef = React.useRef<{ x: number; y: number; t: number } | null>(null);
+
+  const sheetStartRef = React.useRef<{ x: number; y: number; t: number } | null>(null);
 
   const onTouchStart = (e: React.TouchEvent) => {
     if (openDetails) return;
@@ -332,6 +419,14 @@ export default function ReaderClient({
     const dy = t.clientY - start.y;
     const adx = Math.abs(dx);
     const ady = Math.abs(dy);
+
+    const canSwipeOpenFromHere =
+      typeof window !== "undefined" ? start.y > window.innerHeight * 0.55 : true;
+
+    if (hasDetails && canSwipeOpenFromHere && ady > 60 && ady > adx * 1.2 && dy < 0) {
+      setOpenDetails(true);
+      return;
+    }
 
     // Double tap to save (only when it's a tap, not a swipe)
     if (adx < 10 && ady < 10) {
@@ -355,6 +450,30 @@ export default function ReaderClient({
 
     if (dx < 0) goRelative(+1);
     else goRelative(-1);
+  };
+
+  const onSheetHandleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (!t) return;
+    sheetStartRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+
+  const onSheetHandleTouchEnd = (e: React.TouchEvent) => {
+    const start = sheetStartRef.current;
+    sheetStartRef.current = null;
+    if (!start) return;
+
+    const t = e.changedTouches[0];
+    if (!t) return;
+
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    const adx = Math.abs(dx);
+    const ady = Math.abs(dy);
+
+    if (ady > 60 && ady > adx * 1.2 && dy > 0) {
+      setOpenDetails(false);
+    }
   };
 
   return (
@@ -418,37 +537,90 @@ export default function ReaderClient({
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <div className={largeText ? "space-y-3 text-[1.05rem]" : "space-y-3"}>
-          <div className="text-2xl font-semibold leading-snug">{data.title}</div>
-
-          <div className="relative">
-            <RichText
-              html={data.answer_express}
-              className={cn(
-                "prose prose-zinc max-w-none text-base text-muted-foreground dark:prose-invert"
-              )}
-            />
-          </div>
-
-          {data.key_points?.length ? (
-            <div className="flex flex-wrap gap-1">
-              {data.key_points.slice(0, 3).map((p) => (
-                <Badge key={p} variant="secondary" className="max-w-full truncate">
-                  {p}
+          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {primaryCategory ? (
+                <Badge variant="secondary" className="max-w-full truncate">
+                  {primaryCategory}
                 </Badge>
-              ))}
+              ) : null}
+              {publishedLabel ? <div>Publié le {publishedLabel}</div> : null}
             </div>
-          ) : null}
 
-          {hasDetails ? (
-            <button
-              type="button"
-              className="mx-auto flex items-center justify-center gap-1.5 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground"
-              onClick={() => setOpenDetails(true)}
-            >
-              <span>Plus</span>
-              <ChevronUpIcon className="size-4" />
-            </button>
-          ) : null}
+            <div className="mt-3 text-2xl font-semibold leading-snug">{data.title}</div>
+
+            <div className="mt-3 space-y-3">
+              {inlineIllustrationUrl ? (
+                <div className="relative aspect-video overflow-hidden rounded-xl border bg-muted">
+                  <Image
+                    src={inlineIllustrationUrl}
+                    alt={data.title}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, 768px"
+                    priority
+                  />
+                </div>
+              ) : null}
+
+              <div className="relative">
+                <RichText
+                  html={data.answer_express}
+                  className={cn(
+                    "prose prose-zinc max-w-none text-[1.05rem] leading-relaxed text-foreground dark:prose-invert",
+                    largeText ? "text-[1.15rem]" : ""
+                  )}
+                />
+              </div>
+            </div>
+
+            {hasLongPreview ? (
+              <div className="relative mt-4">
+                <div
+                  ref={longPreviewRef}
+                  className="prose prose-zinc max-w-none text-sm text-muted-foreground dark:prose-invert"
+                  style={
+                    longPreviewMaxHeight
+                      ? { maxHeight: longPreviewMaxHeight, overflow: "hidden" }
+                      : undefined
+                  }
+                >
+                  <RichText html={longPreviewHtml} />
+                </div>
+                {longPreviewIsTruncated ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-b from-transparent to-card" />
+                ) : null}
+              </div>
+            ) : null}
+
+            {data.key_points?.length ? (
+              <div className="mt-4 flex flex-wrap gap-1">
+                {data.key_points.slice(0, 3).map((p) => (
+                  <Badge key={p} variant="secondary" className="max-w-full truncate">
+                    {p}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+
+            {hasDetails ? (
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  className="mx-auto flex items-center justify-center gap-1.5 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground"
+                  onClick={() => setOpenDetails(true)}
+                  aria-label="Glisser pour ouvrir les détails et sources"
+                >
+                  <span>Glisser pour détails & sources</span>
+                  <ChevronUpIcon className="size-4" />
+                </button>
+
+                <Button type="button" className="w-full" onClick={() => setOpenDetails(true)}>
+                  Voir détails & sources
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </main>
 
@@ -482,11 +654,21 @@ export default function ReaderClient({
 
       <Sheet open={openDetails} onOpenChange={setOpenDetails}>
         <SheetContent side="bottom" className="max-h-[85dvh] rounded-t-2xl">
+          <button
+            type="button"
+            className="px-4 pt-3"
+            aria-label="Glisser vers le bas pour fermer"
+            onTouchStart={onSheetHandleTouchStart}
+            onTouchEnd={onSheetHandleTouchEnd}
+          >
+            <div className="mx-auto h-1.5 w-10 rounded-full bg-muted" />
+          </button>
+
           <SheetHeader>
             <SheetTitle>Détails & sources</SheetTitle>
           </SheetHeader>
 
-          <ScrollArea className="h-[calc(85dvh-4.5rem)] px-4 pb-6">
+          <ScrollArea className="flex-1 px-4 pb-6">
             <div className="space-y-6">
               <div className="space-y-2">
                 <div className="text-sm font-semibold">{data.title}</div>

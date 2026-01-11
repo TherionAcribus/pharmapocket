@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from wagtail.documents.models import Document
+from wagtail.images import get_image_model
 
 from .models import (
     CategoryMedicament,
@@ -109,6 +110,14 @@ def _parse_int(value: str | None) -> int | None:
 def _sanitize_stream_value(value):
     if value is None:
         return None
+
+    ImageModel = get_image_model()
+    if isinstance(value, ImageModel):
+        try:
+            url = value.file.url
+        except Exception:
+            url = None
+        return {"id": value.id, "title": value.title, "url": url}
 
     if isinstance(value, Source):
         return {
