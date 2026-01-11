@@ -30,6 +30,7 @@ export type MicroArticleListItem = {
   categories_maladies_payload?: CategoryPayload[];
   categories_classes_payload?: CategoryPayload[];
   published_at?: string | null;
+  decks_count?: number;
 };
 
 export type DeckSummary = {

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MicroArticleListItem } from "@/lib/types";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
@@ -13,12 +14,20 @@ export function MicroCard({
   deckSlugs,
   deckIndex,
   isRead,
+  selectMode,
+  selected,
+  onSelectedChange,
 }: {
   item: MicroArticleListItem;
   deckSlugs?: string[];
   deckIndex?: number;
   isRead?: boolean;
+  selectMode?: boolean;
+  selected?: boolean;
+  onSelectedChange?: (next: boolean) => void;
 }) {
+  const sharedDecksCount = typeof item.decks_count === "number" ? item.decks_count : null;
+
   const onOpen = () => {
     if (typeof window === "undefined") return;
     if (!deckSlugs?.length) return;
@@ -33,51 +42,69 @@ export function MicroCard({
     }
   };
 
-  return (
-    <Link
-      href={`/micro/${item.slug}`}
-      className={
-        isRead
-          ? "block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent opacity-70"
-          : "block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent"
-      }
-      onClick={onOpen}
-    >
-      <div className="flex items-start gap-3 p-4">
-        <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-base font-semibold leading-snug">
-            {item.title}
-          </div>
-          <div className="mt-1 text-sm text-muted-foreground">
-            <div
-              className="prose prose-zinc max-w-none line-clamp-2 dark:prose-invert"
-              dangerouslySetInnerHTML={{ __html: item.answer_express }}
-            />
-          </div>
+  const className =
+    isRead
+      ? "block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent opacity-70"
+      : "block rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent";
 
-          {item.key_points?.length ? (
-            <div className="mt-3 flex flex-wrap gap-1">
-              {item.key_points.slice(0, 3).map((p) => (
-                <Badge key={p} variant="secondary" className="max-w-full truncate">
-                  {p}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
+  const content = (
+    <div className="flex items-start gap-3 p-4">
+      {selectMode ? (
+        <div className="pt-0.5">
+          <Checkbox
+            checked={Boolean(selected)}
+            onCheckedChange={(v) => onSelectedChange?.(Boolean(v))}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
+
+      <div className="min-w-0 flex-1">
+        <div className="line-clamp-2 text-base font-semibold leading-snug">{item.title}</div>
+
+        {sharedDecksCount && sharedDecksCount > 1 ? (
+          <div className="mt-2 flex flex-wrap gap-1">
+            <Badge variant="secondary">Dans {sharedDecksCount} decks</Badge>
+          </div>
+        ) : null}
+
+        <div className="mt-1 text-sm text-muted-foreground">
+          <div
+            className="prose prose-zinc max-w-none line-clamp-2 dark:prose-invert"
+            dangerouslySetInnerHTML={{ __html: item.answer_express }}
+          />
         </div>
 
-        <div className="relative mt-0.5 h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted">
-          {item.cover_image_url ? (
-            <Image
-              src={item.cover_image_url}
-              alt={item.title}
-              fill
-              className="object-cover"
-              sizes="64px"
-            />
-          ) : null}
-        </div>
+        {item.key_points?.length ? (
+          <div className="mt-3 flex flex-wrap gap-1">
+            {item.key_points.slice(0, 3).map((p) => (
+              <Badge key={p} variant="secondary" className="max-w-full truncate">
+                {p}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
       </div>
+
+      <div className="relative mt-0.5 h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted">
+        {item.cover_image_url ? (
+          <Image src={item.cover_image_url} alt={item.title} fill className="object-cover" sizes="64px" />
+        ) : null}
+      </div>
+    </div>
+  );
+
+  if (selectMode) {
+    return (
+      <div className={className} onClick={() => onSelectedChange?.(!Boolean(selected))}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Link href={`/micro/${item.slug}`} className={className} onClick={onOpen}>
+      {content}
     </Link>
   );
 }

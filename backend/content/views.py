@@ -567,7 +567,22 @@ class DeckCardsView(APIView):
             qs = qs.filter(
                 Q(microarticle__title__icontains=s) | Q(microarticle__answer_express__icontains=s)
             )
-        items = [_microarticle_list_item(r.microarticle) for r in qs]
+        card_ids = list(qs.values_list("microarticle_id", flat=True))
+        deck_counts_by_card_id = {
+            row["microarticle_id"]: row["decks_count"]
+            for row in DeckCard.objects.filter(
+                deck__user=request.user,
+                microarticle_id__in=card_ids,
+            )
+            .values("microarticle_id")
+            .annotate(decks_count=models.Count("deck_id", distinct=True))
+        }
+
+        items: list[dict] = []
+        for r in qs:
+            item = _microarticle_list_item(r.microarticle)
+            item["decks_count"] = int(deck_counts_by_card_id.get(r.microarticle_id, 1))
+            items.append(item)
         return Response({"count": len(items), "results": items})
 
     def post(self, request, deck_id: int):
