@@ -96,6 +96,9 @@ class BaseCategory(MP_Node):
 
     node_order_by = ["name"]
 
+    class Meta:
+        abstract = True
+
     panels = [
         FieldPanel("name"),
         FieldPanel("slug"),
