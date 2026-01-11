@@ -2,6 +2,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 from django.utils.text import slugify
 
 from modelcluster.fields import ParentalKey, ParentalManyToManyField
@@ -473,6 +474,64 @@ class SavedMicroArticle(models.Model):
         ]
         indexes = [
             models.Index(fields=["user", "created_at"]),
+        ]
+
+
+class Deck(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="decks",
+    )
+    name = models.CharField(max_length=60)
+    is_default = models.BooleanField(default=False)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "name"],
+                name="uniq_deck_user_name",
+            ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=Q(is_default=True),
+                name="uniq_deck_default_per_user",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["user", "sort_order"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.user_id})"
+
+
+class DeckCard(models.Model):
+    deck = models.ForeignKey(
+        "content.Deck",
+        on_delete=models.CASCADE,
+        related_name="deck_cards",
+    )
+    microarticle = models.ForeignKey(
+        "content.MicroArticlePage",
+        on_delete=models.CASCADE,
+        related_name="deck_links",
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["deck", "microarticle"],
+                name="uniq_deck_card",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["deck", "added_at"]),
+            models.Index(fields=["microarticle"]),
         ]
 
 

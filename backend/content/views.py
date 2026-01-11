@@ -1,6 +1,7 @@
 from datetime import date, datetime
 import logging
 
+from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
 from rest_framework import serializers
@@ -17,15 +18,46 @@ from .models import (
     CategoryMedicament,
     CategoryMaladies,
     CategoryTheme,
+    Deck,
+    DeckCard,
     MicroArticlePage,
     MicroArticleReadState,
-    SavedMicroArticle,
     Source,
 )
 from .pagination import MicroArticleCursorPagination
 from .serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _get_or_create_default_deck(user) -> Deck:
+    deck = Deck.objects.filter(user=user, is_default=True).first()
+    if deck is not None:
+        return deck
+
+    Deck.objects.filter(user=user, is_default=True).update(is_default=False)
+    existing = Deck.objects.filter(user=user, name="Mes cartes").first()
+    if existing is not None:
+        existing.is_default = True
+        existing.sort_order = 0
+        existing.save(update_fields=["is_default", "sort_order", "updated_at"])
+        return existing
+
+    return Deck.objects.create(user=user, name="Mes cartes", is_default=True, sort_order=0)
+
+
+def _microarticle_list_item(p: MicroArticlePage) -> dict:
+    return {
+        "id": p.id,
+        "slug": p.slug,
+        "title": p.title,
+        "answer_express": p.answer_express,
+        "takeaway": p.takeaway,
+        "key_points": _key_points(p),
+        "cover_image_url": _cover_url(p),
+        "tags": list(p.tags.values_list("name", flat=True)),
+        "published_at": p.first_published_at,
+    }
 
 
 def _cover_url(page: MicroArticlePage) -> str | None:
@@ -343,10 +375,14 @@ class MicroArticleDetailView(RetrieveAPIView):
         }
 
         if request.user.is_authenticated:
-            data["is_saved"] = SavedMicroArticle.objects.filter(
-                user=request.user,
-                microarticle_id=page.id,
-            ).exists()
+            default_deck = Deck.objects.filter(user=request.user, is_default=True).first()
+            if default_deck is None:
+                data["is_saved"] = False
+            else:
+                data["is_saved"] = DeckCard.objects.filter(
+                    deck=default_deck,
+                    microarticle_id=page.id,
+                ).exists()
 
         serializer = self.get_serializer(data)
         return Response(serializer.data)
@@ -356,29 +392,14 @@ class SavedMicroArticleListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        default_deck = _get_or_create_default_deck(request.user)
         rows = (
-            SavedMicroArticle.objects.filter(user=request.user)
+            DeckCard.objects.filter(deck=default_deck)
             .select_related("microarticle", "microarticle__cover_image")
-            .order_by("-created_at")
+            .order_by("-added_at")
         )
 
-        items = []
-        for r in rows:
-            p: MicroArticlePage = r.microarticle
-            items.append(
-                {
-                    "id": p.id,
-                    "slug": p.slug,
-                    "title": p.title,
-                    "answer_express": p.answer_express,
-                    "takeaway": p.takeaway,
-                    "key_points": _key_points(p),
-                    "cover_image_url": _cover_url(p),
-                    "tags": list(p.tags.values_list("name", flat=True)),
-                    "published_at": p.first_published_at,
-                }
-            )
-
+        items = [_microarticle_list_item(r.microarticle) for r in rows]
         return Response(items)
 
     def post(self, request):
@@ -396,7 +417,8 @@ class SavedMicroArticleListView(APIView):
         if page is None:
             raise DRFValidationError({"slug": "Unknown microarticle"})
 
-        SavedMicroArticle.objects.get_or_create(user=request.user, microarticle=page)
+        default_deck = _get_or_create_default_deck(request.user)
+        DeckCard.objects.get_or_create(deck=default_deck, microarticle=page)
         return Response({"saved": True})
 
 
@@ -407,21 +429,225 @@ class SavedMicroArticleDetailView(APIView):
         page = MicroArticlePage.objects.filter(slug=slug).first()
         if page is None:
             return Response({"saved": False})
+        default_deck = Deck.objects.filter(user=request.user, is_default=True).first()
+        if default_deck is None:
+            return Response({"saved": False})
         return Response(
-            {
-                "saved": SavedMicroArticle.objects.filter(
-                    user=request.user,
-                    microarticle_id=page.id,
-                ).exists()
-            }
+            {"saved": DeckCard.objects.filter(deck=default_deck, microarticle_id=page.id).exists()}
         )
 
     def delete(self, request, slug: str):
         page = MicroArticlePage.objects.filter(slug=slug).first()
         if page is None:
             return Response(status=204)
-        SavedMicroArticle.objects.filter(user=request.user, microarticle_id=page.id).delete()
+        default_deck = Deck.objects.filter(user=request.user, is_default=True).first()
+        if default_deck is not None:
+            DeckCard.objects.filter(deck=default_deck, microarticle_id=page.id).delete()
         return Response(status=204)
+
+
+class DeckListSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    is_default = serializers.BooleanField()
+    sort_order = serializers.IntegerField()
+    cards_count = serializers.IntegerField()
+
+
+class DeckListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        _get_or_create_default_deck(request.user)
+
+        qs = (
+            Deck.objects.filter(user=request.user)
+            .order_by("sort_order", "id")
+            .annotate(cards_count=models.Count("deck_cards"))
+        )
+        items = [
+            {
+                "id": d.id,
+                "name": d.name,
+                "is_default": bool(d.is_default),
+                "sort_order": int(d.sort_order),
+                "cards_count": int(getattr(d, "cards_count", 0) or 0),
+            }
+            for d in qs
+        ]
+        serializer = DeckListSerializer(items, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        name = request.data.get("name") if isinstance(request.data, dict) else None
+        if not name or not isinstance(name, str):
+            raise DRFValidationError({"name": "name is required"})
+        name = name.strip()
+        if not name:
+            raise DRFValidationError({"name": "name is required"})
+
+        _get_or_create_default_deck(request.user)
+        sort_order = (
+            Deck.objects.filter(user=request.user).aggregate(models.Max("sort_order")).get("sort_order__max")
+            or 0
+        )
+        deck = Deck.objects.create(user=request.user, name=name, sort_order=int(sort_order) + 1)
+        return Response({"id": deck.id, "name": deck.name, "is_default": bool(deck.is_default), "sort_order": deck.sort_order})
+
+
+class DeckDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, deck_id: int):
+        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        if deck is None:
+            return Response(status=404)
+
+        name = request.data.get("name") if isinstance(request.data, dict) else None
+        sort_order = request.data.get("sort_order") if isinstance(request.data, dict) else None
+
+        update_fields = ["updated_at"]
+        if isinstance(name, str):
+            deck.name = name.strip()
+            update_fields.append("name")
+        if sort_order is not None:
+            try:
+                deck.sort_order = int(sort_order)
+                update_fields.append("sort_order")
+            except (TypeError, ValueError):
+                raise DRFValidationError({"sort_order": "sort_order must be an integer"})
+
+        if len(update_fields) == 1:
+            raise DRFValidationError({"detail": "No fields to update"})
+
+        deck.save(update_fields=update_fields)
+        return Response({"id": deck.id, "name": deck.name, "is_default": bool(deck.is_default), "sort_order": deck.sort_order})
+
+    def delete(self, request, deck_id: int):
+        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        if deck is None:
+            return Response(status=404)
+        if deck.is_default:
+            raise DRFValidationError({"detail": "Default deck cannot be deleted"})
+        deck.delete()
+        return Response(status=204)
+
+
+class DeckSetDefaultView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, deck_id: int):
+        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        if deck is None:
+            return Response(status=404)
+
+        Deck.objects.filter(user=request.user, is_default=True).exclude(id=deck.id).update(is_default=False)
+        if not deck.is_default:
+            deck.is_default = True
+            deck.save(update_fields=["is_default", "updated_at"])
+        return Response({"ok": True, "default_deck_id": deck.id})
+
+
+class DeckCardsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, deck_id: int):
+        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        if deck is None:
+            return Response(status=404)
+
+        search = request.query_params.get("search")
+        qs = (
+            DeckCard.objects.filter(deck=deck)
+            .select_related("microarticle", "microarticle__cover_image")
+            .order_by("-added_at")
+        )
+        if search and isinstance(search, str) and search.strip():
+            s = search.strip()
+            qs = qs.filter(
+                Q(microarticle__title__icontains=s) | Q(microarticle__answer_express__icontains=s)
+            )
+        items = [_microarticle_list_item(r.microarticle) for r in qs]
+        return Response({"count": len(items), "results": items})
+
+    def post(self, request, deck_id: int):
+        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        if deck is None:
+            return Response(status=404)
+
+        card_id = request.data.get("card_id") if isinstance(request.data, dict) else None
+        if card_id is None:
+            raise DRFValidationError({"card_id": "card_id is required"})
+        try:
+            microarticle_id = int(card_id)
+        except (TypeError, ValueError):
+            raise DRFValidationError({"card_id": "card_id must be an integer"})
+
+        DeckCard.objects.get_or_create(deck=deck, microarticle_id=microarticle_id)
+        return Response({"ok": True})
+
+
+class DeckCardDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, deck_id: int, card_id: int):
+        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        if deck is None:
+            return Response(status=404)
+        DeckCard.objects.filter(deck=deck, microarticle_id=card_id).delete()
+        return Response(status=204)
+
+
+class CardDecksView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, card_id: int):
+        _get_or_create_default_deck(request.user)
+        decks = list(Deck.objects.filter(user=request.user).order_by("sort_order", "id"))
+        member_deck_ids = set(
+            DeckCard.objects.filter(deck__user=request.user, microarticle_id=card_id).values_list(
+                "deck_id", flat=True
+            )
+        )
+        items = [
+            {
+                "id": d.id,
+                "name": d.name,
+                "is_default": bool(d.is_default),
+                "is_member": d.id in member_deck_ids,
+            }
+            for d in decks
+        ]
+        return Response(items)
+
+    def put(self, request, card_id: int):
+        deck_ids = request.data.get("deck_ids") if isinstance(request.data, dict) else None
+        if not isinstance(deck_ids, list):
+            raise DRFValidationError({"deck_ids": "deck_ids must be a list"})
+
+        normalized: list[int] = []
+        for d in deck_ids:
+            try:
+                normalized.append(int(d))
+            except (TypeError, ValueError):
+                raise DRFValidationError({"deck_ids": "deck_ids must contain integers"})
+
+        allowed_decks = Deck.objects.filter(user=request.user, id__in=normalized)
+        allowed_ids = set(allowed_decks.values_list("id", flat=True))
+
+        DeckCard.objects.filter(deck__user=request.user, microarticle_id=card_id).exclude(
+            deck_id__in=list(allowed_ids)
+        ).delete()
+
+        existing = set(
+            DeckCard.objects.filter(deck__user=request.user, microarticle_id=card_id).values_list(
+                "deck_id", flat=True
+            )
+        )
+        for deck_id in allowed_ids - existing:
+            DeckCard.objects.get_or_create(deck_id=deck_id, microarticle_id=card_id)
+
+        return Response({"ok": True, "deck_ids": list(allowed_ids)})
 
 
 class MicroArticleReadStateView(APIView):

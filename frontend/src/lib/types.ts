@@ -32,6 +32,26 @@ export type MicroArticleListItem = {
   published_at?: string | null;
 };
 
+export type DeckSummary = {
+  id: number;
+  name: string;
+  is_default: boolean;
+  sort_order: number;
+  cards_count: number;
+};
+
+export type DeckMembership = {
+  id: number;
+  name: string;
+  is_default: boolean;
+  is_member: boolean;
+};
+
+export type DeckCardsResponse = {
+  count: number;
+  results: MicroArticleListItem[];
+};
+
 export type StreamBlock = { type: string; value: unknown };
 
 export type MicroArticleDetail = {

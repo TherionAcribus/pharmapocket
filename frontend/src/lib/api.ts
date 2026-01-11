@@ -1,5 +1,8 @@
 import {
   CursorPage,
+  DeckCardsResponse,
+  DeckMembership,
+  DeckSummary,
   MicroArticleDetail,
   MicroArticleListItem,
   TagPayload,
@@ -211,6 +214,100 @@ export async function fetchMicroArticle(slug: string): Promise<MicroArticleDetai
 
 export async function fetchSavedMicroArticles(): Promise<MicroArticleListItem[]> {
   return apiGet<MicroArticleListItem[]>(`/api/v1/content/saved/`);
+}
+
+export async function fetchDecks(): Promise<DeckSummary[]> {
+  return apiGet<DeckSummary[]>(`/api/v1/content/decks/`);
+}
+
+export async function createDeck(name: string): Promise<{ id: number; name: string; is_default: boolean; sort_order: number }> {
+  return apiJson<{ id: number; name: string; is_default: boolean; sort_order: number }>(
+    `/api/v1/content/decks/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name }),
+    }
+  );
+}
+
+export async function patchDeck(
+  deckId: number,
+  input: { name?: string; sort_order?: number }
+): Promise<{ id: number; name: string; is_default: boolean; sort_order: number }> {
+  return apiJson<{ id: number; name: string; is_default: boolean; sort_order: number }>(
+    `/api/v1/content/decks/${encodeURIComponent(String(deckId))}/`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export async function deleteDeck(deckId: number): Promise<void> {
+  await apiJson<void>(`/api/v1/content/decks/${encodeURIComponent(String(deckId))}/`, {
+    method: "DELETE",
+  });
+}
+
+export async function setDefaultDeck(deckId: number): Promise<{ ok: boolean; default_deck_id: number }> {
+  return apiJson<{ ok: boolean; default_deck_id: number }>(
+    `/api/v1/content/decks/${encodeURIComponent(String(deckId))}/set-default/`,
+    { method: "POST" }
+  );
+}
+
+export async function fetchDeckCards(deckId: number, search?: string): Promise<DeckCardsResponse> {
+  const qs = search && search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+  return apiGet<DeckCardsResponse>(
+    `/api/v1/content/decks/${encodeURIComponent(String(deckId))}/cards/${qs}`
+  );
+}
+
+export async function addCardToDeck(deckId: number, cardId: number): Promise<{ ok: boolean }> {
+  return apiJson<{ ok: boolean }>(
+    `/api/v1/content/decks/${encodeURIComponent(String(deckId))}/cards/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ card_id: cardId }),
+    }
+  );
+}
+
+export async function removeCardFromDeck(deckId: number, cardId: number): Promise<void> {
+  await apiJson<void>(
+    `/api/v1/content/decks/${encodeURIComponent(String(deckId))}/cards/${encodeURIComponent(
+      String(cardId)
+    )}/`,
+    { method: "DELETE" }
+  );
+}
+
+export async function fetchCardDecks(cardId: number): Promise<DeckMembership[]> {
+  return apiGet<DeckMembership[]>(
+    `/api/v1/content/cards/${encodeURIComponent(String(cardId))}/decks/`
+  );
+}
+
+export async function updateCardDecks(cardId: number, deckIds: number[]): Promise<{ ok: boolean; deck_ids: number[] }> {
+  return apiJson<{ ok: boolean; deck_ids: number[] }>(
+    `/api/v1/content/cards/${encodeURIComponent(String(cardId))}/decks/`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ deck_ids: deckIds }),
+    }
+  );
 }
 
 export async function saveMicroArticle(slug: string): Promise<{ saved: boolean }> {

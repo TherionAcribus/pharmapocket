@@ -18,18 +18,23 @@ import {
 import { SeeMoreRenderer } from "@/components/SeeMoreRenderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
+  createDeck,
+  fetchCardDecks,
   fetchMe,
   fetchMicroArticleSavedStatus,
   saveMicroArticle,
   setMicroArticleReadState,
   unsaveMicroArticle,
+  updateCardDecks,
 } from "@/lib/api";
-import type { MicroArticleDetail, StreamBlock } from "@/lib/types";
+import type { DeckMembership, MicroArticleDetail, StreamBlock } from "@/lib/types";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
 
@@ -99,12 +104,48 @@ export default function ReaderClient({
   const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
 
+  const isLoggedIn = Boolean(currentUserEmail);
+
+  const [deckPickerOpen, setDeckPickerOpen] = React.useState(false);
+  const [deckMembership, setDeckMembership] = React.useState<DeckMembership[] | null>(null);
+  const [deckPickerLoading, setDeckPickerLoading] = React.useState(false);
+  const [deckPickerSaving, setDeckPickerSaving] = React.useState(false);
+  const [deckCreateName, setDeckCreateName] = React.useState("");
+  const [deckCreateLoading, setDeckCreateLoading] = React.useState(false);
+
   const [deck, setDeck] = React.useState<DeckState | null>(null);
 
   const showMessage = (text: string) => {
     setMessage(text);
     window.setTimeout(() => setMessage(null), 1800);
   };
+
+  const loadDeckMembership = React.useCallback(async () => {
+    if (!isLoggedIn) return;
+    setDeckPickerLoading(true);
+    try {
+      const rows = await fetchCardDecks(data.id);
+      setDeckMembership(rows);
+    } catch {
+      setDeckMembership(null);
+      showMessage("Impossible de charger les decks.");
+    } finally {
+      setDeckPickerLoading(false);
+    }
+  }, [data.id, isLoggedIn]);
+
+  const openDeckPicker = React.useCallback(() => {
+    if (!isLoggedIn) {
+      showMessage("Connecte-toi pour sauvegarder cette carte.");
+      return;
+    }
+    setDeckPickerOpen(true);
+  }, [isLoggedIn]);
+
+  React.useEffect(() => {
+    if (!deckPickerOpen) return;
+    void loadDeckMembership();
+  }, [deckPickerOpen, loadDeckMembership]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -121,8 +162,6 @@ export default function ReaderClient({
       cancelled = true;
     };
   }, []);
-
-  const isLoggedIn = Boolean(currentUserEmail);
 
   React.useEffect(() => {
     setSaved(Boolean(data.is_saved));
@@ -399,7 +438,86 @@ export default function ReaderClient({
 
   const sheetStartRef = React.useRef<{ x: number; y: number; t: number } | null>(null);
 
+  const saveLongPressTimerRef = React.useRef<number | null>(null);
+  const saveLongPressTriggeredRef = React.useRef(false);
+
+  const clearSaveLongPressTimer = () => {
+    if (saveLongPressTimerRef.current) {
+      window.clearTimeout(saveLongPressTimerRef.current);
+      saveLongPressTimerRef.current = null;
+    }
+  };
+
+  const onSavePointerDown = () => {
+    if (!isLoggedIn) return;
+    saveLongPressTriggeredRef.current = false;
+    clearSaveLongPressTimer();
+    saveLongPressTimerRef.current = window.setTimeout(() => {
+      saveLongPressTriggeredRef.current = true;
+      openDeckPicker();
+    }, 550);
+  };
+
+  const onSavePointerUp = () => {
+    clearSaveLongPressTimer();
+  };
+
+  const onSaveClick = () => {
+    if (saveLongPressTriggeredRef.current) {
+      saveLongPressTriggeredRef.current = false;
+      return;
+    }
+    void toggleSaved("button");
+  };
+
+  const onSaveContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    openDeckPicker();
+  };
+
+  const selectedDeckIds = React.useMemo(() => {
+    if (!deckMembership) return [] as number[];
+    return deckMembership.filter((d) => d.is_member).map((d) => d.id);
+  }, [deckMembership]);
+
+  const toggleDeckMembership = async (deckId: number) => {
+    if (!deckMembership || deckPickerSaving) return;
+    const next = deckMembership.map((d) =>
+      d.id === deckId ? { ...d, is_member: !d.is_member } : d
+    );
+    setDeckMembership(next);
+
+    const nextDeckIds = next.filter((d) => d.is_member).map((d) => d.id);
+    setDeckPickerSaving(true);
+    try {
+      await updateCardDecks(data.id, nextDeckIds);
+    } catch {
+      showMessage("Impossible de mettre à jour les decks.");
+      await loadDeckMembership();
+    } finally {
+      setDeckPickerSaving(false);
+    }
+  };
+
+  const onCreateDeckFromPicker = async () => {
+    const name = deckCreateName.trim();
+    if (!name || deckCreateLoading || deckPickerSaving) return;
+    setDeckCreateLoading(true);
+    try {
+      const created = await createDeck(name);
+      const nextDeckIds = Array.from(new Set([...selectedDeckIds, created.id]));
+      await updateCardDecks(data.id, nextDeckIds);
+      setDeckCreateName("");
+      await loadDeckMembership();
+    } catch {
+      showMessage("Impossible de créer le deck.");
+    } finally {
+      setDeckCreateLoading(false);
+    }
+  };
+
   const onTouchStart = (e: React.TouchEvent) => {
+    if (deckPickerOpen) return;
     if (openDetails) return;
     const t = e.touches[0];
     if (!t) return;
@@ -407,6 +525,7 @@ export default function ReaderClient({
   };
 
   const onTouchEnd = (e: React.TouchEvent) => {
+    if (deckPickerOpen) return;
     if (openDetails) return;
     const start = startRef.current;
     startRef.current = null;
@@ -500,7 +619,12 @@ export default function ReaderClient({
             size="icon"
             aria-label="Sauvegarder"
             className={!isLoggedIn ? "opacity-40" : ""}
-            onClick={() => void toggleSaved("button")}
+            onPointerDown={onSavePointerDown}
+            onPointerUp={onSavePointerUp}
+            onPointerLeave={onSavePointerUp}
+            onPointerCancel={onSavePointerUp}
+            onContextMenu={onSaveContextMenu}
+            onClick={onSaveClick}
           >
             <StarIcon className="size-5" fill={saved ? "currentColor" : "none"} />
           </Button>
@@ -742,6 +866,79 @@ export default function ReaderClient({
               ) : null}
             </div>
           </ScrollArea>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={deckPickerOpen} onOpenChange={setDeckPickerOpen}>
+        <SheetContent side="bottom" className="max-h-[85dvh] rounded-t-2xl">
+          <SheetHeader>
+            <SheetTitle>Ajouter à un deck</SheetTitle>
+          </SheetHeader>
+
+          <ScrollArea className="flex-1 px-4 pb-6">
+            <div className="space-y-4">
+              {deckPickerLoading ? (
+                <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+                  Chargement…
+                </div>
+              ) : deckMembership?.length ? (
+                <div className="space-y-2">
+                  {deckMembership.map((d) => (
+                    <div
+                      key={d.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg border bg-card px-3 py-2"
+                      onClick={() => void toggleDeckMembership(d.id)}
+                      aria-disabled={deckPickerSaving}
+                    >
+                      <Checkbox
+                        checked={d.is_member}
+                        disabled={deckPickerSaving}
+                        onCheckedChange={() => void toggleDeckMembership(d.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{d.name}</div>
+                        {d.is_default ? (
+                          <div className="text-xs text-muted-foreground">Par défaut</div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+                  Aucun deck.
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="flex gap-2">
+                <Input
+                  value={deckCreateName}
+                  onChange={(e) => setDeckCreateName(e.target.value)}
+                  placeholder="Nouveau deck…"
+                />
+                <Button
+                  type="button"
+                  onClick={() => void onCreateDeckFromPicker()}
+                  disabled={deckCreateLoading || deckPickerSaving}
+                >
+                  Créer
+                </Button>
+              </div>
+            </div>
+          </ScrollArea>
+
+          <SheetFooter className="pt-0">
+            <Button
+              type="button"
+              onClick={() => setDeckPickerOpen(false)}
+              disabled={deckPickerSaving || deckCreateLoading}
+            >
+              Terminé
+            </Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     </div>
