@@ -128,11 +128,8 @@ export function SeeMoreRenderer({
                     const document =
                       refObj && typeof refObj.document === "object" ? (refObj.document as Record<string, unknown>) : null;
 
-                    const title =
-                      (source?.name as string) ||
-                      (source?.title as string) ||
-                      (source?.publisher as string) ||
-                      (typeof r === "string" ? r : "Source");
+                    const sourceName = typeof source?.name === "string" ? source.name : undefined;
+                    const sourceTitle = typeof source?.title === "string" ? source.title : undefined;
                     const url = typeof source?.url === "string" ? source.url : undefined;
                     const publisher = typeof source?.publisher === "string" ? source.publisher : undefined;
                     const author = typeof source?.author === "string" ? source.author : undefined;
@@ -142,6 +139,12 @@ export function SeeMoreRenderer({
                     const documentTitle = typeof document?.title === "string" ? document.title : undefined;
                     const documentUrl = typeof document?.url === "string" ? document.url : undefined;
 
+                    const primaryLabel = [publisher, author].filter(Boolean).join(" · ");
+                    const baseTitle = sourceName || sourceTitle;
+                    const fallbackTitle = (typeof r === "string" ? r : null) || "Source";
+                    const title = primaryLabel
+                      ? [primaryLabel, baseTitle].filter(Boolean).join(" — ")
+                      : baseTitle || publisher || author || fallbackTitle;
                     const metaParts = [publisher, author, pubDate].filter(Boolean).join(" · ");
                     const copyTextValue =
                       [

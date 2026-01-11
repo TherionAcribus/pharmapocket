@@ -87,7 +87,9 @@ class Source(index.Indexed, models.Model):
     ]
 
     def __str__(self) -> str:
-        return self.name
+        label_parts = [p for p in [self.publisher, self.author] if p]
+        prefix = " · ".join(label_parts)
+        return " — ".join([p for p in [prefix, self.name] if p])
 
 
 class BaseCategory(MP_Node):
