@@ -6,12 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from content.models import (
-    CategoryClasses,
-    CategoryMaladies,
-    CategoryPharmacologie,
-    MicroArticlePage,
-)
+from content.models import CategoryMedicament, CategoryMaladies, CategoryTheme, MicroArticlePage
 from learning.models import LessonProgress
 
 from .pagination import FeedCursorPagination
@@ -61,12 +56,12 @@ def _questions_payload(page: MicroArticlePage) -> list[dict]:
     ]
 
 def _taxonomy_model(taxonomy: str):
-    if taxonomy == "pharmacologie":
-        return CategoryPharmacologie, "categories_pharmacologie"
+    if taxonomy == "theme":
+        return CategoryTheme, "categories_theme"
     if taxonomy == "maladies":
         return CategoryMaladies, "categories_maladies"
-    if taxonomy == "classes":
-        return CategoryClasses, "categories_classes"
+    if taxonomy == "medicament":
+        return CategoryMedicament, "categories_medicament"
     return None, None
 
 
@@ -127,11 +122,11 @@ class FeedView(ListAPIView):
             .select_related("cover_image")
             .prefetch_related(
                 "tags",
-                "categories_pharmacologie",
+                "categories_theme",
                 "categories_maladies",
-                "categories_classes",
+                "categories_medicament",
             )
-            .order_by("-first_published_at")
+            .order_by("-first_published_at", "-id")
         )
 
         q = self.request.query_params.get("q")
@@ -144,30 +139,30 @@ class FeedView(ListAPIView):
             if tag_slugs:
                 qs = qs.filter(tags__slug__in=tag_slugs)
 
-        cat_p = self.request.query_params.get("category_pharmacologie")
+        cat_p = self.request.query_params.get("category_theme")
         if cat_p:
-            qs = qs.filter(categories_pharmacologie__slug=cat_p)
+            qs = qs.filter(categories_theme__slug=cat_p)
 
         cat_m = self.request.query_params.get("category_maladies")
         if cat_m:
             qs = qs.filter(categories_maladies__slug=cat_m)
 
-        cat_c = self.request.query_params.get("category_classes")
+        cat_c = self.request.query_params.get("category_medicament")
         if cat_c:
-            qs = qs.filter(categories_classes__slug=cat_c)
+            qs = qs.filter(categories_medicament__slug=cat_c)
 
         used_tree_filter = False
 
-        exact_p = _parse_int(self.request.query_params.get("category_pharmacologie_exact"))
+        exact_p = _parse_int(self.request.query_params.get("category_theme_exact"))
         if exact_p is not None:
             qs, used_tree_filter = _apply_tree_filter(
-                qs, taxonomy="pharmacologie", node_id=exact_p, scope="exact"
+                qs, taxonomy="theme", node_id=exact_p, scope="exact"
             )
 
-        subtree_p = _parse_int(self.request.query_params.get("category_pharmacologie_subtree"))
+        subtree_p = _parse_int(self.request.query_params.get("category_theme_subtree"))
         if subtree_p is not None:
             qs, used_tree_filter = _apply_tree_filter(
-                qs, taxonomy="pharmacologie", node_id=subtree_p, scope="subtree"
+                qs, taxonomy="theme", node_id=subtree_p, scope="subtree"
             )
 
         exact_m = _parse_int(self.request.query_params.get("category_maladies_exact"))
@@ -182,16 +177,16 @@ class FeedView(ListAPIView):
                 qs, taxonomy="maladies", node_id=subtree_m, scope="subtree"
             )
 
-        exact_c = _parse_int(self.request.query_params.get("category_classes_exact"))
+        exact_c = _parse_int(self.request.query_params.get("category_medicament_exact"))
         if exact_c is not None:
             qs, used_tree_filter = _apply_tree_filter(
-                qs, taxonomy="classes", node_id=exact_c, scope="exact"
+                qs, taxonomy="medicament", node_id=exact_c, scope="exact"
             )
 
-        subtree_c = _parse_int(self.request.query_params.get("category_classes_subtree"))
+        subtree_c = _parse_int(self.request.query_params.get("category_medicament_subtree"))
         if subtree_c is not None:
             qs, used_tree_filter = _apply_tree_filter(
-                qs, taxonomy="classes", node_id=subtree_c, scope="subtree"
+                qs, taxonomy="medicament", node_id=subtree_c, scope="subtree"
             )
 
         taxonomy = self.request.query_params.get("taxonomy")
@@ -217,9 +212,9 @@ class FeedView(ListAPIView):
                 "key_points": _key_points(p),
                 "cover_image_url": _cover_url(p),
                 "tags": _tag_payload(p),
-                "categories_pharmacologie": _cat_payload(p.categories_pharmacologie),
+                "categories_theme": _cat_payload(p.categories_theme),
                 "categories_maladies": _cat_payload(p.categories_maladies),
-                "categories_classes": _cat_payload(p.categories_classes),
+                "categories_medicament": _cat_payload(p.categories_medicament),
                 "published_at": p.first_published_at,
                 "progress": progress.get(p.id),
             }
@@ -241,9 +236,9 @@ class MicroBySlugView(RetrieveAPIView):
             .select_related("cover_image")
             .prefetch_related(
                 "tags",
-                "categories_pharmacologie",
+                "categories_theme",
                 "categories_maladies",
-                "categories_classes",
+                "categories_medicament",
                 "microarticle_questions__question",
             )
         )
@@ -263,9 +258,9 @@ class MicroBySlugView(RetrieveAPIView):
             "links": [b.value for b in page.links] if page.links else [],
             "see_more": [{"type": b.block_type, "value": b.value} for b in page.see_more] if page.see_more else [],
             "tags": _tag_payload(page),
-            "categories_pharmacologie": _cat_payload(page.categories_pharmacologie),
+            "categories_theme": _cat_payload(page.categories_theme),
             "categories_maladies": _cat_payload(page.categories_maladies),
-            "categories_classes": _cat_payload(page.categories_classes),
+            "categories_medicament": _cat_payload(page.categories_medicament),
             "questions": _questions_payload(page),
             "published_at": page.first_published_at,
             "progress": progress,

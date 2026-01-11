@@ -12,14 +12,7 @@ from rest_framework.views import APIView
 
 from wagtail.documents.models import Document
 
-from .models import (
-    CategoryClasses,
-    CategoryMaladies,
-    CategoryPharmacologie,
-    MicroArticlePage,
-    SavedMicroArticle,
-    Source,
-)
+from .models import CategoryMedicament, CategoryMaladies, CategoryTheme, MicroArticlePage, SavedMicroArticle, Source
 from .pagination import MicroArticleCursorPagination
 from .serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
 
@@ -69,12 +62,12 @@ def _questions_payload(page: MicroArticlePage) -> list[dict]:
 
 
 def _taxonomy_model(taxonomy: str):
-    if taxonomy == "pharmacologie":
-        return CategoryPharmacologie, "categories_pharmacologie"
+    if taxonomy == "theme":
+        return CategoryTheme, "categories_theme"
     if taxonomy == "maladies":
         return CategoryMaladies, "categories_maladies"
-    if taxonomy == "classes":
-        return CategoryClasses, "categories_classes"
+    if taxonomy == "medicament":
+        return CategoryMedicament, "categories_medicament"
     return None, None
 
 
@@ -182,9 +175,9 @@ class MicroArticleListView(ListAPIView):
             .select_related("cover_image")
             .prefetch_related(
                 "tags",
-                "categories_pharmacologie",
+                "categories_theme",
                 "categories_maladies",
-                "categories_classes",
+                "categories_medicament",
             )
             .order_by("-first_published_at", "-id")
         )
@@ -240,9 +233,9 @@ class MicroArticleListView(ListAPIView):
                 "cover_image_url": _cover_url(p),
                 "tags": list(p.tags.values_list("name", flat=True)),
                 "tags_payload": _tag_payload(p),
-                "categories_pharmacologie_payload": _cat_payload(p.categories_pharmacologie),
+                "categories_theme_payload": _cat_payload(p.categories_theme),
                 "categories_maladies_payload": _cat_payload(p.categories_maladies),
-                "categories_classes_payload": _cat_payload(p.categories_classes),
+                "categories_medicament_payload": _cat_payload(p.categories_medicament),
                 "published_at": p.first_published_at,
             }
             for p in page
@@ -263,9 +256,9 @@ class MicroArticleDetailView(RetrieveAPIView):
             .select_related("cover_image")
             .prefetch_related(
                 "tags",
-                "categories_pharmacologie",
+                "categories_theme",
                 "categories_maladies",
-                "categories_classes",
+                "categories_medicament",
                 "microarticle_questions__question",
             )
             .specific()
@@ -321,13 +314,13 @@ class MicroArticleDetailView(RetrieveAPIView):
             "links": links_blocks,
             "see_more": see_more_blocks,
             "tags": list(page.tags.values_list("name", flat=True)),
-            "categories_pharmacologie": list(page.categories_pharmacologie.values_list("name", flat=True)),
+            "categories_theme": list(page.categories_theme.values_list("name", flat=True)),
             "categories_maladies": list(page.categories_maladies.values_list("name", flat=True)),
-            "categories_classes": list(page.categories_classes.values_list("name", flat=True)),
+            "categories_medicament": list(page.categories_medicament.values_list("name", flat=True)),
             "tags_payload": _tag_payload(page),
-            "categories_pharmacologie_payload": _cat_payload(page.categories_pharmacologie),
+            "categories_theme_payload": _cat_payload(page.categories_theme),
             "categories_maladies_payload": _cat_payload(page.categories_maladies),
-            "categories_classes_payload": _cat_payload(page.categories_classes),
+            "categories_medicament_payload": _cat_payload(page.categories_medicament),
             "questions": _questions_payload(page),
             "published_at": page.first_published_at,
         }

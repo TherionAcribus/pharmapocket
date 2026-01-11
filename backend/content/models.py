@@ -126,9 +126,9 @@ class BaseCategory(MP_Node):
 
 
 @register_snippet
-class CategoryPharmacologie(BaseCategory):
+class CategoryTheme(BaseCategory):
     class Meta:
-        verbose_name_plural = "Catégories pharmacologie"
+        verbose_name_plural = "Catégories"
 
 
 @register_snippet
@@ -136,11 +136,15 @@ class CategoryMaladies(BaseCategory):
     class Meta:
         verbose_name_plural = "Catégories maladies"
 
+    def __str__(self) -> str:
+        return self.name
+
 
 @register_snippet
-class CategoryClasses(BaseCategory):
+class CategoryMedicament(BaseCategory):
     class Meta:
-        verbose_name_plural = "Catégories classes"
+        verbose_name_plural = "Catégories médicaments"
+        verbose_name = "Catégorie médicament"
 
 
 class MicroArticleIndexPage(Page):
@@ -283,8 +287,8 @@ class MicroArticlePage(Page):
         blank=True,
     )
 
-    categories_pharmacologie = ParentalManyToManyField(
-        "content.CategoryPharmacologie",
+    categories_theme = ParentalManyToManyField(
+        "content.CategoryTheme",
         blank=True,
         related_name="microarticles",
     )
@@ -293,8 +297,8 @@ class MicroArticlePage(Page):
         blank=True,
         related_name="microarticles",
     )
-    categories_classes = ParentalManyToManyField(
-        "content.CategoryClasses",
+    categories_medicament = ParentalManyToManyField(
+        "content.CategoryMedicament",
         blank=True,
         related_name="microarticles",
     )
@@ -324,9 +328,9 @@ class MicroArticlePage(Page):
         ),
         MultiFieldPanel(
             [
-                FieldPanel("categories_pharmacologie"),
+                FieldPanel("categories_theme"),
                 FieldPanel("categories_maladies"),
-                FieldPanel("categories_classes"),
+                FieldPanel("categories_medicament"),
                 FieldPanel("tags"),
             ],
             heading="Catégorisation",
@@ -371,17 +375,17 @@ class MicroArticlePage(Page):
     def api_tags(self) -> list[dict]:
         return [{"id": t.id, "name": t.name, "slug": t.slug} for t in self.tags.all()]
 
-    def api_categories_pharmacologie(self) -> list[dict]:
+    def api_categories_theme(self) -> list[dict]:
         return [
             {"id": c.id, "name": c.name, "slug": c.slug}
-            for c in self.categories_pharmacologie.all()
+            for c in self.categories_theme.all()
         ]
 
     def api_categories_maladies(self) -> list[dict]:
         return [{"id": c.id, "name": c.name, "slug": c.slug} for c in self.categories_maladies.all()]
 
-    def api_categories_classes(self) -> list[dict]:
-        return [{"id": c.id, "name": c.name, "slug": c.slug} for c in self.categories_classes.all()]
+    def api_categories_medicament(self) -> list[dict]:
+        return [{"id": c.id, "name": c.name, "slug": c.slug} for c in self.categories_medicament.all()]
 
     def api_questions(self) -> list[dict]:
         rows = (
@@ -414,7 +418,7 @@ class MicroArticlePage(Page):
         APIField("api_see_more", serializer=serializers.ListField(child=serializers.DictField())),
         APIField("api_tags", serializer=serializers.ListField(child=serializers.DictField())),
         APIField(
-            "api_categories_pharmacologie",
+            "api_categories_theme",
             serializer=serializers.ListField(child=serializers.DictField()),
         ),
         APIField(
@@ -422,7 +426,7 @@ class MicroArticlePage(Page):
             serializer=serializers.ListField(child=serializers.DictField()),
         ),
         APIField(
-            "api_categories_classes",
+            "api_categories_medicament",
             serializer=serializers.ListField(child=serializers.DictField()),
         ),
         APIField("api_questions", serializer=serializers.ListField(child=serializers.DictField())),

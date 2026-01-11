@@ -8,16 +8,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from taggit.models import Tag
 
-from .models import CategoryClasses, CategoryMaladies, CategoryPharmacologie
+from .models import CategoryMaladies, CategoryMedicament, CategoryTheme
 
 
 def _taxonomy_model(taxonomy: str):
-    if taxonomy == "pharmacologie":
-        return CategoryPharmacologie
+    if taxonomy == "theme":
+        return CategoryTheme
     if taxonomy == "maladies":
         return CategoryMaladies
-    if taxonomy == "classes":
-        return CategoryClasses
+    if taxonomy == "medicament":
+        return CategoryMedicament
     return None
 
 

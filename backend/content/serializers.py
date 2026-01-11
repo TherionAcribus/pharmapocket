@@ -13,11 +13,9 @@ class MicroArticleListSerializer(serializers.Serializer):
     cover_image_url = serializers.CharField(allow_null=True)
     tags = serializers.ListField(child=serializers.CharField())
     tags_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_pharmacologie_payload = serializers.ListField(
-        child=serializers.DictField(), required=False
-    )
+    categories_theme_payload = serializers.ListField(child=serializers.DictField(), required=False)
     categories_maladies_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_classes_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    categories_medicament_payload = serializers.ListField(child=serializers.DictField(), required=False)
     published_at = serializers.DateTimeField(allow_null=True, required=False)
 
 
@@ -33,14 +31,12 @@ class MicroArticleDetailSerializer(serializers.Serializer):
     see_more = serializers.ListField(child=serializers.DictField(), required=False)
     is_saved = serializers.BooleanField(required=False)
     tags = serializers.ListField(child=serializers.CharField())
-    categories_pharmacologie = serializers.ListField(child=serializers.CharField())
+    categories_theme = serializers.ListField(child=serializers.CharField())
     categories_maladies = serializers.ListField(child=serializers.CharField())
-    categories_classes = serializers.ListField(child=serializers.CharField())
+    categories_medicament = serializers.ListField(child=serializers.CharField())
     tags_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_pharmacologie_payload = serializers.ListField(
-      child=serializers.DictField(), required=False
-    )
+    categories_theme_payload = serializers.ListField(child=serializers.DictField(), required=False)
     categories_maladies_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_classes_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    categories_medicament_payload = serializers.ListField(child=serializers.DictField(), required=False)
     questions = serializers.ListField(child=serializers.DictField(), required=False)
     published_at = serializers.DateTimeField(allow_null=True, required=False)
