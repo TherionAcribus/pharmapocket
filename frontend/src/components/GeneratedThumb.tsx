@@ -13,6 +13,8 @@ type VisualCode = {
   pattern: PatternName;
 };
 
+export type { VisualCode };
+
 function hashString(input: string): number {
   let h = 5381;
   for (let i = 0; i < input.length; i += 1) {
@@ -57,6 +59,8 @@ function resolveVisualCode(pathologySlug?: string | null): VisualCode {
   return { bg: base.bg, accent: base.accent, pattern };
 }
 
+export { resolveVisualCode };
+
 function truncateLabel(label: string, max: number): string {
   const t = label.trim();
   if (t.length <= max) return t;
@@ -67,7 +71,7 @@ function pickFirst(arr: CategoryPayload[] | undefined): CategoryPayload | null {
   return Array.isArray(arr) && arr.length ? arr[0] : null;
 }
 
-type ThemeKey =
+export type ThemeKey =
   | "pathologie"
   | "medicament"
   | "prevention"
@@ -86,7 +90,16 @@ function normalizeThemeSlugOrName(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function resolveTheme(item: MicroArticleListItem): ThemeKey {
+type ThemeSource = {
+  categories_theme_payload?: CategoryPayload[];
+};
+
+type ThumbMetaSource = ThemeSource & {
+  categories_maladies_payload?: CategoryPayload[];
+  categories_medicament_payload?: CategoryPayload[];
+};
+
+function resolveTheme(item: ThemeSource): ThemeKey {
   const theme = pickFirst(item.categories_theme_payload);
   const key = normalizeThemeSlugOrName(theme?.slug || theme?.name || "");
 
@@ -102,8 +115,10 @@ function resolveTheme(item: MicroArticleListItem): ThemeKey {
   return "conseil";
 }
 
-function ThemeIcon({ theme }: { theme: ThemeKey }) {
-  const common = { size: 34, strokeWidth: 2.25 };
+export { resolveTheme };
+
+export function ThemeIcon({ theme, size = 34 }: { theme: ThemeKey; size?: number }) {
+  const common = { size, strokeWidth: 2.25 };
   switch (theme) {
     case "medicament":
       return <Pill {...common} />;
@@ -121,6 +136,29 @@ function ThemeIcon({ theme }: { theme: ThemeKey }) {
     default:
       return <Lightbulb {...common} />;
   }
+}
+
+export function resolveGeneratedThumbMeta(source: ThumbMetaSource): {
+  theme: ThemeKey;
+  visual: VisualCode;
+  labelRaw: string;
+  label: string;
+} {
+  const pathology = pickFirst(source.categories_maladies_payload);
+  const medicament = pickFirst(source.categories_medicament_payload);
+  const themeCategory = pickFirst(source.categories_theme_payload);
+  const theme = resolveTheme(source);
+  const visual = resolveVisualCode(pathology?.slug ?? null);
+
+  const labelRaw =
+    theme === "pathologie"
+      ? pathology?.name || themeCategory?.name || ""
+      : theme === "medicament"
+        ? medicament?.name || themeCategory?.name || ""
+        : themeCategory?.name || "";
+
+  const label = labelRaw ? truncateLabel(labelRaw, 11) : "";
+  return { theme, visual, labelRaw, label };
 }
 
 function PatternOverlay({ pattern, accent }: { pattern: PatternName; accent: string }) {
@@ -218,20 +256,7 @@ export function GeneratedThumb({
   item: MicroArticleListItem;
   className?: string;
 }) {
-  const pathology = pickFirst(item.categories_maladies_payload ?? undefined);
-  const medicament = pickFirst(item.categories_medicament_payload ?? undefined);
-  const themeCategory = pickFirst(item.categories_theme_payload ?? undefined);
-  const theme = resolveTheme(item);
-  const visual = resolveVisualCode(pathology?.slug ?? null);
-
-  const labelRaw =
-    theme === "pathologie"
-      ? pathology?.name || themeCategory?.name || ""
-      : theme === "medicament"
-        ? medicament?.name || themeCategory?.name || ""
-        : themeCategory?.name || "";
-
-  const label = labelRaw ? truncateLabel(labelRaw, 11) : "";
+  const { theme, visual, labelRaw, label } = resolveGeneratedThumbMeta(item);
 
   return (
     <div className={className ?? "relative h-full w-full"} aria-hidden="true">

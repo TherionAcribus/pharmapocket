@@ -15,6 +15,7 @@ import {
   BookOpen as BookOpenIcon,
 } from "lucide-react";
 
+import { ThemeIcon, resolveGeneratedThumbMeta } from "@/components/GeneratedThumb";
 import { SeeMoreRenderer } from "@/components/SeeMoreRenderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -498,6 +499,16 @@ export default function ReaderClient({
     return dt.toLocaleDateString();
   }, [data.published_at]);
 
+  const headerMeta = React.useMemo(
+    () =>
+      resolveGeneratedThumbMeta({
+        categories_theme_payload: data.categories_theme_payload,
+        categories_maladies_payload: data.categories_maladies_payload,
+        categories_medicament_payload: data.categories_medicament_payload,
+      }),
+    [data.categories_maladies_payload, data.categories_medicament_payload, data.categories_theme_payload]
+  );
+
   React.useEffect(() => {
     const seeMoreTypes = Array.isArray(data.see_more)
       ? (data.see_more as StreamBlock[])
@@ -863,7 +874,19 @@ export default function ReaderClient({
             }
           >
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              {primaryCategory ? (
+              {headerMeta.labelRaw ? (
+                <Badge
+                  variant="secondary"
+                  className="max-w-full truncate border-transparent"
+                  style={{
+                    backgroundColor: headerMeta.visual.bg,
+                    color: "rgba(255,255,255,0.96)",
+                  }}
+                >
+                  <ThemeIcon theme={headerMeta.theme} size={14} />
+                  <span className="truncate">{headerMeta.labelRaw}</span>
+                </Badge>
+              ) : primaryCategory ? (
                 <Badge variant="secondary" className="max-w-full truncate">
                   {primaryCategory}
                 </Badge>
