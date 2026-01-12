@@ -10,6 +10,18 @@ export type TagPayload = {
   slug: string;
 };
 
+export type ImagePayload = {
+  id: number;
+  title: string;
+  url: string | null;
+  credit_text?: string | null;
+  credit_author?: string | null;
+  credit_source?: string | null;
+  credit_source_url?: string | null;
+  credit_license?: string | null;
+  credit_license_url?: string | null;
+};
+
 export type CategoryPayload = {
   id: number;
   name: string;
@@ -25,6 +37,7 @@ export type MicroArticleListItem = {
   key_points: string[];
   cover_image_url: string | null;
   cover_image_credit?: string | null;
+  cover_image?: ImagePayload | null;
   tags: string[];
   tags_payload?: TagPayload[];
   categories_pharmacologie_payload?: CategoryPayload[];
@@ -65,6 +78,7 @@ export type MicroArticleDetail = {
   key_points: string[];
   cover_image_url: string | null;
   cover_image_credit?: string | null;
+  cover_image?: ImagePayload | null;
   links?: StreamBlock[];
   see_more?: StreamBlock[];
   is_saved?: boolean;
@@ -130,6 +144,7 @@ export type SrsCard = {
   key_points: string[];
   cover_image_url: string | null;
   cover_image_credit?: string | null;
+  cover_image?: ImagePayload | null;
 };
 
 export type SrsNextResponse = {

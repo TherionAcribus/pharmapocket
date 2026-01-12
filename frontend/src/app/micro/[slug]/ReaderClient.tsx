@@ -88,6 +88,45 @@ function RichText({ html, className }: { html?: string; className?: string }) {
   return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+function CreditLine({
+  creditText,
+  sourceUrl,
+  license,
+  licenseUrl,
+}: {
+  creditText?: string | null;
+  sourceUrl?: string | null;
+  license?: string | null;
+  licenseUrl?: string | null;
+}) {
+  if (!creditText && !license) return null;
+  return (
+    <div className="mt-1 text-[11px] text-muted-foreground">
+      {creditText ? (
+        sourceUrl ? (
+          <Link href={sourceUrl} target="_blank" className="underline">
+            {creditText}
+          </Link>
+        ) : (
+          creditText
+        )
+      ) : null}
+      {license ? (
+        <>
+          {creditText ? " " : ""}
+          {licenseUrl ? (
+            <Link href={licenseUrl} target="_blank" className="underline">
+              ({license})
+            </Link>
+          ) : (
+            <>({license})</>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ReaderClient({
   data,
 }: {
@@ -290,6 +329,17 @@ export default function ReaderClient({
     const url = image && typeof image.url === "string" ? normalizeImageUrl(image.url) : null;
     return url;
   }, [blocks, data.cover_image_url]);
+
+  const coverCredit = React.useMemo(() => {
+    const img = data.cover_image;
+    if (!img) return null;
+    return {
+      creditText: typeof img.credit_text === "string" ? img.credit_text : null,
+      sourceUrl: typeof img.credit_source_url === "string" ? img.credit_source_url : null,
+      license: typeof img.credit_license === "string" ? img.credit_license : null,
+      licenseUrl: typeof img.credit_license_url === "string" ? img.credit_license_url : null,
+    };
+  }, [data.cover_image]);
 
   const primaryCategory = React.useMemo(() => {
     const fromPayload =
@@ -674,24 +724,6 @@ export default function ReaderClient({
             <div className="mt-3 text-2xl font-semibold leading-snug">{data.title}</div>
 
             <div className="mt-3 space-y-3">
-              {inlineIllustrationUrl ? (
-                <div>
-                  <div className="relative aspect-video overflow-hidden rounded-xl border bg-muted">
-                    <Image
-                      src={inlineIllustrationUrl}
-                      alt={data.title}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 100vw, 768px"
-                      priority
-                    />
-                  </div>
-                  {data.cover_image_credit ? (
-                    <div className="mt-1 text-[11px] text-muted-foreground">{data.cover_image_credit}</div>
-                  ) : null}
-                </div>
-              ) : null}
-
               <div className="relative">
                 <RichText
                   html={data.answer_express}
@@ -701,6 +733,27 @@ export default function ReaderClient({
                   )}
                 />
               </div>
+
+              {inlineIllustrationUrl ? (
+                <div>
+                  <div className="relative aspect-video overflow-hidden rounded-xl border bg-muted">
+                    <Image
+                      src={inlineIllustrationUrl}
+                      alt={data.title}
+                      fill
+                      className="object-contain"
+                      sizes="(max-width: 768px) 100vw, 768px"
+                      priority
+                    />
+                  </div>
+                  <CreditLine
+                    creditText={coverCredit?.creditText ?? data.cover_image_credit ?? null}
+                    sourceUrl={coverCredit?.sourceUrl ?? null}
+                    license={coverCredit?.license ?? null}
+                    licenseUrl={coverCredit?.licenseUrl ?? null}
+                  />
+                </div>
+              ) : null}
             </div>
 
             {hasLongPreview ? (

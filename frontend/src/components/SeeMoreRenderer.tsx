@@ -264,7 +264,7 @@ export function SeeMoreRenderer({
                     src={url}
                     alt={caption || title || "Illustration"}
                     fill
-                    className="object-cover"
+                    className="object-contain"
                     sizes="(max-width: 768px) 100vw, 768px"
                   />
                 </div>

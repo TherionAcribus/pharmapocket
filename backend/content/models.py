@@ -282,6 +282,8 @@ class MicroArticlePage(Page):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="microarticle_covers",
+        verbose_name="Illustration",
+        help_text="Illustration principale optionnelle (unique) affichée après la réponse courte.",
     )
     links = StreamField(
         [
