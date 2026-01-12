@@ -100,6 +100,17 @@ def _image_payload(image) -> dict:
     except Exception:
         url = None
 
+    license_name = None
+    license_url = None
+    try:
+        if getattr(image, "license_id", None):
+            license_obj = getattr(image, "license", None)
+            license_name = getattr(license_obj, "name", None) or None
+            license_url = getattr(license_obj, "url", None) or None
+    except Exception:
+        license_name = None
+        license_url = None
+
     credit_text = None
     try:
         ct = getattr(image, "credit_text", None)
@@ -116,8 +127,8 @@ def _image_payload(image) -> dict:
         "url": url,
         "credit_text": credit_text,
         "credit_source_url": getattr(image, "credit_source_url", "") or "",
-        "credit_license": getattr(image, "credit_license", "") or "",
-        "credit_license_url": getattr(image, "credit_license_url", "") or "",
+        "credit_license": license_name or getattr(image, "credit_license", "") or "",
+        "credit_license_url": license_url or getattr(image, "credit_license_url", "") or "",
         "credit_author": getattr(image, "credit_author", "") or "",
         "credit_source": getattr(image, "credit_source", "") or "",
     }

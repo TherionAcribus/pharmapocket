@@ -23,12 +23,44 @@ from wagtail.snippets.models import register_snippet
 from .blocks import ImageWithCaptionBlock, Mechanism3StepsBlock, ReferenceBlock
 
 
+@register_snippet
+class ImageLicense(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    url = models.URLField(blank=True)
+    code = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Facultatif (ex: CC-BY-4.0). Sert pour l'auto-complétion / filtres.",
+    )
+
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("url"),
+        FieldPanel("code"),
+    ]
+
+    class Meta:
+        verbose_name = "Licence d'image"
+        verbose_name_plural = "Licences d'image"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class CustomImage(AbstractImage):
     credit_author = models.CharField(max_length=200, blank=True)
     credit_source = models.CharField(max_length=200, blank=True)
     credit_source_url = models.URLField(blank=True)
     credit_license = models.CharField(max_length=120, blank=True)
     credit_license_url = models.URLField(blank=True)
+    license = models.ForeignKey(
+        "content.ImageLicense",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="images",
+        help_text="Choisir une licence préremplie (prioritaire sur le champ texte ci-dessus).",
+    )
 
     admin_form_fields = Image.admin_form_fields + (
         "credit_author",
@@ -36,10 +68,12 @@ class CustomImage(AbstractImage):
         "credit_source_url",
         "credit_license",
         "credit_license_url",
+        "license",
     )
 
     def credit_text(self) -> str:
-        parts = [p for p in [self.credit_author, self.credit_source, self.credit_license] if p]
+        license_label = self.license.name if self.license_id else self.credit_license
+        parts = [p for p in [self.credit_author, self.credit_source, license_label] if p]
         return " · ".join(parts)
 
 
