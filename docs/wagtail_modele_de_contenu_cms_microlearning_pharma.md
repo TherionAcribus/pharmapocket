@@ -11,17 +11,20 @@
 ### 2.1 Champs « feed » (niveau 1 — toujours court)
 Ces champs alimentent la carte affichée dans le flux (scroll).
 - **Titre-question** *(obligatoire)*
-- **Réponse express** *(obligatoire — limite conseillée : 300–350 caractères)*
-- **Points clés** *(obligatoire — 3 à 5 items ; limite conseillée : 90 caractères/item)*
+- **Réponse express** *(optionnelle — recommandée 300–350 caractères, compteur dans Wagtail)*
+- **Points clés** *(optionnels — 0 à 5 items ; limite conseillée : 90 caractères/item)*
 - **À retenir** *(optionnel — 140 caractères)*
 - **Image “cover”** *(optionnel — schéma/illustration simple)*
+- **Sources** *(optionnel — 0 à 5 références max)*
 - **Liens** *(optionnel — 0 à 5 entrées structurées : titre, url, type, source, date)*
 - **Articles liés (manuel)** *(optionnel — 0 à 5, pour garantir la qualité)*
 
-> Recommandation : mettre des **validateurs** de longueur dès le départ.
+> Recommandation : garder des **garde-fous souples** (compteur + limites non bloquantes).
 
 ### 2.2 Contenu « Voir plus » (niveau 2 — structuré en blocs)
 Un **StreamField** limité (garde-fou éditorial) : ex. **max 3 blocs** au début.
+
+Note : le champ `answer_detail` (legacy) reste utilisable et est injecté dans `see_more` côté API.
 
 Blocs proposés (activer progressivement) :
 1. **Détail (court)** : texte 2–8 lignes
@@ -59,9 +62,9 @@ Relation :
 ## 4) Catégorisation dans Wagtail (liaisons)
 Sur `MicroArticle`, prévoir :
 - **3 taxonomies arborescentes** (multi-chemins) :
-  - `categories_pharmacologie` (0..n)
+  - `categories_theme` (1..n, **obligatoire**)
   - `categories_maladies` (0..n)
-  - `categories_classes` (0..n)
+  - `categories_medicament` (0..n)
 - **Tags** (facettes transversales) : `tags`
 
 Implémentation conseillée :
@@ -106,4 +109,3 @@ Dans les deux cas :
 - Quiz : UI + tentatives + score (les objets `Question` existent déjà)
 - Badges : déclenchement via événements (LearningEvent)
 - UGC : soumission + modération (workflow déjà en place)
-

@@ -17,14 +17,18 @@ L’illustration (`cover_image_url`) est conservée pour l’écran de lecture/d
   - affiche toujours `GeneratedThumb` dans le carré `h-16 w-16`
   - ne rend plus `cover_image_url` dans la liste
 
-- **Génération vignette** : `frontend/src/components/GeneratedThumb.tsx`
+- **Génération vignette & helpers partagés** : `frontend/src/components/GeneratedThumb.tsx`
   - calcule couleurs/motifs + choisit icône + label
+  - expose `resolveGeneratedThumbMeta`, `ThemeIcon`, `resolveTheme`, `resolveVisualCode` (réutilisés dans le header)
 
 - **Types API** : `frontend/src/lib/types.ts`
   - expose les champs nécessaires pour piloter thème/maladie/médicament
 
 - **Mapping API /discover feed** : `frontend/src/lib/api.ts`
   - `fetchDiscoverFeed()` mappe les champs `categories_*` renvoyés par `/api/v1/feed/`
+
+- **Header (vue lecture)** : `frontend/src/app/micro/[slug]/ReaderClient.tsx`
+  - badge thématisé dans le header (même logique que la vignette) via `resolveGeneratedThumbMeta` + `ThemeIcon`
 
 ---
 
@@ -91,6 +95,7 @@ Le label est tronqué pour rester lisible en 64px.
 3. Dans `frontend/src/components/GeneratedThumb.tsx` :
    - ajouter une règle de normalisation si besoin (synonymes / slug)
    - ajouter l’icône correspondante dans `ThemeIcon()`
+4. Si besoin, le header de lecture (ReaderClient) bénéficie automatiquement du mapping (il consomme `resolveGeneratedThumbMeta`).
 
 ### Changer de librairie d’icônes (ex: passer à Phosphor)
 - Point unique à modifier : `frontend/src/components/GeneratedThumb.tsx`

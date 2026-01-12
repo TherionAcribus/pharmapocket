@@ -251,7 +251,11 @@ class MicroArticlePage(Page):
     answer_express = RichTextField(
         features=["bold", "italic", "link", "ol", "ul"],
         blank=True,
-        help_text="Réponse courte recommandée (~350 caractères), non bloquante. RichText autorisé (gras/italique/liens/listes).",
+        help_text=(
+            "Reponse courte optionnelle, recommandee (~350 caracteres). "
+            "Compteur affiche dans l'admin Wagtail. "
+            "RichText autorise (gras/italique/liens/listes)."
+        ),
     )
     answer_detail = RichTextField(
         features=["bold", "italic", "link", "ol", "ul"],
@@ -268,8 +272,8 @@ class MicroArticlePage(Page):
         [("reference", ReferenceBlock())],
         use_json_field=True,
         blank=True,
-        max_num=12,
-        help_text="Sources principales de l’article",
+        max_num=5,
+        help_text="Sources principales de l'article (max 5)."
     )
     takeaway = RichTextField(
         features=["bold", "italic", "link", "ol", "ul"],
@@ -359,7 +363,6 @@ class MicroArticlePage(Page):
 
     categories_theme = ParentalManyToManyField(
         "content.CategoryTheme",
-        blank=True,
         related_name="microarticles",
     )
     categories_maladies = ParentalManyToManyField(
