@@ -6,7 +6,7 @@ from taggit.models import Tag
 from wagtail.models import Page, Site
 
 from .models import (
-    CategoryPharmacologie,
+    CategoryMedicament,
     MicroArticleIndexPage,
     MicroArticlePage,
 )
@@ -40,7 +40,7 @@ class PublicApiSmokeTests(APITestCase):
 
         page.tags.add("diabete")
 
-        cat_root = CategoryPharmacologie.add_root(name="Diabète")
+        cat_root = CategoryMedicament.add_root(name="Diabète")
         cat_root.add_child(name="Biguanides")
 
     def test_content_list_smoke(self):

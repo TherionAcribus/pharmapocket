@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from content.models import MicroArticlePage
 
@@ -56,3 +57,40 @@ class LearningEvent(models.Model):
 
     def __str__(self) -> str:
         return self.type
+
+
+class CardSRSState(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="card_srs_states",
+    )
+    microarticle = models.ForeignKey(
+        MicroArticlePage,
+        on_delete=models.CASCADE,
+        related_name="srs_states",
+    )
+
+    srs_level = models.PositiveSmallIntegerField(default=1)
+    due_at = models.DateTimeField(default=timezone.now)
+    last_reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviews_count = models.PositiveIntegerField(default=0)
+    last_rating = models.CharField(max_length=16, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "microarticle"],
+                name="uniq_user_microarticle_srs",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "due_at"]),
+            models.Index(fields=["microarticle"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.microarticle_id} L{self.srs_level}"

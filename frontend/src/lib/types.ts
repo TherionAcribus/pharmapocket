@@ -107,3 +107,29 @@ export type TaxonomyResolveResponse = {
   breadcrumb: Array<{ id: number; name: string; slug: string }>;
   canonical_path: string;
 };
+
+export type SrsScope = "all_decks" | "deck" | "decks" | "all_cards";
+export type SrsRating = "know" | "medium" | "again";
+
+export type SrsState = {
+  level: number;
+  due_at: string;
+  last_reviewed_at?: string | null;
+  reviews_count: number;
+  last_rating?: string;
+};
+
+export type SrsCard = {
+  id: number;
+  slug: string;
+  title: string;
+  answer_express: string;
+  takeaway: string;
+  key_points: string[];
+  cover_image_url: string | null;
+};
+
+export type SrsNextResponse = {
+  card: SrsCard | null;
+  srs: SrsState | null;
+};

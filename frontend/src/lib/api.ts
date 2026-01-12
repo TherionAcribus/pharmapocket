@@ -5,6 +5,9 @@ import {
   DeckSummary,
   MicroArticleDetail,
   MicroArticleListItem,
+  SrsNextResponse,
+  SrsRating,
+  SrsScope,
   TagPayload,
   TaxonomyTreeResponse,
 } from "@/lib/types";
@@ -368,6 +371,39 @@ export async function fetchTags(q?: string, limit = 200): Promise<TagPayload[]> 
   return apiGet<TagPayload[]>(
     `/api/v1/tags/${buildQuery({ q: q?.trim() ? q.trim() : undefined, limit: String(limit) })}`
   );
+}
+
+export type SrsNextQuery = {
+  scope: SrsScope;
+  deck_id?: number | null;
+  deck_ids?: number[];
+  only_due?: boolean;
+};
+
+export async function fetchSrsNext(query: SrsNextQuery): Promise<SrsNextResponse> {
+  const deckIdsValue = query.deck_ids?.length ? query.deck_ids.join(",") : undefined;
+
+  return apiGet<SrsNextResponse>(
+    `/api/v1/learning/srs/next/${buildQuery({
+      scope: query.scope,
+      deck_id: query.deck_id != null ? String(query.deck_id) : undefined,
+      deck_ids: deckIdsValue,
+      only_due: query.only_due === false ? "false" : "true",
+    })}`
+  );
+}
+
+export async function postSrsReview(input: {
+  card_id: number;
+  rating: SrsRating;
+}): Promise<SrsNextResponse> {
+  return apiJson<SrsNextResponse>(`/api/v1/learning/srs/review/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
 }
 
 export type CurrentUser = {

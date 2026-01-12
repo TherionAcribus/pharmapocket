@@ -27,3 +27,21 @@ class LessonProgressSerializer(serializers.Serializer):
 class ProgressImportSerializer(serializers.Serializer):
     device_id = serializers.CharField(required=False, allow_blank=True)
     lessons = serializers.DictField(child=LessonProgressUpdateSerializer())
+
+
+class SRSReviewSerializer(serializers.Serializer):
+    card_id = serializers.IntegerField(min_value=1)
+    rating = serializers.ChoiceField(choices=["know", "medium", "again"])
+
+
+class SRSStateSerializer(serializers.Serializer):
+    level = serializers.IntegerField(min_value=1)
+    due_at = serializers.DateTimeField()
+    last_reviewed_at = serializers.DateTimeField(allow_null=True, required=False)
+    reviews_count = serializers.IntegerField(min_value=0)
+    last_rating = serializers.CharField(required=False)
+
+
+class SRSNextSerializer(serializers.Serializer):
+    card = serializers.DictField(allow_null=True)
+    srs = SRSStateSerializer(allow_null=True)

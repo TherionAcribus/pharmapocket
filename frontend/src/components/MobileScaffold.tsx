@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen as BookOpenIcon,
   Brain as BrainIcon,
+  Clock as ClockIcon,
   LayoutGrid as LayoutGridIcon,
   Layers as LayersIcon,
   LogIn as LogInIcon,
@@ -39,6 +40,7 @@ const tabs: TabItem[] = [
   { href: "/discover", label: "Dose du jour", Icon: LayoutGridIcon },
   { href: "/library", label: "Bibliothèque", Icon: BookOpenIcon },
   { href: "/cards", label: "Mes cartes", Icon: LayersIcon },
+  { href: "/review", label: "À revoir", Icon: ClockIcon },
   { href: "/quiz", label: "Quiz", Icon: BrainIcon },
 ];
 
