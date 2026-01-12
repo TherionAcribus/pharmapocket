@@ -37,6 +37,8 @@ import {
 import type { DeckMembership, MicroArticleDetail, StreamBlock } from "@/lib/types";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
+const SLIDE_TRANSITION_STORAGE_KEY = "pp_reader_slide_transition";
+const SLIDE_TRANSITION_PENDING_DIR_SESSION_KEY = "pp_reader_slide_dir";
 
 type DeckState = {
   slugs: string[];
@@ -74,12 +76,44 @@ function readDeckFromSession(): DeckState | null {
   }
 }
 
+function writePendingSlideDirectionToSession(dir: "next" | "prev") {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SLIDE_TRANSITION_PENDING_DIR_SESSION_KEY, dir);
+  } catch {
+    // ignore
+  }
+}
+
+function readAndClearPendingSlideDirectionFromSession(): "next" | "prev" | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = window.sessionStorage.getItem(SLIDE_TRANSITION_PENDING_DIR_SESSION_KEY);
+    window.sessionStorage.removeItem(SLIDE_TRANSITION_PENDING_DIR_SESSION_KEY);
+    if (v === "next" || v === "prev") return v;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function writeDeckToSession(next: DeckState) {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(DECK_STORAGE_KEY, JSON.stringify(next));
   } catch (error) {
     console.error("Error writing deck to session:", error);
+  }
+}
+
+function readSlideTransitionPreferenceFromStorage() {
+  if (typeof window === "undefined") return true;
+  try {
+    const v = window.localStorage.getItem(SLIDE_TRANSITION_STORAGE_KEY);
+    if (v == null) return true;
+    return v === "1" || v === "true";
+  } catch {
+    return true;
   }
 }
 
@@ -143,7 +177,62 @@ export default function ReaderClient({
   const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
 
+  const [slideTransitionEnabled, setSlideTransitionEnabled] = React.useState<boolean>(() =>
+    readSlideTransitionPreferenceFromStorage()
+  );
+
+  const [incomingSlideDir, setIncomingSlideDir] = React.useState<"next" | "prev" | null>(null);
+  const [incomingSlideActive, setIncomingSlideActive] = React.useState(false);
+  const [outgoingSlideDir, setOutgoingSlideDir] = React.useState<"next" | "prev" | null>(null);
+  const navLockRef = React.useRef(false);
+
   const isLoggedIn = Boolean(currentUserEmail);
+
+  React.useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== SLIDE_TRANSITION_STORAGE_KEY) return;
+      setSlideTransitionEnabled(readSlideTransitionPreferenceFromStorage());
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  React.useEffect(() => {
+    const shouldAnimate = isLoggedIn ? slideTransitionEnabled : true;
+    if (!shouldAnimate) {
+      setIncomingSlideDir(null);
+      setIncomingSlideActive(false);
+      return;
+    }
+
+    const dir = readAndClearPendingSlideDirectionFromSession();
+    if (!dir) {
+      setIncomingSlideDir(null);
+      setIncomingSlideActive(false);
+      return;
+    }
+
+    setIncomingSlideDir(dir);
+    setIncomingSlideActive(true);
+
+    const raf1 = window.requestAnimationFrame(() => {
+      const raf2 = window.requestAnimationFrame(() => {
+        setIncomingSlideActive(false);
+      });
+      return raf2;
+    });
+
+    const t = window.setTimeout(() => {
+      setIncomingSlideDir(null);
+      setIncomingSlideActive(false);
+    }, 180);
+
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      window.clearTimeout(t);
+    };
+  }, [data.slug, isLoggedIn, slideTransitionEnabled]);
 
   const [deckPickerOpen, setDeckPickerOpen] = React.useState(false);
   const [deckMembership, setDeckMembership] = React.useState<DeckMembership[] | null>(null);
@@ -158,6 +247,32 @@ export default function ReaderClient({
     setMessage(text);
     window.setTimeout(() => setMessage(null), 1800);
   };
+
+  const cardMotionStyle = React.useMemo(() => {
+    const base: React.CSSProperties = {
+      transform: "translateX(0)",
+    };
+
+    if (outgoingSlideDir === "next") {
+      return { ...base, transform: "translateX(-18%)" };
+    }
+    if (outgoingSlideDir === "prev") {
+      return { ...base, transform: "translateX(18%)" };
+    }
+
+    if (incomingSlideDir === "next") {
+      return incomingSlideActive
+        ? { ...base, transform: "translateX(18%)" }
+        : base;
+    }
+    if (incomingSlideDir === "prev") {
+      return incomingSlideActive
+        ? { ...base, transform: "translateX(-18%)" }
+        : base;
+    }
+
+    return base;
+  }, [incomingSlideActive, incomingSlideDir, outgoingSlideDir]);
 
   const loadDeckMembership = React.useCallback(async () => {
     if (!isLoggedIn) return;
@@ -446,6 +561,7 @@ export default function ReaderClient({
 
   const goRelative = React.useCallback(
     (delta: number) => {
+      if (navLockRef.current) return;
       if (!deck?.slugs?.length) return;
       const idx = deck.slugs.indexOf(data.slug);
       const current = idx >= 0 ? idx : deck.index;
@@ -454,13 +570,34 @@ export default function ReaderClient({
       const nextSlug = deck.slugs[nextIndex];
       if (!nextSlug) return;
 
-      const nextDeck = { ...deck, index: nextIndex };
-      setDeck(nextDeck);
-      writeDeckToSession(nextDeck);
+      const doNavigate = () => {
+        const nextDeck = { ...deck, index: nextIndex };
+        setDeck(nextDeck);
+        writeDeckToSession(nextDeck);
+        router.push(`/micro/${encodeURIComponent(nextSlug)}`);
+      };
 
-      router.push(`/micro/${encodeURIComponent(nextSlug)}`);
+      const shouldAnimate = isLoggedIn ? slideTransitionEnabled : true;
+      if (!shouldAnimate) {
+        doNavigate();
+        return;
+      }
+
+      const dir: "next" | "prev" = delta > 0 ? "next" : "prev";
+      navLockRef.current = true;
+      setOutgoingSlideDir(dir);
+      writePendingSlideDirectionToSession(dir);
+
+      window.setTimeout(() => {
+        doNavigate();
+      }, 80);
+
+      window.setTimeout(() => {
+        navLockRef.current = false;
+        setOutgoingSlideDir(null);
+      }, 220);
     },
-    [deck, data.slug, router]
+    [deck, data.slug, isLoggedIn, router, slideTransitionEnabled]
   );
 
   React.useEffect(() => {
@@ -711,7 +848,20 @@ export default function ReaderClient({
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <div className={largeText ? "space-y-3 text-[1.05rem]" : "space-y-3"}>
-          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div
+            className={cn(
+              "rounded-2xl border bg-card p-5 shadow-sm",
+              incomingSlideDir || outgoingSlideDir
+                ? "transition-transform duration-120 ease-out will-change-transform"
+                : ""
+            )}
+            style={
+              {
+                viewTransitionName: "pp-reader-card",
+                ...(incomingSlideDir || outgoingSlideDir ? cardMotionStyle : null),
+              } as React.CSSProperties
+            }
+          >
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {primaryCategory ? (
                 <Badge variant="secondary" className="max-w-full truncate">
