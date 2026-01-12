@@ -130,6 +130,29 @@ export type TaxonomyResolveResponse = {
   canonical_path: string;
 };
 
+export type LessonProgress = {
+  lesson_id: number;
+  seen: boolean;
+  completed: boolean;
+  percent: number;
+  time_ms: number;
+  score_best: number | null;
+  score_last: number | null;
+  updated_at: string;
+  last_seen_at: string | null;
+};
+
+export type LessonProgressUpdate = {
+  seen?: boolean;
+  completed?: boolean;
+  percent?: number;
+  time_ms?: number;
+  score_best?: number | null;
+  score_last?: number | null;
+  updated_at: string;
+  last_seen_at?: string | null;
+};
+
 export type SrsScope = "all_decks" | "deck" | "decks" | "all_cards";
 export type SrsRating = "know" | "medium" | "again";
 

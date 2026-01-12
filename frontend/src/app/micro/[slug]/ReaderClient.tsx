@@ -35,6 +35,8 @@ import {
   unsaveMicroArticle,
   updateCardDecks,
 } from "@/lib/api";
+import { addLessonTime, markLessonSeen, setLessonCompletion } from "@/lib/progressStore";
+import { ensureProgressSyncLoop, scheduleProgressSync, setProgressSyncEnabled } from "@/lib/progressSync";
 import type { DeckMembership, MicroArticleDetail, StreamBlock } from "@/lib/types";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
@@ -188,6 +190,25 @@ export default function ReaderClient({
   const navLockRef = React.useRef(false);
 
   const isLoggedIn = Boolean(currentUserEmail);
+
+  React.useEffect(() => {
+    ensureProgressSyncLoop();
+    setProgressSyncEnabled(isLoggedIn);
+  }, [isLoggedIn]);
+
+  React.useEffect(() => {
+    markLessonSeen(data.id);
+    if (isLoggedIn) scheduleProgressSync("lesson_seen");
+  }, [data.id, isLoggedIn]);
+
+  React.useEffect(() => {
+    const startedAt = Date.now();
+    return () => {
+      const delta = Date.now() - startedAt;
+      addLessonTime(data.id, delta);
+      if (isLoggedIn) scheduleProgressSync("lesson_time");
+    };
+  }, [data.id, isLoggedIn]);
 
   React.useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -346,6 +367,8 @@ export default function ReaderClient({
     if (!isLoggedIn) return;
     let cancelled = false;
     setIsRead(true);
+    setLessonCompletion(data.id, true);
+    scheduleProgressSync("auto_read");
     setMicroArticleReadState(data.slug, true).catch(() => {
       if (cancelled) return;
       // ignore: keep optimistic state
@@ -385,6 +408,8 @@ export default function ReaderClient({
     if (isReadLoading) return;
     const next = !isRead;
     setIsRead(next);
+    setLessonCompletion(data.id, next);
+    scheduleProgressSync("toggle_read");
     setIsReadLoading(true);
     try {
       await setMicroArticleReadState(data.slug, next);

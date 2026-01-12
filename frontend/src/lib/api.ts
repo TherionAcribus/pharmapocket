@@ -3,6 +3,8 @@ import {
   DeckCardsResponse,
   DeckMembership,
   DeckSummary,
+  LessonProgress,
+  LessonProgressUpdate,
   MicroArticleDetail,
   MicroArticleListItem,
   SrsNextResponse,
@@ -404,6 +406,42 @@ export async function postSrsReview(input: {
     },
     body: JSON.stringify(input),
   });
+}
+
+export async function fetchLessonProgress(): Promise<LessonProgress[]> {
+  return apiGet<LessonProgress[]>("/api/v1/learning/progress/");
+}
+
+export async function patchLessonProgress(
+  lessonId: number,
+  input: LessonProgressUpdate
+): Promise<LessonProgress> {
+  return apiJson<LessonProgress>(
+    `/api/v1/learning/progress/${encodeURIComponent(String(lessonId))}/`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export async function importLessonProgress(input: {
+  device_id?: string;
+  lessons: Record<string, LessonProgressUpdate>;
+}): Promise<{ imported: number; updated: number }> {
+  return apiJson<{ imported: number; updated: number }>(
+    "/api/v1/learning/progress/import/",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    }
+  );
 }
 
 export type CurrentUser = {

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { authLogout, fetchMe, fetchTaxonomyTree } from "@/lib/api";
+import { ensureProgressSyncLoop, setProgressSyncEnabled } from "@/lib/progressSync";
 import type { TaxonomyNode, TaxonomyTreeResponse } from "@/lib/types";
 
 type TabItem = {
@@ -138,6 +139,11 @@ export function MobileScaffold({
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    ensureProgressSyncLoop();
+    setProgressSyncEnabled(Boolean(currentUserEmail));
+  }, [currentUserEmail]);
 
   const goToTaxonomy = (t: Taxonomy) => {
     setTaxonomy(t);
