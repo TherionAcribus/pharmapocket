@@ -143,9 +143,9 @@ type FeedItemPayload = {
   key_points: string[];
   cover_image_url: string | null;
   tags: Array<{ id: number; name: string; slug: string }>;
-  categories_pharmacologie: Array<{ id: number; name: string; slug: string }>;
+  categories_theme: Array<{ id: number; name: string; slug: string }>;
   categories_maladies: Array<{ id: number; name: string; slug: string }>;
-  categories_classes: Array<{ id: number; name: string; slug: string }>;
+  categories_medicament: Array<{ id: number; name: string; slug: string }>;
   published_at?: string | null;
   progress?: unknown;
 };
@@ -201,9 +201,9 @@ export async function fetchDiscoverFeed(query: FeedQuery): Promise<CursorPage<Mi
       cover_image_url: r.cover_image_url,
       tags: r.tags.map((t) => t.name),
       tags_payload: r.tags,
-      categories_pharmacologie_payload: r.categories_pharmacologie,
+      categories_theme_payload: r.categories_theme,
       categories_maladies_payload: r.categories_maladies,
-      categories_classes_payload: r.categories_classes,
+      categories_medicament_payload: r.categories_medicament,
       published_at: r.published_at ?? null,
     })),
   };

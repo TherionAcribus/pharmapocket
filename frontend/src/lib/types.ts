@@ -40,8 +40,10 @@ export type MicroArticleListItem = {
   cover_image?: ImagePayload | null;
   tags: string[];
   tags_payload?: TagPayload[];
-  categories_pharmacologie_payload?: CategoryPayload[];
+  categories_theme_payload?: CategoryPayload[];
   categories_maladies_payload?: CategoryPayload[];
+  categories_medicament_payload?: CategoryPayload[];
+  categories_pharmacologie_payload?: CategoryPayload[];
   categories_classes_payload?: CategoryPayload[];
   published_at?: string | null;
   decks_count?: number;
@@ -84,12 +86,16 @@ export type MicroArticleDetail = {
   is_saved?: boolean;
   is_read?: boolean;
   tags: string[];
-  categories_pharmacologie: string[];
+  categories_theme?: string[];
   categories_maladies: string[];
-  categories_classes: string[];
+  categories_medicament?: string[];
+  categories_pharmacologie?: string[];
+  categories_classes?: string[];
   tags_payload?: TagPayload[];
-  categories_pharmacologie_payload?: CategoryPayload[];
+  categories_theme_payload?: CategoryPayload[];
   categories_maladies_payload?: CategoryPayload[];
+  categories_medicament_payload?: CategoryPayload[];
+  categories_pharmacologie_payload?: CategoryPayload[];
   categories_classes_payload?: CategoryPayload[];
   questions?: Array<{
     id: number;

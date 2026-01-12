@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 
+import { GeneratedThumb } from "@/components/GeneratedThumb";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MicroArticleListItem } from "@/lib/types";
@@ -87,9 +87,7 @@ export function MicroCard({
       </div>
 
       <div className="relative mt-0.5 h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted">
-        {item.cover_image_url ? (
-          <Image src={item.cover_image_url} alt={item.title} fill className="object-cover" sizes="64px" />
-        ) : null}
+        <GeneratedThumb item={item} className="absolute inset-0 h-full w-full" />
       </div>
     </div>
   );
