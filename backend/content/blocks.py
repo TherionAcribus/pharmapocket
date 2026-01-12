@@ -20,3 +20,15 @@ class ReferenceBlock(blocks.StructBlock):
     note = blocks.TextBlock(required=False, help_text="Contexte ou citation courte")
     page = blocks.CharBlock(required=False, max_length=60, help_text="Page/chapitre")
     document = DocumentChooserBlock(required=False)
+
+
+class LandingStepBlock(blocks.StructBlock):
+    title = blocks.CharBlock(required=True, max_length=60)
+    detail = blocks.CharBlock(required=True, max_length=140)
+
+
+class LandingCardBlock(blocks.StructBlock):
+    title = blocks.CharBlock(required=True, max_length=80)
+    summary = blocks.CharBlock(required=False, max_length=180)
+    cta_label = blocks.CharBlock(required=False, max_length=40)
+    href = blocks.CharBlock(required=False, max_length=200)

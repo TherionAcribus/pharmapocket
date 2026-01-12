@@ -52,6 +52,14 @@ function toErrorMessage(e: unknown): string {
   return String(e);
 }
 
+function landingTargetToPath(target: string | null | undefined): string {
+  if (target === "discover") return "/discover";
+  if (target === "cards") return "/cards";
+  if (target === "review") return "/review";
+  if (target === "quiz") return "/quiz";
+  return "/start";
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -71,8 +79,10 @@ export default function LoginPage() {
     try {
       await ensureCsrf();
       await authLogin({ email: email.trim(), password });
-      await fetchMe();
-      router.push("/discover");
+      const me = await fetchMe();
+      const shouldRedirect = Boolean(me.landing_redirect_enabled);
+      const target = shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover";
+      router.push(target);
     } catch (err: unknown) {
       setError(toErrorMessage(err));
     } finally {

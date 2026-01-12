@@ -20,7 +20,7 @@ from wagtail.models import Orderable, Page
 from wagtail.search import index
 from wagtail.snippets.models import register_snippet
 
-from .blocks import ImageWithCaptionBlock, Mechanism3StepsBlock, ReferenceBlock
+from .blocks import ImageWithCaptionBlock, LandingCardBlock, LandingStepBlock, Mechanism3StepsBlock, ReferenceBlock
 
 
 @register_snippet
@@ -220,6 +220,94 @@ class MicroArticleIndexPage(Page):
     max_count = 1
 
     subpage_types = ["content.MicroArticlePage"]
+
+
+class LandingPage(Page):
+    max_count = 1
+
+    hero_title = models.CharField(max_length=120, blank=True)
+    hero_subtitle = models.TextField(blank=True)
+    hero_bullets = StreamField(
+        [("bullet", blocks.CharBlock(max_length=90))],
+        use_json_field=True,
+        blank=True,
+    )
+    steps = StreamField(
+        [("step", LandingStepBlock())],
+        use_json_field=True,
+        blank=True,
+        max_num=3,
+    )
+    cards = StreamField(
+        [("card", LandingCardBlock())],
+        use_json_field=True,
+        blank=True,
+    )
+
+    primary_cta_label = models.CharField(max_length=40, blank=True, default="Commencer")
+    primary_cta_target = models.CharField(
+        max_length=32,
+        choices=[
+            ("start", "Commencer"),
+            ("discover", "Dose du jour"),
+            ("cards", "Mes cartes"),
+            ("review", "Révision"),
+            ("quiz", "Quiz"),
+        ],
+        default="start",
+    )
+    secondary_cta_label = models.CharField(max_length=40, blank=True, default="")
+    secondary_cta_target = models.CharField(
+        max_length=32,
+        choices=[
+            ("", "—"),
+            ("start", "Commencer"),
+            ("discover", "Dose du jour"),
+            ("cards", "Mes cartes"),
+            ("review", "Révision"),
+            ("quiz", "Quiz"),
+        ],
+        blank=True,
+        default="",
+    )
+
+    content_panels = Page.content_panels + [
+        MultiFieldPanel(
+            [
+                FieldPanel("hero_title"),
+                FieldPanel("hero_subtitle"),
+                FieldPanel("hero_bullets"),
+                FieldPanel("steps"),
+                FieldPanel("cards"),
+            ],
+            heading="Landing",
+        ),
+        MultiFieldPanel(
+            [
+                FieldPanel("primary_cta_label"),
+                FieldPanel("primary_cta_target"),
+                FieldPanel("secondary_cta_label"),
+                FieldPanel("secondary_cta_target"),
+            ],
+            heading="Boutons",
+        ),
+    ]
+
+    api_fields = [
+        APIField("title"),
+        APIField("hero_title"),
+        APIField("hero_subtitle"),
+        APIField("hero_bullets", serializer=serializers.ListField(child=serializers.DictField())),
+        APIField("steps", serializer=serializers.ListField(child=serializers.DictField())),
+        APIField("cards", serializer=serializers.ListField(child=serializers.DictField())),
+        APIField("primary_cta_label"),
+        APIField("primary_cta_target"),
+        APIField("secondary_cta_label"),
+        APIField("secondary_cta_target"),
+    ]
+
+    parent_page_types = ["wagtailcore.Page"]
+    subpage_types: list[str] = []
 
 
 class MicroArticlePageTag(TaggedItemBase):

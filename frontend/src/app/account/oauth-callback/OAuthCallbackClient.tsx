@@ -8,9 +8,17 @@ import { Button } from "@/components/ui/button";
 import { fetchMe } from "@/lib/api";
 
 function toNextPath(next: string | null): string {
-  if (!next) return "/discover";
+  if (!next) return "";
   if (!next.startsWith("/")) return "/discover";
   return next;
+}
+
+function landingTargetToPath(target: string | null | undefined): string {
+  if (target === "discover") return "/discover";
+  if (target === "cards") return "/cards";
+  if (target === "review") return "/review";
+  if (target === "quiz") return "/quiz";
+  return "/start";
 }
 
 export default function OAuthCallbackClient() {
@@ -26,9 +34,15 @@ export default function OAuthCallbackClient() {
     let cancelled = false;
 
     fetchMe()
-      .then(() => {
+      .then((me) => {
         if (cancelled) return;
-        router.replace(next);
+        if (next) {
+          router.replace(next);
+          return;
+        }
+        const shouldRedirect = Boolean(me.landing_redirect_enabled);
+        const target = shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover";
+        router.replace(target);
       })
       .catch((e: unknown) => {
         if (cancelled) return;

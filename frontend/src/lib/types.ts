@@ -180,3 +180,28 @@ export type SrsNextResponse = {
   card: SrsCard | null;
   srs: SrsState | null;
 };
+
+export type LandingStep = {
+  title: string;
+  detail: string;
+};
+
+export type LandingCard = {
+  title: string;
+  summary: string;
+  cta_label: string;
+  href: string;
+};
+
+export type LandingPayload = {
+  title: string;
+  hero_title: string;
+  hero_subtitle: string;
+  hero_bullets: string[];
+  steps: LandingStep[];
+  cards: LandingCard[];
+  primary_cta_label: string;
+  primary_cta_target: string;
+  secondary_cta_label: string;
+  secondary_cta_target: string;
+};

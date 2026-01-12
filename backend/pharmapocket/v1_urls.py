@@ -1,11 +1,12 @@
 from django.urls import include, path
 
 from content.public_views import TagListView, TaxonomyResolveView, TaxonomyTreeView
-from pharmapocket.auth_views import CsrfView, MeView
+from pharmapocket.auth_views import CsrfView, MeView, PreferencesView
 
 urlpatterns = [
     path("auth/csrf/", CsrfView.as_view(), name="auth-csrf"),
     path("auth/me/", MeView.as_view(), name="auth-me"),
+    path("auth/preferences/", PreferencesView.as_view(), name="auth-preferences"),
     path("taxonomies/<str:taxonomy>/tree/", TaxonomyTreeView.as_view(), name="taxonomy-tree"),
     path(
         "taxonomies/<str:taxonomy>/resolve/",

@@ -7,6 +7,7 @@ import {
   BookOpen as BookOpenIcon,
   Brain as BrainIcon,
   Clock as ClockIcon,
+  Home as HomeIcon,
   LayoutGrid as LayoutGridIcon,
   Layers as LayersIcon,
   LogIn as LogInIcon,
@@ -38,6 +39,7 @@ type TabItem = {
 };
 
 const tabs: TabItem[] = [
+  { href: "/", label: "Accueil", Icon: HomeIcon },
   { href: "/discover", label: "Dose du jour", Icon: LayoutGridIcon },
   { href: "/library", label: "Bibliothèque", Icon: BookOpenIcon },
   { href: "/cards", label: "Mes cartes", Icon: LayersIcon },
@@ -48,7 +50,7 @@ const tabs: TabItem[] = [
 type Taxonomy = "pharmacologie" | "maladies" | "classes";
 
 function isActivePath(pathname: string, href: string) {
-  if (href === "/discover") return pathname === "/" || pathname.startsWith("/discover");
+  if (href === "/discover") return pathname.startsWith("/discover");
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -176,7 +178,20 @@ export function MobileScaffold({
                 <Separator />
                 <ScrollArea className="h-[calc(100dvh-4rem)] px-2">
                   <div className="space-y-1 p-2">
-                    {tabs.map(({ href, label, Icon }) => (
+                    <SheetClose asChild>
+                      <Link
+                        href="/"
+                        className={cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent",
+                          pathname === "/" ? "bg-accent" : ""
+                        )}
+                      >
+                        <HomeIcon className="size-4" />
+                        <span className="truncate">Accueil</span>
+                      </Link>
+                    </SheetClose>
+
+                    {tabs.slice(1).map(({ href, label, Icon }) => (
                       <SheetClose key={href} asChild>
                         <Link
                           href={href}

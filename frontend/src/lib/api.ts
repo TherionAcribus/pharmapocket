@@ -3,6 +3,7 @@ import {
   DeckCardsResponse,
   DeckMembership,
   DeckSummary,
+  LandingPayload,
   LessonProgress,
   LessonProgressUpdate,
   MicroArticleDetail,
@@ -450,10 +451,37 @@ export type CurrentUser = {
   username: string;
   is_staff: boolean;
   is_superuser: boolean;
+  landing_redirect_enabled?: boolean;
+  landing_redirect_target?: "start" | "discover" | "cards" | "review" | "quiz";
 };
 
 export async function fetchMe(): Promise<CurrentUser> {
   return apiGet<CurrentUser>("/api/v1/auth/me/");
+}
+
+export type LandingRedirectTarget = "start" | "discover" | "cards" | "review" | "quiz";
+
+export type UserPreferences = {
+  landing_redirect_enabled: boolean;
+  landing_redirect_target: LandingRedirectTarget;
+};
+
+export async function fetchPreferences(): Promise<UserPreferences> {
+  return apiGet<UserPreferences>("/api/v1/auth/preferences/");
+}
+
+export async function patchPreferences(input: Partial<UserPreferences>): Promise<UserPreferences> {
+  return apiJson<UserPreferences>("/api/v1/auth/preferences/", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function fetchLanding(): Promise<LandingPayload> {
+  return apiGet<LandingPayload>("/api/v1/content/landing/");
 }
 
 const ALLAUTH_CLIENT = "browser";

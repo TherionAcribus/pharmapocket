@@ -7,6 +7,7 @@ from .views import (
     DeckDetailView,
     DeckListCreateView,
     DeckSetDefaultView,
+    LandingView,
     MicroArticleDetailView,
     MicroArticleListView,
     MicroArticleReadStateView,
@@ -16,6 +17,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("landing/", LandingView.as_view(), name="landing"),
     path("microarticles/", MicroArticleListView.as_view(), name="microarticle-list"),
     # use <str:slug> to allow unicode slugs (accents)
     path("microarticles/<str:slug>/", MicroArticleDetailView.as_view(), name="microarticle-detail"),

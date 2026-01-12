@@ -7,6 +7,7 @@ from django.utils.text import slugify
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -20,6 +21,7 @@ from .models import (
     CategoryTheme,
     Deck,
     DeckCard,
+    LandingPage,
     MicroArticlePage,
     MicroArticleReadState,
     Source,
@@ -28,6 +30,79 @@ from .pagination import MicroArticleCursorPagination
 from .serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _stream_items(field) -> list:
+    if not field:
+        return []
+    try:
+        return list(field)  # StreamValue iterable (StreamField)
+    except Exception:
+        try:
+            return list(field.stream_data)
+        except Exception:
+            return []
+
+
+class LandingView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        page = LandingPage.objects.live().public().specific().first()
+        if page is None:
+            return Response({"detail": "Landing page not configured."}, status=404)
+
+        bullets: list[str] = []
+        for block in _stream_items(getattr(page, "hero_bullets", None)):
+            # block can be StreamChild or dict
+            val = getattr(block, "value", None) if not isinstance(block, dict) else block.get("value")
+            if isinstance(val, str) and val.strip():
+                bullets.append(val)
+
+        steps: list[dict] = []
+        for block in _stream_items(getattr(page, "steps", None)):
+            value = getattr(block, "value", None) if not isinstance(block, dict) else block.get("value")
+            btype = getattr(block, "block_type", None) if not isinstance(block, dict) else block.get("type")
+            if btype not in ("step", None):  # None means StructBlock iteration direct
+                continue
+            if not isinstance(value, dict):
+                continue
+            title = value.get("title")
+            detail = value.get("detail")
+            if isinstance(title, str) and isinstance(detail, str):
+                steps.append({"title": title, "detail": detail})
+
+        cards: list[dict] = []
+        for block in _stream_items(getattr(page, "cards", None)):
+            value = getattr(block, "value", None) if not isinstance(block, dict) else block.get("value")
+            btype = getattr(block, "block_type", None) if not isinstance(block, dict) else block.get("type")
+            if btype not in ("card", None):
+                continue
+            if not isinstance(value, dict):
+                continue
+            cards.append(
+                {
+                    "title": value.get("title") if isinstance(value.get("title"), str) else "",
+                    "summary": value.get("summary") if isinstance(value.get("summary"), str) else "",
+                    "cta_label": value.get("cta_label") if isinstance(value.get("cta_label"), str) else "",
+                    "href": value.get("href") if isinstance(value.get("href"), str) else "",
+                }
+            )
+
+        return Response(
+            {
+                "title": page.title,
+                "hero_title": page.hero_title,
+                "hero_subtitle": page.hero_subtitle,
+                "hero_bullets": bullets,
+                "steps": steps,
+                "cards": cards,
+                "primary_cta_label": page.primary_cta_label,
+                "primary_cta_target": page.primary_cta_target,
+                "secondary_cta_label": page.secondary_cta_label,
+                "secondary_cta_target": page.secondary_cta_target,
+            }
+        )
 
 
 def _get_or_create_default_deck(user) -> Deck:
