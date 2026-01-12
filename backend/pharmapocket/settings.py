@@ -111,6 +111,9 @@ SITE_ID = int(os.environ.get("DJANGO_SITE_ID", "1"))
 
 WAGTAIL_SITE_NAME = "PharmaPocket"
 
+WAGTAILIMAGES_IMAGE_MODEL = "content.CustomImage"
+WAGTAILIMAGES_RENDITION_MODEL = "content.CustomRendition"
+
 WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "http://localhost:8000")
 
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@localhost")

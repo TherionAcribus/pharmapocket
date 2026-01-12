@@ -219,6 +219,20 @@ def _cover_url(page: MicroArticlePage) -> str | None:
         return None
 
 
+def _cover_credit(page: MicroArticlePage) -> str | None:
+    if not page.cover_image_id:
+        return None
+    try:
+        text = getattr(page.cover_image, "credit_text", None)
+        if callable(text):
+            value = text()
+        else:
+            value = str(text) if text else ""
+        return value or None
+    except Exception:
+        return None
+
+
 def _key_points(page: MicroArticlePage) -> list[str]:
     return [block.value for block in page.key_points]
 
@@ -232,6 +246,7 @@ def _card_payload(page: MicroArticlePage) -> dict:
         "takeaway": page.takeaway,
         "key_points": _key_points(page),
         "cover_image_url": _cover_url(page),
+        "cover_image_credit": _cover_credit(page),
     }
 
 

@@ -22,6 +22,20 @@ def _cover_url(page: MicroArticlePage) -> str | None:
         return None
 
 
+def _cover_credit(page: MicroArticlePage) -> str | None:
+    if not page.cover_image_id:
+        return None
+    try:
+        text = getattr(page.cover_image, "credit_text", None)
+        if callable(text):
+            value = text()
+        else:
+            value = str(text) if text else ""
+        return value or None
+    except Exception:
+        return None
+
+
 def _key_points(page: MicroArticlePage) -> list[str]:
     return [block.value for block in page.key_points]
 
@@ -211,6 +225,7 @@ class FeedView(ListAPIView):
                 "takeaway": p.takeaway,
                 "key_points": _key_points(p),
                 "cover_image_url": _cover_url(p),
+                "cover_image_credit": _cover_credit(p),
                 "tags": _tag_payload(p),
                 "categories_theme": _cat_payload(p.categories_theme),
                 "categories_maladies": _cat_payload(p.categories_maladies),
@@ -255,6 +270,7 @@ class MicroBySlugView(RetrieveAPIView):
             "takeaway": page.takeaway,
             "key_points": _key_points(page),
             "cover_image_url": _cover_url(page),
+            "cover_image_credit": _cover_credit(page),
             "links": [b.value for b in page.links] if page.links else [],
             "see_more": [{"type": b.block_type, "value": b.value} for b in page.see_more] if page.see_more else [],
             "tags": _tag_payload(page),

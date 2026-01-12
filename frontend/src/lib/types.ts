@@ -24,6 +24,7 @@ export type MicroArticleListItem = {
   takeaway: string;
   key_points: string[];
   cover_image_url: string | null;
+  cover_image_credit?: string | null;
   tags: string[];
   tags_payload?: TagPayload[];
   categories_pharmacologie_payload?: CategoryPayload[];
@@ -63,6 +64,7 @@ export type MicroArticleDetail = {
   takeaway: string;
   key_points: string[];
   cover_image_url: string | null;
+  cover_image_credit?: string | null;
   links?: StreamBlock[];
   see_more?: StreamBlock[];
   is_saved?: boolean;
@@ -127,6 +129,7 @@ export type SrsCard = {
   takeaway: string;
   key_points: string[];
   cover_image_url: string | null;
+  cover_image_credit?: string | null;
 };
 
 export type SrsNextResponse = {

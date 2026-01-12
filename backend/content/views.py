@@ -55,6 +55,8 @@ def _microarticle_list_item(p: MicroArticlePage) -> dict:
         "takeaway": p.takeaway,
         "key_points": _key_points(p),
         "cover_image_url": _cover_url(p),
+        "cover_image_credit": _cover_credit(p),
+        "cover_image": _cover_payload(p),
         "tags": list(p.tags.values_list("name", flat=True)),
         "published_at": p.first_published_at,
     }
@@ -67,6 +69,58 @@ def _cover_url(page: MicroArticlePage) -> str | None:
         return page.cover_image.file.url
     except Exception:
         return None
+
+
+def _cover_credit(page: MicroArticlePage) -> str | None:
+    if not page.cover_image_id:
+        return None
+    try:
+        text = getattr(page.cover_image, "credit_text", None)
+        if callable(text):
+            value = text()
+        else:
+            value = str(text) if text else ""
+        return value or None
+    except Exception:
+        return None
+
+
+def _cover_payload(page: MicroArticlePage) -> dict | None:
+    if not page.cover_image_id:
+        return None
+    try:
+        return _image_payload(page.cover_image)
+    except Exception:
+        return None
+
+
+def _image_payload(image) -> dict:
+    try:
+        url = image.file.url
+    except Exception:
+        url = None
+
+    credit_text = None
+    try:
+        ct = getattr(image, "credit_text", None)
+        if callable(ct):
+            credit_text = ct() or None
+        elif ct:
+            credit_text = str(ct)
+    except Exception:
+        credit_text = None
+
+    return {
+        "id": image.id,
+        "title": image.title,
+        "url": url,
+        "credit_text": credit_text,
+        "credit_source_url": getattr(image, "credit_source_url", "") or "",
+        "credit_license": getattr(image, "credit_license", "") or "",
+        "credit_license_url": getattr(image, "credit_license_url", "") or "",
+        "credit_author": getattr(image, "credit_author", "") or "",
+        "credit_source": getattr(image, "credit_source", "") or "",
+    }
 
 
 def _key_points(page: MicroArticlePage) -> list[str]:
@@ -145,11 +199,7 @@ def _sanitize_stream_value(value):
 
     ImageModel = get_image_model()
     if isinstance(value, ImageModel):
-        try:
-            url = value.file.url
-        except Exception:
-            url = None
-        return {"id": value.id, "title": value.title, "url": url}
+        return _image_payload(value)
 
     if isinstance(value, Source):
         return {
@@ -280,6 +330,8 @@ class MicroArticleListView(ListAPIView):
                 "takeaway": p.takeaway,
                 "key_points": _key_points(p),
                 "cover_image_url": _cover_url(p),
+                "cover_image_credit": _cover_credit(p),
+                "cover_image": _cover_payload(p),
                 "tags": list(p.tags.values_list("name", flat=True)),
                 "tags_payload": _tag_payload(p),
                 "categories_theme_payload": _cat_payload(p.categories_theme),
@@ -360,6 +412,8 @@ class MicroArticleDetailView(RetrieveAPIView):
             "takeaway": page.takeaway,
             "key_points": _key_points(page),
             "cover_image_url": _cover_url(page),
+            "cover_image_credit": _cover_credit(page),
+            "cover_image": _cover_payload(page),
             "links": links_blocks,
             "see_more": see_more_blocks,
             "tags": list(page.tags.values_list("name", flat=True)),

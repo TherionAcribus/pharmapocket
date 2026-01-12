@@ -250,6 +250,10 @@ export function SeeMoreRenderer({
           const image = v.image && typeof v.image === "object" ? (v.image as Record<string, unknown>) : null;
           const url = image && typeof image.url === "string" ? image.url : null;
           const title = image && typeof image.title === "string" ? image.title : null;
+          const creditText = image && typeof image.credit_text === "string" ? image.credit_text : null;
+          const creditSourceUrl = image && typeof image.credit_source_url === "string" ? image.credit_source_url : null;
+          const license = image && typeof image.credit_license === "string" ? image.credit_license : null;
+          const licenseUrl = image && typeof image.credit_license_url === "string" ? image.credit_license_url : null;
           const caption = typeof v.caption === "string" ? v.caption : null;
           return (
             <div key={idx} className="rounded-xl border p-4">
@@ -268,6 +272,29 @@ export function SeeMoreRenderer({
                 <div className="mt-2 text-sm text-muted-foreground">Image id: {String(v.image ?? "—")}</div>
               )}
               {caption ? <div className="mt-2 text-sm">{caption}</div> : null}
+              {creditText ? (
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  {creditSourceUrl ? (
+                    <Link href={creditSourceUrl} target="_blank" className="underline">
+                      {creditText}
+                    </Link>
+                  ) : (
+                    creditText
+                  )}
+                  {license ? (
+                    <>
+                      {" "}
+                      {licenseUrl ? (
+                        <Link href={licenseUrl} target="_blank" className="underline">
+                          ({license})
+                        </Link>
+                      ) : (
+                        <>({license})</>
+                      )}
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           );
         }

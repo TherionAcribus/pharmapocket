@@ -675,15 +675,20 @@ export default function ReaderClient({
 
             <div className="mt-3 space-y-3">
               {inlineIllustrationUrl ? (
-                <div className="relative aspect-video overflow-hidden rounded-xl border bg-muted">
-                  <Image
-                    src={inlineIllustrationUrl}
-                    alt={data.title}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 100vw, 768px"
-                    priority
-                  />
+                <div>
+                  <div className="relative aspect-video overflow-hidden rounded-xl border bg-muted">
+                    <Image
+                      src={inlineIllustrationUrl}
+                      alt={data.title}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, 768px"
+                      priority
+                    />
+                  </div>
+                  {data.cover_image_credit ? (
+                    <div className="mt-1 text-[11px] text-muted-foreground">{data.cover_image_credit}</div>
+                  ) : null}
                 </div>
               ) : null}
 

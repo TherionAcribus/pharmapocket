@@ -14,12 +14,44 @@ from wagtail import blocks
 from wagtail.admin.panels import FieldPanel, InlinePanel, MultiFieldPanel
 from wagtail.api import APIField
 from wagtail.fields import RichTextField, StreamField
+from wagtail.images.models import AbstractImage, AbstractRendition, Image
 from wagtail.images import get_image_model_string
 from wagtail.models import Orderable, Page
 from wagtail.search import index
 from wagtail.snippets.models import register_snippet
 
 from .blocks import ImageWithCaptionBlock, Mechanism3StepsBlock, ReferenceBlock
+
+
+class CustomImage(AbstractImage):
+    credit_author = models.CharField(max_length=200, blank=True)
+    credit_source = models.CharField(max_length=200, blank=True)
+    credit_source_url = models.URLField(blank=True)
+    credit_license = models.CharField(max_length=120, blank=True)
+    credit_license_url = models.URLField(blank=True)
+
+    admin_form_fields = Image.admin_form_fields + (
+        "credit_author",
+        "credit_source",
+        "credit_source_url",
+        "credit_license",
+        "credit_license_url",
+    )
+
+    def credit_text(self) -> str:
+        parts = [p for p in [self.credit_author, self.credit_source, self.credit_license] if p]
+        return " · ".join(parts)
+
+
+class CustomRendition(AbstractRendition):
+    image = models.ForeignKey(
+        "content.CustomImage",
+        on_delete=models.CASCADE,
+        related_name="renditions",
+    )
+
+    class Meta:
+        unique_together = (("image", "filter_spec", "focal_point_key"),)
 
 
 @register_snippet
