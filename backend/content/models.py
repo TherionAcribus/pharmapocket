@@ -125,6 +125,8 @@ class Source(index.Indexed, models.Model):
         INSTITUTIONAL = "institutional", "Site institutionnel"
         BOOK = "book", "Livre"
         SCIENTIFIC = "article", "Article scientifique"
+        THESIS = "thesis", "Thèse"
+        LAB_INFORMATION = "lab_information", "Information laboratoire"
         OTHER = "other", "Autre"
 
     name = models.CharField(max_length=200)
