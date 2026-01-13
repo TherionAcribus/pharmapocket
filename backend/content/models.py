@@ -362,8 +362,10 @@ class MicroArticlePage(Page):
         [("reference", ReferenceBlock())],
         use_json_field=True,
         blank=True,
+        min_num=1,
+        default=[("reference", {})],
         max_num=5,
-        help_text="Sources principales de l'article (max 5)."
+        help_text="Sources principales de l'article (max 5). Un bloc vide est préajouté."
     )
     takeaway = RichTextField(
         features=["bold", "italic", "link", "ol", "ul"],
