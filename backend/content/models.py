@@ -94,24 +94,156 @@ class Question(models.Model):
         QCM = "qcm", "QCM"
         TRUE_FALSE = "true_false", "Vrai/Faux"
 
+    class TrueFalseCorrect(models.TextChoices):
+        UNSET = "", "—"
+        TRUE = "true", "Vrai"
+        FALSE = "false", "Faux"
+
     type = models.CharField(max_length=32, choices=QuestionType.choices)
     prompt = models.CharField(max_length=500)
-    choices = models.JSONField(blank=True, null=True)
-    correct_answers = models.JSONField(blank=True, null=True)
+    qcm_answer_1 = models.CharField(max_length=200, blank=True)
+    qcm_answer_2 = models.CharField(max_length=200, blank=True)
+    qcm_answer_3 = models.CharField(max_length=200, blank=True)
+    qcm_answer_4 = models.CharField(max_length=200, blank=True)
+    true_false_correct = models.CharField(
+        max_length=8,
+        choices=TrueFalseCorrect.choices,
+        blank=True,
+        default=TrueFalseCorrect.UNSET,
+    )
+    source = models.ForeignKey(
+        "content.Source",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="questions",
+    )
+    choices = models.JSONField(blank=True, null=True, editable=False)
+    correct_answers = models.JSONField(blank=True, null=True, editable=False)
     explanation = models.TextField(blank=True)
     difficulty = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)], default=3
     )
-    references = models.JSONField(blank=True, null=True)
+    references = models.JSONField(blank=True, null=True, editable=False)
+
+    def _derive_qcm_choices(self) -> list[str]:
+        return [
+            (self.qcm_answer_1 or "").strip(),
+            (self.qcm_answer_2 or "").strip(),
+            (self.qcm_answer_3 or "").strip(),
+            (self.qcm_answer_4 or "").strip(),
+        ]
+
+    def _serialize_source(self) -> dict | None:
+        if not self.source_id:
+            return None
+        try:
+            s = self.source
+        except Exception:
+            return None
+        return {
+            "id": s.id,
+            "name": s.name,
+            "kind": s.kind,
+            "url": s.url,
+            "publisher": s.publisher,
+            "author": s.author,
+            "publication_date": s.publication_date.isoformat() if s.publication_date else None,
+            "accessed_date": s.accessed_date.isoformat() if s.accessed_date else None,
+            "notes": s.notes,
+        }
+
+    def _sync_references(self) -> None:
+        src = self._serialize_source()
+        self.references = [src] if src else None
+
+    def _sync_legacy_json_fields(self) -> None:
+        if self.type == self.QuestionType.QCM:
+            self.choices = self._derive_qcm_choices()
+            self.correct_answers = [0]
+            return
+
+        if self.type == self.QuestionType.TRUE_FALSE:
+            if self.true_false_correct == self.TrueFalseCorrect.TRUE:
+                self.choices = ["Vrai", "Faux"]
+                self.correct_answers = [0]
+                return
+            if self.true_false_correct == self.TrueFalseCorrect.FALSE:
+                self.choices = ["Faux", "Vrai"]
+                self.correct_answers = [0]
+                return
+
+            self.choices = None
+            self.correct_answers = None
+            return
+
+        self.choices = None
+        self.correct_answers = None
+
+    def clean(self):
+        super().clean()
+
+        if self.type == self.QuestionType.QCM:
+            a1 = (self.qcm_answer_1 or "").strip()
+            a2 = (self.qcm_answer_2 or "").strip()
+            a3 = (self.qcm_answer_3 or "").strip()
+            a4 = (self.qcm_answer_4 or "").strip()
+            errors: dict[str, str] = {}
+            if not a1:
+                errors["qcm_answer_1"] = "Réponse 1 obligatoire (bonne réponse)."
+            if not a2:
+                errors["qcm_answer_2"] = "Réponse 2 obligatoire."
+            if not a3:
+                errors["qcm_answer_3"] = "Réponse 3 obligatoire."
+            if not a4:
+                errors["qcm_answer_4"] = "Réponse 4 obligatoire."
+            if errors:
+                raise ValidationError(errors)
+
+            self._sync_legacy_json_fields()
+            self._sync_references()
+            return
+
+        if self.type == self.QuestionType.TRUE_FALSE:
+            if self.true_false_correct not in (
+                self.TrueFalseCorrect.TRUE,
+                self.TrueFalseCorrect.FALSE,
+            ):
+                raise ValidationError({"true_false_correct": "Choisir Vrai ou Faux."})
+
+            self._sync_legacy_json_fields()
+            self._sync_references()
+            return
+
+        self._sync_legacy_json_fields()
+        self._sync_references()
+
+    def save(self, *args, **kwargs):
+        self._sync_legacy_json_fields()
+        self._sync_references()
+        return super().save(*args, **kwargs)
 
     panels = [
         FieldPanel("type"),
         FieldPanel("prompt"),
-        FieldPanel("choices"),
-        FieldPanel("correct_answers"),
+        MultiFieldPanel(
+            [
+                FieldPanel("qcm_answer_1"),
+                FieldPanel("qcm_answer_2"),
+                FieldPanel("qcm_answer_3"),
+                FieldPanel("qcm_answer_4"),
+            ],
+            heading="Réponses QCM (bonne en 1ère position)",
+        ),
+        MultiFieldPanel(
+            [
+                FieldPanel("true_false_correct"),
+            ],
+            heading="Vrai/Faux (bonne réponse)",
+        ),
+        FieldPanel("source"),
         FieldPanel("explanation"),
         FieldPanel("difficulty"),
-        FieldPanel("references"),
     ]
 
     def __str__(self) -> str:
