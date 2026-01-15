@@ -1,0 +1,15 @@
+.sequence-member {
+  margin-bottom: 0.5rem;
+}
+
+.sequence-member__header {
+  padding: 0.5rem;
+}
+
+.sequence-member__content {
+  padding: 0.5rem;
+}
+
+.sequence-member__content .field {
+  margin-bottom: 0.5rem;
+}

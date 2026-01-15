@@ -773,7 +773,6 @@ class SavedMicroArticle(models.Model):
         ]
 
 
-@register_snippet
 class Deck(ClusterableModel):
     class DeckType(models.TextChoices):
         USER = "user", "User"
@@ -882,6 +881,58 @@ class Deck(ClusterableModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.type}:{self.user_id})"
+
+
+class PackManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(type="official")
+
+
+@register_snippet
+class Pack(Deck):
+    objects = PackManager()
+
+    panels = [
+        MultiFieldPanel(
+            [
+                FieldPanel("status"),
+                FieldPanel("name"),
+            ],
+            heading="Identité",
+        ),
+        MultiFieldPanel(
+            [
+                FieldPanel("description"),
+                FieldPanel("cover_image"),
+                FieldPanel("difficulty"),
+                FieldPanel("estimated_minutes"),
+            ],
+            heading="Métadonnées",
+        ),
+        MultiFieldPanel(
+            [
+                FieldPanel("sort_order"),
+            ],
+            heading="Affichage",
+        ),
+        MultiFieldPanel(
+            [
+                InlinePanel("deck_cards", label="Cartes"),
+            ],
+            heading="Cartes",
+        ),
+    ]
+
+    class Meta:
+        proxy = True
+        verbose_name = "Pack"
+        verbose_name_plural = "Packs"
+
+    def save(self, *args, **kwargs):
+        self.type = self.DeckType.OFFICIAL
+        self.user_id = None
+        self.is_default = False
+        return super().save(*args, **kwargs)
 
 
 class DeckCard(Orderable):

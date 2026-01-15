@@ -1,6 +1,12 @@
 from django.urls import path
 
 from .views import (
+    AdminMicroArticleSearchView,
+    AdminPackBulkAddView,
+    AdminPackDetailView,
+    AdminPackListCreateView,
+    AdminPackRemoveCardView,
+    AdminPackReorderCardsView,
     CardDecksView,
     DeckCardDetailView,
     DeckCardsView,
@@ -23,6 +29,31 @@ urlpatterns = [
     path("microarticles/", MicroArticleListView.as_view(), name="microarticle-list"),
     # use <str:slug> to allow unicode slugs (accents)
     path("microarticles/<str:slug>/", MicroArticleDetailView.as_view(), name="microarticle-detail"),
+
+    # Admin pack builder (staff only)
+    path("admin/packs/", AdminPackListCreateView.as_view(), name="admin-pack-list"),
+    path("admin/packs/<int:pack_id>/", AdminPackDetailView.as_view(), name="admin-pack-detail"),
+    path(
+        "admin/packs/<int:pack_id>/bulk-add/",
+        AdminPackBulkAddView.as_view(),
+        name="admin-pack-bulk-add",
+    ),
+    path(
+        "admin/packs/<int:pack_id>/cards/reorder/",
+        AdminPackReorderCardsView.as_view(),
+        name="admin-pack-reorder",
+    ),
+    path(
+        "admin/packs/<int:pack_id>/cards/<int:card_id>/remove/",
+        AdminPackRemoveCardView.as_view(),
+        name="admin-pack-remove-card",
+    ),
+    path(
+        "admin/microarticles/search/",
+        AdminMicroArticleSearchView.as_view(),
+        name="admin-microarticle-search",
+    ),
+
     path("decks/", DeckListCreateView.as_view(), name="deck-list"),
     path("decks/<int:deck_id>/", DeckDetailView.as_view(), name="deck-detail"),
     path(

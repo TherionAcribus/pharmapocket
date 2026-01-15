@@ -1,4 +1,7 @@
 import {
+  AdminMicroArticleSearchResult,
+  AdminPackDetail,
+  AdminPackSummary,
   CursorPage,
   DeckCardsResponse,
   DeckMembership,
@@ -482,6 +485,113 @@ export async function patchPreferences(input: Partial<UserPreferences>): Promise
 
 export async function fetchLanding(): Promise<LandingPayload> {
   return apiGet<LandingPayload>("/api/v1/content/landing/");
+}
+
+export async function fetchAdminPacks(): Promise<AdminPackSummary[]> {
+  return apiGet<AdminPackSummary[]>("/api/v1/content/admin/packs/");
+}
+
+export async function createAdminPack(input: {
+  name: string;
+  description?: string;
+  difficulty?: string;
+  estimated_minutes?: number | null;
+  status?: string;
+  sort_order?: number;
+  cover_image_id?: number | null;
+}): Promise<AdminPackSummary> {
+  return apiJson<AdminPackSummary>("/api/v1/content/admin/packs/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function fetchAdminPack(packId: number): Promise<AdminPackDetail> {
+  return apiGet<AdminPackDetail>(`/api/v1/content/admin/packs/${encodeURIComponent(String(packId))}/`);
+}
+
+export async function patchAdminPack(
+  packId: number,
+  input: Partial<{
+    name: string;
+    description: string;
+    difficulty: string;
+    estimated_minutes: number | null;
+    status: string;
+    sort_order: number;
+    cover_image_id: number | null;
+  }>
+): Promise<AdminPackSummary> {
+  return apiJson<AdminPackSummary>(`/api/v1/content/admin/packs/${encodeURIComponent(String(packId))}/`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteAdminPack(packId: number): Promise<void> {
+  await apiJson(`/api/v1/content/admin/packs/${encodeURIComponent(String(packId))}/`, {
+    method: "DELETE",
+  });
+}
+
+export async function adminMicroArticleSearch(q: string): Promise<AdminMicroArticleSearchResult[]> {
+  const value = q.trim();
+  if (!value) return [];
+  return apiGet<AdminMicroArticleSearchResult[]>(
+    `/api/v1/content/admin/microarticles/search/?q=${encodeURIComponent(value)}`
+  );
+}
+
+export async function adminPackBulkAdd(
+  packId: number,
+  input:
+    | { items: string }
+    | { microarticle_ids: number[] }
+    | { slugs: string[] }
+): Promise<{ added: number; already_present: number; not_found: number }> {
+  return apiJson<{ added: number; already_present: number; not_found: number }>(
+    `/api/v1/content/admin/packs/${encodeURIComponent(String(packId))}/bulk-add/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export async function adminPackReorder(
+  packId: number,
+  microarticleIds: number[]
+): Promise<{ ok: boolean; updated: number }> {
+  return apiJson<{ ok: boolean; updated: number }>(
+    `/api/v1/content/admin/packs/${encodeURIComponent(String(packId))}/cards/reorder/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ microarticle_ids: microarticleIds }),
+    }
+  );
+}
+
+export async function adminPackRemoveCard(packId: number, cardId: number): Promise<{ ok: boolean }> {
+  return apiJson<{ ok: boolean }>(
+    `/api/v1/content/admin/packs/${encodeURIComponent(String(packId))}/cards/${encodeURIComponent(
+      String(cardId)
+    )}/remove/`,
+    {
+      method: "POST",
+    }
+  );
 }
 
 const ALLAUTH_CLIENT = "browser";

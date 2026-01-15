@@ -1,0 +1,20 @@
+{% extends "wagtailadmin/base.html" %}
+
+{% block titletag %}Ajout en masse — {{ pack.name }}{% endblock %}
+
+{% block content %}
+<div class="nice-padding">
+  <h1>Ajout en masse — {{ pack.name }}</h1>
+  <p>Cartes actuellement dans le pack : {{ cards_count }}</p>
+
+  <form action="" method="post">
+    {% csrf_token %}
+    <label for="items">IDs / slugs / URLs (un par ligne, ou séparés par espaces/virgules)</label>
+    <textarea id="items" name="items" rows="12" style="width: 100%;"></textarea>
+    <div style="margin-top: 1rem;">
+      <button type="submit" class="button button-longrunning" data-clicked-text="Ajout...">Ajouter</button>
+      <a class="button button-secondary" href="/admin/snippets/content/pack/">Retour aux packs</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

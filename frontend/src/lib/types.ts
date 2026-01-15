@@ -69,6 +69,40 @@ export type DeckCardsResponse = {
   results: MicroArticleListItem[];
 };
 
+export type AdminMicroArticleSearchResult = {
+  id: number;
+  slug: string;
+  title: string;
+};
+
+export type AdminPackSummary = {
+  id: number;
+  name: string;
+  description: string;
+  difficulty: string;
+  estimated_minutes: number | null;
+  status: string;
+  type: string;
+  sort_order: number;
+  cards_count: number;
+  cover_image_url: string | null;
+  cover_image_credit?: string | null;
+  cover_image?: ImagePayload | null;
+};
+
+export type AdminPackDetail = Omit<AdminPackSummary, "cards_count"> & {
+  cards_count: number;
+  cards: Array<
+    MicroArticleListItem & {
+      deck_card_id: number;
+      sort_order: number;
+      position: number;
+      is_optional: boolean;
+      notes: string;
+    }
+  >;
+};
+
 export type StreamBlock = { type: string; value: unknown };
 
 export type MicroArticleDetail = {
