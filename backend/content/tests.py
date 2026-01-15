@@ -27,7 +27,6 @@ class PublicApiSmokeTests(APITestCase):
         page = MicroArticlePage(
             title="Metformine",
             slug="metformine",
-            title_question="Pourquoi la metformine est-elle en première intention ?",
             answer_express="Elle améliore la sensibilité à l'insuline.",
             key_points=[
                 {"type": "point", "value": "Diminue la production hépatique de glucose"},

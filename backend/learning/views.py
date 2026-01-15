@@ -267,7 +267,7 @@ class SRSNextView(APIView):
         if scope == "all_cards":
             candidates = MicroArticlePage.objects.live().public().select_related("cover_image")
         else:
-            decks_qs = Deck.objects.filter(user=request.user)
+            decks_qs = Deck.objects.filter(user=request.user, type=Deck.DeckType.USER)
             if scope == "deck":
                 if deck_id is None:
                     raise DRFValidationError({"deck_id": "deck_id is required when scope=deck"})

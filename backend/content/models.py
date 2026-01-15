@@ -7,11 +7,12 @@ from django.utils.text import slugify
 
 from modelcluster.fields import ParentalKey, ParentalManyToManyField
 from modelcluster.contrib.taggit import ClusterTaggableManager
+from modelcluster.models import ClusterableModel
 from rest_framework import serializers
 from taggit.models import TaggedItemBase
 from treebeard.mp_tree import MP_Node
 from wagtail import blocks
-from wagtail.admin.panels import FieldPanel, InlinePanel, MultiFieldPanel
+from wagtail.admin.panels import FieldPanel, InlinePanel, MultiFieldPanel, PageChooserPanel
 from wagtail.api import APIField
 from wagtail.fields import RichTextField, StreamField
 from wagtail.images.models import AbstractImage, AbstractRendition, Image
@@ -772,17 +773,81 @@ class SavedMicroArticle(models.Model):
         ]
 
 
-class Deck(models.Model):
+@register_snippet
+class Deck(ClusterableModel):
+    class DeckType(models.TextChoices):
+        USER = "user", "User"
+        OFFICIAL = "official", "Official"
+
+    class Difficulty(models.TextChoices):
+        BEGINNER = "beginner", "Beginner"
+        INTERMEDIATE = "intermediate", "Intermediate"
+        ADVANCED = "advanced", "Advanced"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PUBLISHED = "published", "Published"
+        ARCHIVED = "archived", "Archived"
+
+    type = models.CharField(max_length=16, choices=DeckType.choices, default=DeckType.USER)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="decks",
+        null=True,
+        blank=True,
     )
     name = models.CharField(max_length=60)
+    description = models.TextField(blank=True, default="")
+    cover_image = models.ForeignKey(
+        get_image_model_string(),
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deck_covers",
+        verbose_name="Illustration",
+    )
+    difficulty = models.CharField(max_length=16, choices=Difficulty.choices, blank=True, default="")
+    estimated_minutes = models.PositiveSmallIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PUBLISHED)
     is_default = models.BooleanField(default=False)
     sort_order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    panels = [
+        MultiFieldPanel(
+            [
+                FieldPanel("type"),
+                FieldPanel("status"),
+                FieldPanel("user"),
+                FieldPanel("name"),
+            ],
+            heading="Identité",
+        ),
+        MultiFieldPanel(
+            [
+                FieldPanel("description"),
+                FieldPanel("cover_image"),
+                FieldPanel("difficulty"),
+                FieldPanel("estimated_minutes"),
+            ],
+            heading="Métadonnées",
+        ),
+        MultiFieldPanel(
+            [
+                FieldPanel("is_default"),
+                FieldPanel("sort_order"),
+            ],
+            heading="Affichage",
+        ),
+        MultiFieldPanel(
+            [
+                InlinePanel("deck_cards", label="Cartes"),
+            ],
+            heading="Cartes",
+        ),
+    ]
 
     class Meta:
         constraints = [
@@ -792,7 +857,7 @@ class Deck(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["user"],
-                condition=Q(is_default=True),
+                condition=Q(is_default=True, type="user"),
                 name="uniq_deck_default_per_user",
             ),
         ]
@@ -800,12 +865,27 @@ class Deck(models.Model):
             models.Index(fields=["user", "sort_order"]),
         ]
 
+    def clean(self):
+        super().clean()
+
+        if self.type == self.DeckType.OFFICIAL:
+            if self.user_id is not None:
+                raise ValidationError({"user": "Official decks must not have an owner."})
+            if self.is_default:
+                raise ValidationError({"is_default": "Official decks cannot be default."})
+            return
+
+        if self.type == self.DeckType.USER:
+            if self.user_id is None:
+                raise ValidationError({"user": "User decks must have an owner."})
+            return
+
     def __str__(self) -> str:
-        return f"{self.name} ({self.user_id})"
+        return f"{self.name} ({self.type}:{self.user_id})"
 
 
-class DeckCard(models.Model):
-    deck = models.ForeignKey(
+class DeckCard(Orderable):
+    deck = ParentalKey(
         "content.Deck",
         on_delete=models.CASCADE,
         related_name="deck_cards",
@@ -815,9 +895,18 @@ class DeckCard(models.Model):
         on_delete=models.CASCADE,
         related_name="deck_links",
     )
+    is_optional = models.BooleanField(default=False)
+    notes = models.TextField(blank=True, default="")
     added_at = models.DateTimeField(auto_now_add=True)
 
+    panels = [
+        PageChooserPanel("microarticle", page_type="content.MicroArticlePage"),
+        FieldPanel("is_optional"),
+        FieldPanel("notes"),
+    ]
+
     class Meta:
+        ordering = ["sort_order", "id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["deck", "microarticle"],
@@ -826,7 +915,54 @@ class DeckCard(models.Model):
         ]
         indexes = [
             models.Index(fields=["deck", "added_at"]),
+            models.Index(fields=["deck", "sort_order"], name="content_dec_deck_id_sort_idx"),
             models.Index(fields=["microarticle"]),
+        ]
+
+
+class UserDeckProgress(models.Model):
+    class ProgressMode(models.TextChoices):
+        ORDERED = "ordered", "Ordered"
+        SHUFFLE = "shuffle", "Shuffle"
+        DUE_ONLY = "due_only", "Due only"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="deck_progress",
+    )
+    deck = models.ForeignKey(
+        "content.Deck",
+        on_delete=models.CASCADE,
+        related_name="user_progress",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    cards_seen_count = models.PositiveIntegerField(default=0)
+    cards_done_count = models.PositiveIntegerField(default=0)
+    mode_last = models.CharField(
+        max_length=16,
+        choices=ProgressMode.choices,
+        default=ProgressMode.ORDERED,
+    )
+    last_card = models.ForeignKey(
+        "content.MicroArticlePage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="last_seen_in_deck_progress",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "deck"],
+                name="uniq_user_deck_progress",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "deck"]),
+            models.Index(fields=["user", "last_seen_at"]),
         ]
 
 

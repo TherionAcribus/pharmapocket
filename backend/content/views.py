@@ -3,6 +3,7 @@ import logging
 
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -25,6 +26,7 @@ from .models import (
     MicroArticlePage,
     MicroArticleReadState,
     Source,
+    UserDeckProgress,
 )
 from .pagination import MicroArticleCursorPagination
 from .serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
@@ -106,19 +108,25 @@ class LandingView(APIView):
 
 
 def _get_or_create_default_deck(user) -> Deck:
-    deck = Deck.objects.filter(user=user, is_default=True).first()
+    deck = Deck.objects.filter(user=user, type=Deck.DeckType.USER, is_default=True).first()
     if deck is not None:
         return deck
 
-    Deck.objects.filter(user=user, is_default=True).update(is_default=False)
-    existing = Deck.objects.filter(user=user, name="Mes cartes").first()
+    Deck.objects.filter(user=user, type=Deck.DeckType.USER, is_default=True).update(is_default=False)
+    existing = Deck.objects.filter(user=user, type=Deck.DeckType.USER, name="Mes cartes").first()
     if existing is not None:
         existing.is_default = True
         existing.sort_order = 0
         existing.save(update_fields=["is_default", "sort_order", "updated_at"])
         return existing
 
-    return Deck.objects.create(user=user, name="Mes cartes", is_default=True, sort_order=0)
+    return Deck.objects.create(
+        user=user,
+        type=Deck.DeckType.USER,
+        name="Mes cartes",
+        is_default=True,
+        sort_order=0,
+    )
 
 
 def _microarticle_list_item(p: MicroArticlePage) -> dict:
@@ -515,7 +523,11 @@ class MicroArticleDetailView(RetrieveAPIView):
         }
 
         if request.user.is_authenticated:
-            default_deck = Deck.objects.filter(user=request.user, is_default=True).first()
+            default_deck = Deck.objects.filter(
+                user=request.user,
+                type=Deck.DeckType.USER,
+                is_default=True,
+            ).first()
             if default_deck is None:
                 data["is_saved"] = False
             else:
@@ -569,7 +581,11 @@ class SavedMicroArticleDetailView(APIView):
         page = MicroArticlePage.objects.filter(slug=slug).first()
         if page is None:
             return Response({"saved": False})
-        default_deck = Deck.objects.filter(user=request.user, is_default=True).first()
+        default_deck = Deck.objects.filter(
+            user=request.user,
+            type=Deck.DeckType.USER,
+            is_default=True,
+        ).first()
         if default_deck is None:
             return Response({"saved": False})
         return Response(
@@ -580,7 +596,11 @@ class SavedMicroArticleDetailView(APIView):
         page = MicroArticlePage.objects.filter(slug=slug).first()
         if page is None:
             return Response(status=204)
-        default_deck = Deck.objects.filter(user=request.user, is_default=True).first()
+        default_deck = Deck.objects.filter(
+            user=request.user,
+            type=Deck.DeckType.USER,
+            is_default=True,
+        ).first()
         if default_deck is not None:
             DeckCard.objects.filter(deck=default_deck, microarticle_id=page.id).delete()
         return Response(status=204)
@@ -595,13 +615,72 @@ class DeckListSerializer(serializers.Serializer):
 
 
 class DeckListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        if self.request.method == "GET":
+            req_type = self.request.query_params.get("type")
+            if req_type == Deck.DeckType.OFFICIAL:
+                return [AllowAny()]
+        return [IsAuthenticated()]
 
     def get(self, request):
+        req_type = request.query_params.get("type")
+        if req_type == Deck.DeckType.OFFICIAL:
+            qs = (
+                Deck.objects.filter(type=Deck.DeckType.OFFICIAL, status=Deck.Status.PUBLISHED)
+                .select_related("cover_image")
+                .order_by("sort_order", "id")
+                .annotate(cards_count=models.Count("deck_cards"))
+            )
+
+            progress_by_deck_id: dict[int, UserDeckProgress] = {}
+            if request.user.is_authenticated:
+                progress_rows = UserDeckProgress.objects.filter(
+                    user=request.user,
+                    deck_id__in=list(qs.values_list("id", flat=True)),
+                )
+                progress_by_deck_id = {p.deck_id: p for p in progress_rows}
+
+            items: list[dict] = []
+            for d in qs:
+                p = progress_by_deck_id.get(d.id)
+                cards_count = int(getattr(d, "cards_count", 0) or 0)
+                done = int(getattr(p, "cards_done_count", 0) or 0) if p else 0
+                progress_pct = int(round((done / cards_count) * 100)) if cards_count else 0
+                cover_payload = _image_payload(d.cover_image) if getattr(d, "cover_image_id", None) else None
+                items.append(
+                    {
+                        "id": d.id,
+                        "name": d.name,
+                        "description": d.description,
+                        "cover_image_url": cover_payload.get("url") if cover_payload else None,
+                        "cover_image_credit": cover_payload.get("credit_text") if cover_payload else None,
+                        "cover_image": cover_payload,
+                        "difficulty": d.difficulty,
+                        "estimated_minutes": d.estimated_minutes,
+                        "status": d.status,
+                        "type": d.type,
+                        "cards_count": cards_count,
+                        "progress": (
+                            {
+                                "started_at": p.started_at,
+                                "last_seen_at": p.last_seen_at,
+                                "cards_seen_count": p.cards_seen_count,
+                                "cards_done_count": p.cards_done_count,
+                                "progress_pct": progress_pct,
+                                "mode_last": p.mode_last,
+                                "last_card_id": p.last_card_id,
+                            }
+                            if p
+                            else None
+                        ),
+                    }
+                )
+            return Response(items)
+
         _get_or_create_default_deck(request.user)
 
         qs = (
-            Deck.objects.filter(user=request.user)
+            Deck.objects.filter(user=request.user, type=Deck.DeckType.USER)
             .order_by("sort_order", "id")
             .annotate(cards_count=models.Count("deck_cards"))
         )
@@ -628,18 +707,90 @@ class DeckListCreateView(APIView):
 
         _get_or_create_default_deck(request.user)
         sort_order = (
-            Deck.objects.filter(user=request.user).aggregate(models.Max("sort_order")).get("sort_order__max")
+            Deck.objects.filter(user=request.user, type=Deck.DeckType.USER)
+            .aggregate(models.Max("sort_order"))
+            .get("sort_order__max")
             or 0
         )
-        deck = Deck.objects.create(user=request.user, name=name, sort_order=int(sort_order) + 1)
+        deck = Deck.objects.create(
+            user=request.user,
+            type=Deck.DeckType.USER,
+            name=name,
+            sort_order=int(sort_order) + 1,
+        )
         return Response({"id": deck.id, "name": deck.name, "is_default": bool(deck.is_default), "sort_order": deck.sort_order})
 
 
 class DeckDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get(self, request, deck_id: int):
+        deck = Deck.objects.filter(id=deck_id).first()
+        if deck is None:
+            return Response(status=404)
+
+        if deck.type == Deck.DeckType.OFFICIAL:
+            if deck.status != Deck.Status.PUBLISHED:
+                return Response(status=404)
+        else:
+            if not request.user.is_authenticated:
+                return Response(status=404)
+            if deck.user_id != request.user.id:
+                return Response(status=404)
+
+        cards_qs = DeckCard.objects.filter(deck=deck).select_related("microarticle", "microarticle__cover_image")
+        if deck.type == Deck.DeckType.OFFICIAL:
+            cards_qs = cards_qs.order_by("sort_order", "id")
+        else:
+            cards_qs = cards_qs.order_by("-added_at")
+
+        cards = []
+        for r in cards_qs:
+            item = _microarticle_list_item(r.microarticle)
+            item["position"] = r.sort_order
+            item["sort_order"] = r.sort_order
+            item["is_optional"] = bool(r.is_optional)
+            item["notes"] = r.notes
+            cards.append(item)
+
+        deck_cover_payload = _image_payload(deck.cover_image) if getattr(deck, "cover_image_id", None) else None
+
+        payload = {
+            "id": deck.id,
+            "name": deck.name,
+            "description": deck.description,
+            "cover_image_url": deck_cover_payload.get("url") if deck_cover_payload else None,
+            "cover_image_credit": deck_cover_payload.get("credit_text") if deck_cover_payload else None,
+            "cover_image": deck_cover_payload,
+            "difficulty": deck.difficulty,
+            "estimated_minutes": deck.estimated_minutes,
+            "status": deck.status,
+            "type": deck.type,
+            "cards_count": len(cards),
+            "cards": cards,
+        }
+
+        if request.user.is_authenticated and deck.type == Deck.DeckType.OFFICIAL:
+            progress = UserDeckProgress.objects.filter(user=request.user, deck=deck).first()
+            if progress is not None:
+                payload["progress"] = {
+                    "started_at": progress.started_at,
+                    "last_seen_at": progress.last_seen_at,
+                    "cards_seen_count": progress.cards_seen_count,
+                    "cards_done_count": progress.cards_done_count,
+                    "mode_last": progress.mode_last,
+                    "last_card_id": progress.last_card_id,
+                }
+            else:
+                payload["progress"] = None
+
+        return Response(payload)
 
     def patch(self, request, deck_id: int):
-        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        deck = Deck.objects.filter(id=deck_id, user=request.user, type=Deck.DeckType.USER).first()
         if deck is None:
             return Response(status=404)
 
@@ -664,7 +815,7 @@ class DeckDetailView(APIView):
         return Response({"id": deck.id, "name": deck.name, "is_default": bool(deck.is_default), "sort_order": deck.sort_order})
 
     def delete(self, request, deck_id: int):
-        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        deck = Deck.objects.filter(id=deck_id, user=request.user, type=Deck.DeckType.USER).first()
         if deck is None:
             return Response(status=404)
         if deck.is_default:
@@ -677,11 +828,11 @@ class DeckSetDefaultView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, deck_id: int):
-        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        deck = Deck.objects.filter(id=deck_id, user=request.user, type=Deck.DeckType.USER).first()
         if deck is None:
             return Response(status=404)
 
-        Deck.objects.filter(user=request.user, is_default=True).exclude(id=deck.id).update(is_default=False)
+        Deck.objects.filter(user=request.user, type=Deck.DeckType.USER, is_default=True).exclude(id=deck.id).update(is_default=False)
         if not deck.is_default:
             deck.is_default = True
             deck.save(update_fields=["is_default", "updated_at"])
@@ -689,44 +840,70 @@ class DeckSetDefaultView(APIView):
 
 
 class DeckCardsView(APIView):
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def get(self, request, deck_id: int):
-        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        deck = Deck.objects.filter(id=deck_id).first()
         if deck is None:
             return Response(status=404)
+
+        if deck.type == Deck.DeckType.OFFICIAL:
+            if deck.status != Deck.Status.PUBLISHED:
+                return Response(status=404)
+        else:
+            if not request.user.is_authenticated:
+                return Response(status=404)
+            if deck.user_id != request.user.id:
+                return Response(status=404)
 
         search = request.query_params.get("search")
         qs = (
             DeckCard.objects.filter(deck=deck)
             .select_related("microarticle", "microarticle__cover_image")
-            .order_by("-added_at")
         )
+        if deck.type == Deck.DeckType.OFFICIAL:
+            qs = qs.order_by("sort_order", "id")
+        else:
+            qs = qs.order_by("-added_at")
         if search and isinstance(search, str) and search.strip():
             s = search.strip()
             qs = qs.filter(
                 Q(microarticle__title__icontains=s) | Q(microarticle__answer_express__icontains=s)
             )
         card_ids = list(qs.values_list("microarticle_id", flat=True))
-        deck_counts_by_card_id = {
-            row["microarticle_id"]: row["decks_count"]
-            for row in DeckCard.objects.filter(
-                deck__user=request.user,
-                microarticle_id__in=card_ids,
-            )
-            .values("microarticle_id")
-            .annotate(decks_count=models.Count("deck_id", distinct=True))
-        }
+        deck_counts_by_card_id = {}
+        if request.user.is_authenticated and card_ids:
+            deck_counts_by_card_id = {
+                row["microarticle_id"]: row["decks_count"]
+                for row in DeckCard.objects.filter(
+                    deck__user=request.user,
+                    deck__type=Deck.DeckType.USER,
+                    microarticle_id__in=card_ids,
+                )
+                .values("microarticle_id")
+                .annotate(decks_count=models.Count("deck_id", distinct=True))
+            }
 
         items: list[dict] = []
         for r in qs:
             item = _microarticle_list_item(r.microarticle)
             item["decks_count"] = int(deck_counts_by_card_id.get(r.microarticle_id, 1))
+            item["position"] = r.sort_order
+            item["sort_order"] = r.sort_order
+            item["is_optional"] = bool(r.is_optional)
+            item["notes"] = r.notes
             items.append(item)
         return Response({"count": len(items), "results": items})
 
     def post(self, request, deck_id: int):
-        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        deck = Deck.objects.filter(
+            id=deck_id,
+            user=request.user,
+            type=Deck.DeckType.USER,
+        ).first()
         if deck is None:
             return Response(status=404)
 
@@ -742,11 +919,114 @@ class DeckCardsView(APIView):
         return Response({"ok": True})
 
 
+class OfficialDeckStartView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, deck_id: int):
+        deck = Deck.objects.filter(
+            id=deck_id,
+            type=Deck.DeckType.OFFICIAL,
+            status=Deck.Status.PUBLISHED,
+        ).first()
+        if deck is None:
+            return Response(status=404)
+
+        obj, created = UserDeckProgress.objects.get_or_create(
+            user=request.user,
+            deck=deck,
+            defaults={"last_seen_at": timezone.now()},
+        )
+        if not created and obj.last_seen_at is None:
+            obj.last_seen_at = timezone.now()
+            obj.save(update_fields=["last_seen_at"])
+
+        return Response(
+            {
+                "deck_id": deck.id,
+                "started_at": obj.started_at,
+                "last_seen_at": obj.last_seen_at,
+                "cards_seen_count": obj.cards_seen_count,
+                "cards_done_count": obj.cards_done_count,
+                "mode_last": obj.mode_last,
+                "last_card_id": obj.last_card_id,
+            }
+        )
+
+
+class OfficialDeckProgressView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, deck_id: int):
+        deck = Deck.objects.filter(
+            id=deck_id,
+            type=Deck.DeckType.OFFICIAL,
+            status=Deck.Status.PUBLISHED,
+        ).first()
+        if deck is None:
+            return Response(status=404)
+
+        if not isinstance(request.data, dict):
+            raise DRFValidationError({"detail": "Invalid JSON body"})
+
+        mode_last = request.data.get("mode_last")
+        last_card_id = request.data.get("last_card_id")
+        cards_seen_count = request.data.get("cards_seen_count")
+        cards_done_count = request.data.get("cards_done_count")
+
+        update_fields: list[str] = ["last_seen_at"]
+
+        obj, _ = UserDeckProgress.objects.get_or_create(
+            user=request.user,
+            deck=deck,
+        )
+        obj.last_seen_at = timezone.now()
+
+        if isinstance(mode_last, str) and mode_last in UserDeckProgress.ProgressMode.values:
+            obj.mode_last = mode_last
+            update_fields.append("mode_last")
+
+        if last_card_id is not None:
+            try:
+                obj.last_card_id = int(last_card_id)
+                update_fields.append("last_card")
+            except (TypeError, ValueError):
+                raise DRFValidationError({"last_card_id": "last_card_id must be an integer"})
+
+        if cards_seen_count is not None:
+            try:
+                obj.cards_seen_count = max(0, int(cards_seen_count))
+                update_fields.append("cards_seen_count")
+            except (TypeError, ValueError):
+                raise DRFValidationError({"cards_seen_count": "cards_seen_count must be an integer"})
+
+        if cards_done_count is not None:
+            try:
+                obj.cards_done_count = max(0, int(cards_done_count))
+                update_fields.append("cards_done_count")
+            except (TypeError, ValueError):
+                raise DRFValidationError({"cards_done_count": "cards_done_count must be an integer"})
+
+        # Always persist last_seen_at
+        obj.save(update_fields=list(dict.fromkeys(update_fields)))
+
+        return Response(
+            {
+                "deck_id": deck.id,
+                "started_at": obj.started_at,
+                "last_seen_at": obj.last_seen_at,
+                "cards_seen_count": obj.cards_seen_count,
+                "cards_done_count": obj.cards_done_count,
+                "mode_last": obj.mode_last,
+                "last_card_id": obj.last_card_id,
+            }
+        )
+
+
 class DeckCardDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, deck_id: int, card_id: int):
-        deck = Deck.objects.filter(id=deck_id, user=request.user).first()
+        deck = Deck.objects.filter(id=deck_id, user=request.user, type=Deck.DeckType.USER).first()
         if deck is None:
             return Response(status=404)
         DeckCard.objects.filter(deck=deck, microarticle_id=card_id).delete()
@@ -758,7 +1038,7 @@ class CardDecksView(APIView):
 
     def get(self, request, card_id: int):
         _get_or_create_default_deck(request.user)
-        decks = list(Deck.objects.filter(user=request.user).order_by("sort_order", "id"))
+        decks = list(Deck.objects.filter(user=request.user, type=Deck.DeckType.USER).order_by("sort_order", "id"))
         member_deck_ids = set(
             DeckCard.objects.filter(deck__user=request.user, microarticle_id=card_id).values_list(
                 "deck_id", flat=True
@@ -787,7 +1067,7 @@ class CardDecksView(APIView):
             except (TypeError, ValueError):
                 raise DRFValidationError({"deck_ids": "deck_ids must contain integers"})
 
-        allowed_decks = Deck.objects.filter(user=request.user, id__in=normalized)
+        allowed_decks = Deck.objects.filter(user=request.user, type=Deck.DeckType.USER, id__in=normalized)
         allowed_ids = set(allowed_decks.values_list("id", flat=True))
 
         DeckCard.objects.filter(deck__user=request.user, microarticle_id=card_id).exclude(

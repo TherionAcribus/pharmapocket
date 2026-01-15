@@ -11,6 +11,8 @@ from .views import (
     MicroArticleDetailView,
     MicroArticleListView,
     MicroArticleReadStateView,
+    OfficialDeckProgressView,
+    OfficialDeckStartView,
     SavedMicroArticleDetailView,
     SavedMicroArticleListView,
     SourceSearchView,
@@ -23,6 +25,16 @@ urlpatterns = [
     path("microarticles/<str:slug>/", MicroArticleDetailView.as_view(), name="microarticle-detail"),
     path("decks/", DeckListCreateView.as_view(), name="deck-list"),
     path("decks/<int:deck_id>/", DeckDetailView.as_view(), name="deck-detail"),
+    path(
+        "decks/<int:deck_id>/start/",
+        OfficialDeckStartView.as_view(),
+        name="official-deck-start",
+    ),
+    path(
+        "decks/<int:deck_id>/progress/",
+        OfficialDeckProgressView.as_view(),
+        name="official-deck-progress",
+    ),
     path(
         "decks/<int:deck_id>/set-default/",
         DeckSetDefaultView.as_view(),
