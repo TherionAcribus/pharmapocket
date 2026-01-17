@@ -19,6 +19,7 @@ from wagtail.images import get_image_model
 from .models import (
     CategoryMedicament,
     CategoryMaladies,
+    CategoryPharmacologie,
     CategoryTheme,
     Deck,
     DeckCard,
@@ -265,6 +266,8 @@ def _taxonomy_model(taxonomy: str):
         return CategoryMaladies, "categories_maladies"
     if taxonomy == "medicament":
         return CategoryMedicament, "categories_medicament"
+    if taxonomy == "pharmacologie":
+        return CategoryPharmacologie, "categories_pharmacologie"
     return None, None
 
 
@@ -379,6 +382,7 @@ class MicroArticleListView(ListAPIView):
                 "categories_theme",
                 "categories_maladies",
                 "categories_medicament",
+                "categories_pharmacologie",
             )
             .order_by("-first_published_at", "-id")
         )
@@ -439,6 +443,7 @@ class MicroArticleListView(ListAPIView):
                 "categories_theme_payload": _cat_payload(p.categories_theme),
                 "categories_maladies_payload": _cat_payload(p.categories_maladies),
                 "categories_medicament_payload": _cat_payload(p.categories_medicament),
+                "categories_pharmacologie_payload": _cat_payload(p.categories_pharmacologie),
                 "published_at": p.first_published_at,
             }
             for p in page
@@ -462,6 +467,7 @@ class MicroArticleDetailView(RetrieveAPIView):
                 "categories_theme",
                 "categories_maladies",
                 "categories_medicament",
+                "categories_pharmacologie",
                 "microarticle_questions__question",
             )
             .specific()
@@ -522,10 +528,12 @@ class MicroArticleDetailView(RetrieveAPIView):
             "categories_theme": list(page.categories_theme.values_list("name", flat=True)),
             "categories_maladies": list(page.categories_maladies.values_list("name", flat=True)),
             "categories_medicament": list(page.categories_medicament.values_list("name", flat=True)),
+            "categories_pharmacologie": list(page.categories_pharmacologie.values_list("name", flat=True)),
             "tags_payload": _tag_payload(page),
             "categories_theme_payload": _cat_payload(page.categories_theme),
             "categories_maladies_payload": _cat_payload(page.categories_maladies),
             "categories_medicament_payload": _cat_payload(page.categories_medicament),
+            "categories_pharmacologie_payload": _cat_payload(page.categories_pharmacologie),
             "questions": _questions_payload(page),
             "published_at": page.first_published_at,
         }

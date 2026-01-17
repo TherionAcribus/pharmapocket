@@ -25,6 +25,7 @@ class FeedItemSerializer(serializers.Serializer):
     categories_theme = serializers.ListField(child=serializers.DictField())
     categories_maladies = serializers.ListField(child=serializers.DictField())
     categories_medicament = serializers.ListField(child=serializers.DictField())
+    categories_pharmacologie = serializers.ListField(child=serializers.DictField(), required=False)
     published_at = serializers.DateTimeField(allow_null=True)
     progress = ProgressSerializer(required=False, allow_null=True)
 
@@ -44,6 +45,7 @@ class MicroDetailSerializer(serializers.Serializer):
     categories_theme = serializers.ListField(child=serializers.DictField())
     categories_maladies = serializers.ListField(child=serializers.DictField())
     categories_medicament = serializers.ListField(child=serializers.DictField())
+    categories_pharmacologie = serializers.ListField(child=serializers.DictField(), required=False)
     questions = serializers.ListField(child=serializers.DictField())
     published_at = serializers.DateTimeField(allow_null=True)
     progress = ProgressSerializer(required=False, allow_null=True)

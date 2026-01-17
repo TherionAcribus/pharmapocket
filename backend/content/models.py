@@ -351,6 +351,13 @@ class CategoryMedicament(BaseCategory):
         verbose_name = "Catégorie médicament"
 
 
+@register_snippet
+class CategoryPharmacologie(BaseCategory):
+    class Meta:
+        verbose_name_plural = "Catégories pharmacologie"
+        verbose_name = "Catégorie pharmacologie"
+
+
 class MicroArticleIndexPage(Page):
     max_count = 1
 
@@ -601,6 +608,12 @@ class MicroArticlePage(Page):
         related_name="microarticles",
     )
 
+    categories_pharmacologie = ParentalManyToManyField(
+        "content.CategoryPharmacologie",
+        blank=True,
+        related_name="microarticles",
+    )
+
     tags = ClusterTaggableManager(through=MicroArticlePageTag, blank=True)
 
     content_panels = Page.content_panels + [
@@ -628,6 +641,7 @@ class MicroArticlePage(Page):
                 FieldPanel("categories_theme"),
                 FieldPanel("categories_maladies"),
                 FieldPanel("categories_medicament"),
+                FieldPanel("categories_pharmacologie"),
                 FieldPanel("tags"),
             ],
             heading="Catégorisation",
@@ -684,6 +698,12 @@ class MicroArticlePage(Page):
     def api_categories_medicament(self) -> list[dict]:
         return [{"id": c.id, "name": c.name, "slug": c.slug} for c in self.categories_medicament.all()]
 
+    def api_categories_pharmacologie(self) -> list[dict]:
+        return [
+            {"id": c.id, "name": c.name, "slug": c.slug}
+            for c in self.categories_pharmacologie.all()
+        ]
+
     def api_questions(self) -> list[dict]:
         rows = (
             self.microarticle_questions.select_related("question")
@@ -724,6 +744,10 @@ class MicroArticlePage(Page):
         ),
         APIField(
             "api_categories_medicament",
+            serializer=serializers.ListField(child=serializers.DictField()),
+        ),
+        APIField(
+            "api_categories_pharmacologie",
             serializer=serializers.ListField(child=serializers.DictField()),
         ),
         APIField("api_questions", serializer=serializers.ListField(child=serializers.DictField())),

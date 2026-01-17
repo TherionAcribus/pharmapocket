@@ -55,11 +55,14 @@ export default function Home() {
     };
   }, [router]);
 
+  const showContent = !loading && data;
+  const showFallback = !loading && !data;
+
   return (
     <MobileScaffold title="Accueil" contentClassName="space-y-4">
       {loading ? <div className="text-sm text-muted-foreground">Chargement…</div> : null}
 
-      {data ? (
+      {showContent ? (
         <div className="rounded-xl border bg-card p-4">
           <div className="text-xl font-semibold leading-snug">
             {data.hero_title || "PharmaPocket"}
@@ -98,7 +101,9 @@ export default function Home() {
             )}
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {showFallback ? (
         <div className="rounded-xl border bg-card p-4">
           <div className="text-sm font-semibold">Bienvenue</div>
           <div className="mt-1 text-sm text-muted-foreground">
@@ -110,7 +115,7 @@ export default function Home() {
             </Button>
           </div>
         </div>
-      )}
+      ) : null}
 
       {data?.steps?.length ? (
         <div className="rounded-xl border bg-card p-4">

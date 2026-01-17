@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from content.models import CategoryMedicament, CategoryMaladies, CategoryTheme, MicroArticlePage
+from content.models import CategoryMedicament, CategoryMaladies, CategoryPharmacologie, CategoryTheme, MicroArticlePage
 from learning.models import LessonProgress
 
 from .pagination import FeedCursorPagination
@@ -76,6 +76,8 @@ def _taxonomy_model(taxonomy: str):
         return CategoryMaladies, "categories_maladies"
     if taxonomy == "medicament":
         return CategoryMedicament, "categories_medicament"
+    if taxonomy == "pharmacologie":
+        return CategoryPharmacologie, "categories_pharmacologie"
     return None, None
 
 
@@ -139,6 +141,7 @@ class FeedView(ListAPIView):
                 "categories_theme",
                 "categories_maladies",
                 "categories_medicament",
+                "categories_pharmacologie",
             )
             .order_by("-first_published_at", "-id")
         )
@@ -164,6 +167,10 @@ class FeedView(ListAPIView):
         cat_c = self.request.query_params.get("category_medicament")
         if cat_c:
             qs = qs.filter(categories_medicament__slug=cat_c)
+
+        cat_ph = self.request.query_params.get("category_pharmacologie")
+        if cat_ph:
+            qs = qs.filter(categories_pharmacologie__slug=cat_ph)
 
         used_tree_filter = False
 
@@ -203,6 +210,18 @@ class FeedView(ListAPIView):
                 qs, taxonomy="medicament", node_id=subtree_c, scope="subtree"
             )
 
+        exact_ph = _parse_int(self.request.query_params.get("category_pharmacologie_exact"))
+        if exact_ph is not None:
+            qs, used_tree_filter = _apply_tree_filter(
+                qs, taxonomy="pharmacologie", node_id=exact_ph, scope="exact"
+            )
+
+        subtree_ph = _parse_int(self.request.query_params.get("category_pharmacologie_subtree"))
+        if subtree_ph is not None:
+            qs, used_tree_filter = _apply_tree_filter(
+                qs, taxonomy="pharmacologie", node_id=subtree_ph, scope="subtree"
+            )
+
         taxonomy = self.request.query_params.get("taxonomy")
         category = _parse_int(self.request.query_params.get("category"))
         scope = self.request.query_params.get("scope")
@@ -230,6 +249,7 @@ class FeedView(ListAPIView):
                 "categories_theme": _cat_payload(p.categories_theme),
                 "categories_maladies": _cat_payload(p.categories_maladies),
                 "categories_medicament": _cat_payload(p.categories_medicament),
+                "categories_pharmacologie": _cat_payload(p.categories_pharmacologie),
                 "published_at": p.first_published_at,
                 "progress": progress.get(p.id),
             }
@@ -254,6 +274,7 @@ class MicroBySlugView(RetrieveAPIView):
                 "categories_theme",
                 "categories_maladies",
                 "categories_medicament",
+                "categories_pharmacologie",
                 "microarticle_questions__question",
             )
         )
@@ -277,6 +298,7 @@ class MicroBySlugView(RetrieveAPIView):
             "categories_theme": _cat_payload(page.categories_theme),
             "categories_maladies": _cat_payload(page.categories_maladies),
             "categories_medicament": _cat_payload(page.categories_medicament),
+            "categories_pharmacologie": _cat_payload(page.categories_pharmacologie),
             "questions": _questions_payload(page),
             "published_at": page.first_published_at,
             "progress": progress,
