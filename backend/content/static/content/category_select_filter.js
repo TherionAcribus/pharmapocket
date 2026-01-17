@@ -11,6 +11,23 @@
     return name.indexOf("categories_") !== -1;
   }
 
+  function guessAddUrl(selectEl) {
+    var name = selectEl.getAttribute("name") || "";
+    if (name.indexOf("categories_theme") !== -1) {
+      return "/cms/snippets/content/categorytheme/add/";
+    }
+    if (name.indexOf("categories_maladies") !== -1) {
+      return "/cms/snippets/content/categorymaladies/add/";
+    }
+    if (name.indexOf("categories_medicament") !== -1) {
+      return "/cms/snippets/content/categorymedicament/add/";
+    }
+    if (name.indexOf("categories_pharmacologie") !== -1) {
+      return "/cms/snippets/content/categorypharmacologie/add/";
+    }
+    return null;
+  }
+
   function attachFilter(selectEl) {
     if (!shouldFilterSelect(selectEl)) return;
     if (selectEl.dataset.categoryFilterAttached === "1") return;
@@ -26,6 +43,20 @@
     input.style.width = "100%";
 
     wrapper.appendChild(input);
+
+    var addUrl = guessAddUrl(selectEl);
+    if (addUrl) {
+      var addButton = document.createElement("a");
+      addButton.textContent = "Ajouter une catégorie (nouvel onglet)";
+      addButton.href = addUrl;
+      addButton.target = "_blank";
+      addButton.rel = "noopener noreferrer";
+      addButton.style.display = "inline-block";
+      addButton.style.margin = "6px 0 0";
+      addButton.style.fontSize = "12px";
+      addButton.style.textDecoration = "underline";
+      wrapper.appendChild(addButton);
+    }
 
     // Insert above select
     selectEl.parentNode.insertBefore(wrapper, selectEl);
