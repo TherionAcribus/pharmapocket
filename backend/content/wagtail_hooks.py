@@ -10,9 +10,10 @@ from .wagtail_pack_admin import pack_bulk_add
 @hooks.register("insert_editor_js")
 def editor_js():
     return format_html(
-        '<script src="{}"></script><script src="{}"></script>',
+        '<script src="{}"></script><script src="{}"></script><script src="{}"></script>',
         static("content/answer_express_counter.js"),
         static("content/question_admin.js"),
+        static("content/category_select_filter.js"),
     )
 
 

@@ -294,11 +294,16 @@ class Source(index.Indexed, models.Model):
         return " — ".join([p for p in [prefix, self.name] if p])
 
 
-class BaseCategory(MP_Node):
+class BaseCategory(index.Indexed, MP_Node):
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=140, unique=True, blank=True)
 
     node_order_by = ["name"]
+
+    search_fields = [
+        index.SearchField("name"),
+        index.SearchField("slug"),
+    ]
 
     class Meta:
         abstract = True
