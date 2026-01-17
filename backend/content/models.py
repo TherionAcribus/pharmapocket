@@ -20,6 +20,7 @@ from wagtail.images import get_image_model_string
 from wagtail.models import Orderable, Page
 from wagtail.search import index
 from wagtail.snippets.models import register_snippet
+from wagtail.snippets.widgets import AdminSnippetChooser
 
 from .blocks import ImageWithCaptionBlock, LandingCardBlock, LandingStepBlock, Mechanism3StepsBlock, ReferenceBlock
 
@@ -90,7 +91,7 @@ class CustomRendition(AbstractRendition):
 
 
 @register_snippet
-class Question(models.Model):
+class Question(index.Indexed, models.Model):
     class QuestionType(models.TextChoices):
         QCM = "qcm", "QCM"
         TRUE_FALSE = "true_false", "Vrai/Faux"
@@ -126,6 +127,18 @@ class Question(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)], default=3
     )
     references = models.JSONField(blank=True, null=True, editable=False)
+
+    search_fields = [
+        index.SearchField("prompt"),
+        index.SearchField("explanation"),
+        index.AutocompleteField("prompt"),
+        index.AutocompleteField("explanation"),
+    ]
+
+    admin_search_fields = ["prompt", "explanation"]
+
+    class Meta:
+        ordering = ["prompt", "id"]
 
     def _derive_qcm_choices(self) -> list[str]:
         return [
@@ -478,7 +491,7 @@ class MicroArticleQuestion(Orderable):
     )
 
     panels = [
-        FieldPanel("question"),
+        FieldPanel("question", widget=AdminSnippetChooser(Question)),
     ]
 
 
