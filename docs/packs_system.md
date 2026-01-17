@@ -29,12 +29,24 @@ Dernière mise à jour : 2026-01-16
 - JS/CSS admin : `content/pack_admin.js` injecte un bouton « Ajout en masse » qui ouvre `/admin/packs/<id>/bulk-add/`; `pack_admin.css` rend la liste un peu plus compacte.
 - Vue Django `/admin/packs/<id>/bulk-add/` (staff + perm change_pack) pour coller des IDs/slugs/URLs et ajouter en lot.
 
-## 4. Pack Builder (frontend admin, Option B)
-- Pages Next.js (client) réservées staff :
-  - `/admin/packs` : liste + création de pack officiel.
-  - `/admin/packs/[id]` : édition métadonnées, ajout en masse, recherche de cartes, drag & drop + « Sauvegarder l’ordre », retrait de carte, suppression du pack.
-- Protection : `fetchMe().is_staff` côté front ; côté backend, tous les endpoints admin vérifient `is_staff` (403 sinon).
-- Drag & drop : HTML5 simple, puis envoi de l’ordre via API `cards/reorder`.
+## 4. Pack Builder (frontend Next.js)
+- Pages :
+  - `/admin/packs` : liste + création pack officiel
+  - `/admin/packs/[id]` : édition pack (métadonnées, cover, bulk add, reorder, search & add)
+- Permissions : check staff via `/api/v1/auth/me/`
+- UX :
+  - bulk add via textarea (IDs/slug/URL)
+  - recherche cartes (texte + filtres tags/taxonomies) + bouton d’ajout
+  - drag & drop + “Enregistrer l’ordre”
+  - upload cover : input fichier → `POST /admin/images/upload/` → `cover_image_id` mis à jour + aperçu image
+- Data :
+  - `cover_image_id` et `cover_image_url` renvoyés côté backend pour affichage
+
+### Configuration front (URLs médias)
+- Le backend renvoie des URLs **relatives** (`/media/...`). En dev, configure une base pour les médias :
+  - `NEXT_PUBLIC_MEDIA_BASE=http://<host_backend>:8000`
+  - fallback : `NEXT_PUBLIC_API_BASE`
+- Le front résout alors les covers en `MEDIA_BASE + /media/...`. En prod, pointer vers l’URL publique des médias (CDN ou domaine backend).
 
 ## 5. APIs (publices)
 - `/api/v1/content/decks/?type=official` : liste des packs publiés (ordre `sort_order`).
