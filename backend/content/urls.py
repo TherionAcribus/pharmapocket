@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    AdminImageUploadView,
     AdminMicroArticleSearchView,
     AdminPackBulkAddView,
     AdminPackDetailView,
@@ -52,6 +53,11 @@ urlpatterns = [
         "admin/microarticles/search/",
         AdminMicroArticleSearchView.as_view(),
         name="admin-microarticle-search",
+    ),
+    path(
+        "admin/images/upload/",
+        AdminImageUploadView.as_view(),
+        name="admin-image-upload",
     ),
 
     path("decks/", DeckListCreateView.as_view(), name="deck-list"),

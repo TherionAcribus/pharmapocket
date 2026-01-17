@@ -8,6 +8,7 @@ import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  adminUploadImage,
   adminMicroArticleSearch,
   adminPackBulkAdd,
   adminPackRemoveCard,
@@ -15,9 +16,17 @@ import {
   deleteAdminPack,
   fetchAdminPack,
   fetchMe,
+  fetchTags,
+  fetchTaxonomyTree,
   patchAdminPack,
 } from "@/lib/api";
-import type { AdminMicroArticleSearchResult, AdminPackDetail } from "@/lib/types";
+import type {
+  AdminMicroArticleSearchResult,
+  AdminPackDetail,
+  TagPayload,
+  TaxonomyNode,
+  TaxonomyTreeResponse,
+} from "@/lib/types";
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -51,6 +60,9 @@ export default function AdminPackDetailPage() {
   const [status, setStatus] = React.useState("draft");
   const [coverImageId, setCoverImageId] = React.useState<string>("");
 
+  const [coverFile, setCoverFile] = React.useState<File | null>(null);
+  const [coverUploading, setCoverUploading] = React.useState(false);
+
   const [bulkItems, setBulkItems] = React.useState("");
   const [bulkResult, setBulkResult] = React.useState<string | null>(null);
 
@@ -58,7 +70,92 @@ export default function AdminPackDetailPage() {
   const [searchLoading, setSearchLoading] = React.useState(false);
   const [searchResults, setSearchResults] = React.useState<AdminMicroArticleSearchResult[]>([]);
 
+  const [tagQuery, setTagQuery] = React.useState("");
+  const [tagsLoading, setTagsLoading] = React.useState(false);
+  const [tags, setTags] = React.useState<TagPayload[]>([]);
+  const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
+
+  const [themeTree, setThemeTree] = React.useState<TaxonomyTreeResponse | null>(null);
+  const [medicamentTree, setMedicamentTree] = React.useState<TaxonomyTreeResponse | null>(null);
+  const [pharmacologieTree, setPharmacologieTree] = React.useState<TaxonomyTreeResponse | null>(null);
+
+  const [themeNodes, setThemeNodes] = React.useState<number[]>([]);
+  const [medicamentNodes, setMedicamentNodes] = React.useState<number[]>([]);
+  const [pharmacologieNodes, setPharmacologieNodes] = React.useState<number[]>([]);
+
+  const [themeScope, setThemeScope] = React.useState<"exact" | "subtree">("subtree");
+  const [medicamentScope, setMedicamentScope] = React.useState<"exact" | "subtree">("subtree");
+  const [pharmacologieScope, setPharmacologieScope] = React.useState<"exact" | "subtree">("subtree");
+
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+
+  const coverImageSrc = React.useMemo(() => {
+    const raw = pack?.cover_image_url;
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base =
+      process.env.NEXT_PUBLIC_MEDIA_BASE ||
+      process.env.NEXT_PUBLIC_API_BASE ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+    const normalizedBase =
+      base && base.includes(":3000") ? base.replace(":3000", ":8000") : base;
+    try {
+      return new URL(raw, normalizedBase).toString();
+    } catch {
+      return raw;
+    }
+  }, [pack?.cover_image_url]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setTagsLoading(true);
+    fetchTags(tagQuery, 100)
+      .then((rows) => {
+        if (cancelled) return;
+        setTags(rows);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setTagsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tagQuery]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchTaxonomyTree("theme")
+      .then((t) => {
+        if (cancelled) return;
+        setThemeTree(t);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setThemeTree(null);
+      });
+    fetchTaxonomyTree("medicament")
+      .then((t) => {
+        if (cancelled) return;
+        setMedicamentTree(t);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMedicamentTree(null);
+      });
+    fetchTaxonomyTree("pharmacologie")
+      .then((t) => {
+        if (cancelled) return;
+        setPharmacologieTree(t);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPharmacologieTree(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const reload = React.useCallback(async () => {
     if (!Number.isFinite(packId)) return;
@@ -128,6 +225,26 @@ export default function AdminPackDetailPage() {
     }
   };
 
+  const onUploadCover = async () => {
+    if (!coverFile) {
+      setError("Choisis d’abord un fichier image avant de cliquer sur Uploader.");
+      return;
+    }
+    setCoverUploading(true);
+    setError(null);
+    try {
+      const uploaded = await adminUploadImage({ file: coverFile, title: `Pack ${packId} cover` });
+      setCoverImageId(String(uploaded.id));
+      await patchAdminPack(packId, { cover_image_id: uploaded.id });
+      await reload();
+      setCoverFile(null);
+    } catch (e: unknown) {
+      setError(toErrorMessage(e));
+    } finally {
+      setCoverUploading(false);
+    }
+  };
+
   const onBulkAdd = async () => {
     if (!Number.isFinite(packId)) return;
     setSaving(true);
@@ -146,18 +263,82 @@ export default function AdminPackDetailPage() {
   };
 
   const onSearch = async () => {
-    const q = searchQ.trim();
-    if (!q) {
-      setSearchResults([]);
-      return;
-    }
     setSearchLoading(true);
     try {
-      const res = await adminMicroArticleSearch(q);
+      const res = await adminMicroArticleSearch({
+        q: searchQ,
+        tags: selectedTags,
+        theme_nodes: themeNodes,
+        theme_scope: themeScope,
+        medicament_nodes: medicamentNodes,
+        medicament_scope: medicamentScope,
+        pharmacologie_nodes: pharmacologieNodes,
+        pharmacologie_scope: pharmacologieScope,
+      });
       setSearchResults(res);
+      if (!res.length) {
+        // keep quiet; UI already shows "Aucun résultat"
+      }
     } finally {
       setSearchLoading(false);
     }
+  };
+
+  const toggleTag = (slug: string) => {
+    setSelectedTags((prev) => {
+      const set = new Set(prev);
+      if (set.has(slug)) set.delete(slug);
+      else set.add(slug);
+      return Array.from(set);
+    });
+  };
+
+  const toggleNode = (id: number, setState: React.Dispatch<React.SetStateAction<number[]>>) => {
+    setState((prev) => {
+      const set = new Set(prev);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      return Array.from(set);
+    });
+  };
+
+  const TaxonomyMultiTree = ({
+    nodes,
+    selected,
+    onToggle,
+    depth = 0,
+  }: {
+    nodes: TaxonomyNode[];
+    selected: number[];
+    onToggle: (id: number) => void;
+    depth?: number;
+  }) => {
+    return (
+      <div className="space-y-1">
+        {nodes.map((n) => (
+          <div key={n.id} className="space-y-1">
+            <label className="flex items-center gap-2 text-sm" style={{ paddingLeft: `${depth * 12}px` }}>
+              <input
+                type="checkbox"
+                checked={selected.includes(n.id)}
+                onChange={() => onToggle(n.id)}
+              />
+              <span className="truncate">{n.name}</span>
+            </label>
+            {n.children?.length ? (
+              <div className="ml-4 border-l pl-2">
+                <TaxonomyMultiTree
+                  nodes={n.children}
+                  selected={selected}
+                  onToggle={onToggle}
+                  depth={depth + 1}
+                />
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const onAddOne = async (id: number) => {
@@ -295,8 +476,42 @@ export default function AdminPackDetailPage() {
             </div>
           </div>
 
-          {pack?.cover_image_url ? (
-            <div className="text-xs text-muted-foreground">Cover actuelle: {pack.cover_image_url}</div>
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Upload cover</div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+            />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={coverUploading}
+                onClick={() => void onUploadCover()}
+              >
+                {coverUploading ? "Upload…" : "Uploader et associer"}
+              </Button>
+              <div className="text-xs text-muted-foreground self-center truncate">
+                {coverFile ? coverFile.name : "Aucun fichier sélectionné"}
+              </div>
+            </div>
+          </div>
+
+          {coverImageSrc ? (
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Cover actuelle</div>
+              <div className="inline-block rounded-md border bg-background p-2">
+                <img
+                  src={coverImageSrc}
+                  alt="Cover pack"
+                  className="h-32 w-32 object-cover rounded"
+                />
+              </div>
+              <div className="text-[11px] text-muted-foreground truncate max-w-xs">
+                {coverImageSrc}
+              </div>
+            </div>
           ) : null}
         </div>
 
@@ -326,11 +541,114 @@ export default function AdminPackDetailPage() {
 
       <div className="rounded-xl border bg-card p-4 space-y-3">
         <div className="text-sm font-semibold">Recherche + ajout</div>
-        <div className="flex gap-2">
-          <Input value={searchQ} onChange={(e) => setSearchQ(e.target.value)} placeholder="Rechercher une carte…" />
-          <Button type="button" variant="outline" onClick={() => void onSearch()} disabled={searchLoading}>
-            {searchLoading ? "…" : "Rechercher"}
-          </Button>
+
+        <div className="grid gap-2">
+          <div className="flex gap-2">
+            <Input value={searchQ} onChange={(e) => setSearchQ(e.target.value)} placeholder="Texte (optionnel)…" />
+            <Button type="button" variant="outline" onClick={() => void onSearch()} disabled={searchLoading}>
+              {searchLoading ? "…" : "Rechercher"}
+            </Button>
+          </div>
+
+          <div className="rounded-md border bg-background p-3 space-y-3">
+            <div className="text-xs font-semibold text-muted-foreground">Filtres (AND entre blocs)</div>
+
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Tags</div>
+              <Input value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} placeholder="Filtrer tags…" />
+              {tagsLoading ? <div className="text-xs text-muted-foreground">Chargement…</div> : null}
+              <div className="max-h-40 overflow-auto rounded border p-2 space-y-1">
+                {tags.slice(0, 80).map((t) => (
+                  <label key={t.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedTags.includes(t.slug)}
+                      onChange={() => toggleTag(t.slug)}
+                    />
+                    <span className="truncate">{t.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">{t.slug}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Thème</div>
+                  <select
+                    className="rounded border bg-background px-2 py-1 text-xs"
+                    value={themeScope}
+                    onChange={(e) => setThemeScope(e.target.value as "exact" | "subtree")}
+                  >
+                    <option value="subtree">subtree</option>
+                    <option value="exact">exact</option>
+                  </select>
+                </div>
+                <div className="max-h-56 overflow-auto rounded border p-2">
+                  {themeTree?.tree?.length ? (
+                    <TaxonomyMultiTree
+                      nodes={themeTree.tree}
+                      selected={themeNodes}
+                      onToggle={(id) => toggleNode(id, setThemeNodes)}
+                    />
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Aucun arbre.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Médicament</div>
+                  <select
+                    className="rounded border bg-background px-2 py-1 text-xs"
+                    value={medicamentScope}
+                    onChange={(e) => setMedicamentScope(e.target.value as "exact" | "subtree")}
+                  >
+                    <option value="subtree">subtree</option>
+                    <option value="exact">exact</option>
+                  </select>
+                </div>
+                <div className="max-h-56 overflow-auto rounded border p-2">
+                  {medicamentTree?.tree?.length ? (
+                    <TaxonomyMultiTree
+                      nodes={medicamentTree.tree}
+                      selected={medicamentNodes}
+                      onToggle={(id) => toggleNode(id, setMedicamentNodes)}
+                    />
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Aucun arbre.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Pharmacologie</div>
+                  <select
+                    className="rounded border bg-background px-2 py-1 text-xs"
+                    value={pharmacologieScope}
+                    onChange={(e) => setPharmacologieScope(e.target.value as "exact" | "subtree")}
+                  >
+                    <option value="subtree">subtree</option>
+                    <option value="exact">exact</option>
+                  </select>
+                </div>
+                <div className="max-h-56 overflow-auto rounded border p-2">
+                  {pharmacologieTree?.tree?.length ? (
+                    <TaxonomyMultiTree
+                      nodes={pharmacologieTree.tree}
+                      selected={pharmacologieNodes}
+                      onToggle={(id) => toggleNode(id, setPharmacologieNodes)}
+                    />
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Aucun arbre.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {searchResults.length ? (

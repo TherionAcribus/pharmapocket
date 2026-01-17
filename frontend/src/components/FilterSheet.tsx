@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { fetchTags, fetchTaxonomyTree } from "@/lib/api";
 import { TagPayload, TaxonomyNode, TaxonomyTreeResponse } from "@/lib/types";
 
-type Taxonomy = "pharmacologie" | "maladies" | "classes";
+type Taxonomy = "pharmacologie" | "maladies" | "classes" | "theme" | "medicament";
 type Scope = "exact" | "subtree";
 
 function parseTags(sp: URLSearchParams): string[] {
@@ -34,7 +34,7 @@ function parseTags(sp: URLSearchParams): string[] {
 
 function parseTaxonomy(sp: URLSearchParams): Taxonomy | null {
   const t = sp.get("taxonomy");
-  if (t === "pharmacologie" || t === "maladies" || t === "classes") return t;
+  if (t === "pharmacologie" || t === "maladies" || t === "classes" || t === "theme" || t === "medicament") return t;
   return null;
 }
 
@@ -237,7 +237,7 @@ export function FilterSheet({ basePath = "/discover" }: { basePath?: string }) {
           <div className="text-sm font-semibold">Taxonomy</div>
 
           <div className="flex flex-wrap gap-2">
-            {(["pharmacologie", "maladies", "classes"] as Taxonomy[]).map((t) => (
+            {(["theme", "medicament", "pharmacologie", "maladies", "classes"] as Taxonomy[]).map((t) => (
               <Button
                 key={t}
                 variant={taxonomy === t ? "default" : "outline"}

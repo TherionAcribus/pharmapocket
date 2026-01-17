@@ -10,11 +10,13 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from wagtail.documents.models import Document
 from wagtail.images import get_image_model
+from wagtail.models import Collection
 
 from .models import (
     CategoryMedicament,
@@ -1290,22 +1292,128 @@ class AdminMicroArticleSearchView(APIView):
         if denied is not None:
             return denied
 
-        q = request.query_params.get("q")
-        if not isinstance(q, str) or not q.strip():
-            return Response([])
-        s = q.strip()
+        def _parse_csv_ints(value: str | None) -> list[int]:
+            if not value:
+                return []
+            out: list[int] = []
+            for part in value.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                try:
+                    out.append(int(part))
+                except ValueError:
+                    continue
+            return out
 
-        qs = (
-            MicroArticlePage.objects.live()
-            .public()
-            .filter(Q(title__icontains=s) | Q(answer_express__icontains=s) | Q(slug__icontains=s))
-            .order_by("title")
-            .specific()
+        def _parse_csv_strings(value: str | None) -> list[str]:
+            if not value:
+                return []
+            return [p.strip() for p in value.split(",") if p and p.strip()]
+
+        q = request.query_params.get("q")
+        s = q.strip() if isinstance(q, str) else ""
+
+        theme_nodes = _parse_csv_ints(
+            request.query_params.get("theme_nodes") or request.query_params.get("theme_node")
         )
+        theme_scope = request.query_params.get("theme_scope") or "subtree"
+
+        medicament_nodes = _parse_csv_ints(
+            request.query_params.get("medicament_nodes") or request.query_params.get("medicament_node")
+        )
+        medicament_scope = request.query_params.get("medicament_scope") or "subtree"
+
+        pharmacologie_nodes = _parse_csv_ints(
+            request.query_params.get("pharmacologie_nodes") or request.query_params.get("pharmacologie_node")
+        )
+        pharmacologie_scope = request.query_params.get("pharmacologie_scope") or "subtree"
+
+        tags = _parse_csv_strings(request.query_params.get("tags"))
+
+        has_filters = bool(theme_nodes or medicament_nodes or pharmacologie_nodes or tags)
+        if not s and not has_filters:
+            return Response([])
+
+        qs = MicroArticlePage.objects.live().public().all()
+        if s:
+            qs = qs.filter(Q(title__icontains=s) | Q(answer_express__icontains=s) | Q(slug__icontains=s))
+
+        def _apply_taxonomy_filter(qs_in, *, model, rel: str, node_ids: list[int], scope: str):
+            if not node_ids:
+                return qs_in
+            scope = scope if scope in ("exact", "subtree") else "subtree"
+            if scope == "exact":
+                return qs_in.filter(**{f"{rel}__id__in": node_ids})
+
+            nodes = list(model.objects.filter(id__in=node_ids))
+            if not nodes:
+                return qs_in
+            q_or = Q()
+            for n in nodes:
+                q_or |= Q(**{f"{rel}__path__startswith": n.path})
+            return qs_in.filter(q_or)
+
+        qs = _apply_taxonomy_filter(
+            qs,
+            model=CategoryTheme,
+            rel="categories_theme",
+            node_ids=theme_nodes,
+            scope=theme_scope,
+        )
+        qs = _apply_taxonomy_filter(
+            qs,
+            model=CategoryMedicament,
+            rel="categories_medicament",
+            node_ids=medicament_nodes,
+            scope=medicament_scope,
+        )
+        qs = _apply_taxonomy_filter(
+            qs,
+            model=CategoryPharmacologie,
+            rel="categories_pharmacologie",
+            node_ids=pharmacologie_nodes,
+            scope=pharmacologie_scope,
+        )
+        if tags:
+            qs = qs.filter(tags__slug__in=tags)
+
+        qs = qs.order_by("title").distinct().specific()
         rows = []
         for p in qs[:30]:
             rows.append({"id": p.id, "slug": p.slug, "title": p.title})
         return Response(rows)
+
+
+class AdminImageUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        upload = request.FILES.get("file") or request.FILES.get("image")
+        if upload is None:
+            raise DRFValidationError({"file": "file is required"})
+
+        title = request.data.get("title") if hasattr(request, "data") else None
+        if not isinstance(title, str) or not title.strip():
+            title = getattr(upload, "name", "cover")
+
+        ImageModel = get_image_model()
+        try:
+            collection = Collection.get_first_root_node()
+        except Exception:
+            collection = None
+
+        image = ImageModel(title=title.strip(), file=upload)
+        if collection is not None and hasattr(image, "collection_id"):
+            image.collection = collection
+        image.save()
+
+        return Response(_image_payload(image), status=201)
 
 
 def _parse_bulk_tokens(raw: str) -> list[str]:

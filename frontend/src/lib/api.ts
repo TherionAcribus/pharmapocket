@@ -368,7 +368,7 @@ export async function setMicroArticleReadState(
 }
 
 export async function fetchTaxonomyTree(
-  taxonomy: "pharmacologie" | "maladies" | "classes"
+  taxonomy: "pharmacologie" | "maladies" | "classes" | "theme" | "medicament"
 ): Promise<TaxonomyTreeResponse> {
   return apiGet<TaxonomyTreeResponse>(`/api/v1/taxonomies/${taxonomy}/tree/`);
 }
@@ -540,12 +540,69 @@ export async function deleteAdminPack(packId: number): Promise<void> {
   });
 }
 
-export async function adminMicroArticleSearch(q: string): Promise<AdminMicroArticleSearchResult[]> {
-  const value = q.trim();
-  if (!value) return [];
-  return apiGet<AdminMicroArticleSearchResult[]>(
-    `/api/v1/content/admin/microarticles/search/?q=${encodeURIComponent(value)}`
-  );
+export async function adminMicroArticleSearch(input: {
+  q?: string;
+  tags?: string[];
+  theme_nodes?: number[];
+  theme_scope?: "exact" | "subtree";
+  medicament_nodes?: number[];
+  medicament_scope?: "exact" | "subtree";
+  pharmacologie_nodes?: number[];
+  pharmacologie_scope?: "exact" | "subtree";
+}): Promise<AdminMicroArticleSearchResult[]> {
+  const usp = new URLSearchParams();
+  const q = (input.q ?? "").trim();
+  if (q) usp.set("q", q);
+
+  if (input.tags?.length) usp.set("tags", input.tags.join(","));
+
+  if (input.theme_nodes?.length) usp.set("theme_nodes", input.theme_nodes.join(","));
+  if (input.theme_scope) usp.set("theme_scope", input.theme_scope);
+
+  if (input.medicament_nodes?.length) usp.set("medicament_nodes", input.medicament_nodes.join(","));
+  if (input.medicament_scope) usp.set("medicament_scope", input.medicament_scope);
+
+  if (input.pharmacologie_nodes?.length)
+    usp.set("pharmacologie_nodes", input.pharmacologie_nodes.join(","));
+  if (input.pharmacologie_scope) usp.set("pharmacologie_scope", input.pharmacologie_scope);
+
+  const qs = usp.toString();
+  if (!qs) return [];
+  return apiGet<AdminMicroArticleSearchResult[]>(`/api/v1/content/admin/microarticles/search/?${qs}`);
+}
+
+export async function adminUploadImage(input: {
+  file: File;
+  title?: string;
+}): Promise<{ id: number; url: string | null; title: string }> {
+  const fd = new FormData();
+  fd.append("file", input.file);
+  if (input.title) fd.append("title", input.title);
+
+  const res = await apiFetch("/api/v1/content/admin/images/upload/", {
+    method: "POST",
+    body: fd,
+  });
+
+  if (!res.ok) {
+    const contentType = res.headers.get("content-type") ?? "";
+    const raw = await res.text();
+    let parsed: unknown = raw;
+    if (contentType.includes("application/json")) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = raw;
+      }
+    }
+    throw new Error(
+      `API ${res.status} on /api/v1/content/admin/images/upload/ (content-type: ${
+        contentType || "unknown"
+      }): ${JSON.stringify(parsed)}`
+    );
+  }
+
+  return (await res.json()) as { id: number; url: string | null; title: string };
 }
 
 export async function adminPackBulkAdd(
