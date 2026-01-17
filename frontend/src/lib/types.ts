@@ -69,6 +69,35 @@ export type DeckCardsResponse = {
   results: MicroArticleListItem[];
 };
 
+export type OfficialPackProgress = {
+  started_at: string;
+  last_seen_at: string;
+  cards_seen_count: number;
+  cards_done_count: number;
+  progress_pct: number;
+  mode_last: string;
+  last_card_id: number | null;
+};
+
+export type OfficialPackSummary = {
+  id: number;
+  name: string;
+  description: string;
+  cover_image_url: string | null;
+  cover_image_credit?: string | null;
+  cover_image?: ImagePayload | null;
+  difficulty: string;
+  estimated_minutes: number | null;
+  status: string;
+  type: string;
+  cards_count: number;
+  progress?: OfficialPackProgress | null;
+};
+
+export type OfficialPackDetail = OfficialPackSummary & {
+  cards: MicroArticleListItem[];
+};
+
 export type AdminMicroArticleSearchResult = {
   id: number;
   slug: string;

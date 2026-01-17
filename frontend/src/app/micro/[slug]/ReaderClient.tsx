@@ -42,6 +42,7 @@ import type { DeckMembership, MicroArticleDetail, StreamBlock } from "@/lib/type
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
 const SLIDE_TRANSITION_STORAGE_KEY = "pp_reader_slide_transition";
 const SLIDE_TRANSITION_PENDING_DIR_SESSION_KEY = "pp_reader_slide_dir";
+const RETURN_TO_STORAGE_KEY = "pp_reader:returnTo";
 
 type DeckState = {
   slugs: string[];
@@ -120,6 +121,18 @@ function readSlideTransitionPreferenceFromStorage() {
   }
 }
 
+function readReturnToFromSession(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(RETURN_TO_STORAGE_KEY);
+    if (!raw) return null;
+    if (!raw.startsWith("/")) return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
 function RichText({ html, className }: { html?: string; className?: string }) {
   if (!html) return null;
   return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
@@ -170,6 +183,8 @@ export default function ReaderClient({
   data: MicroArticleDetail;
 }) {
   const router = useRouter();
+
+  const returnTo = React.useMemo(() => readReturnToFromSession(), []);
 
   const [openDetails, setOpenDetails] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
@@ -822,8 +837,24 @@ export default function ReaderClient({
     <div className="min-h-dvh bg-background" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-12 w-full max-w-3xl items-center gap-1 px-2">
-          <Button asChild variant="ghost" size="icon" aria-label="Retour">
-            <Link href="/discover">←</Link>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Retour"
+            onClick={() => {
+              if (returnTo) {
+                router.push(returnTo);
+                return;
+              }
+              try {
+                router.back();
+              } catch {
+                router.push("/discover");
+              }
+            }}
+          >
+            ←
           </Button>
 
           <div className="flex-1" />

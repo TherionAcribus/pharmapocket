@@ -11,6 +11,9 @@ import {
   LessonProgressUpdate,
   MicroArticleDetail,
   MicroArticleListItem,
+  OfficialPackDetail,
+  OfficialPackProgress,
+  OfficialPackSummary,
   SrsNextResponse,
   SrsRating,
   SrsScope,
@@ -227,6 +230,42 @@ export async function fetchSavedMicroArticles(): Promise<MicroArticleListItem[]>
 
 export async function fetchDecks(): Promise<DeckSummary[]> {
   return apiGet<DeckSummary[]>(`/api/v1/content/decks/`);
+}
+
+export async function fetchOfficialPacks(): Promise<OfficialPackSummary[]> {
+  return apiGet<OfficialPackSummary[]>(`/api/v1/content/decks/?type=official`);
+}
+
+export async function fetchOfficialPackDetail(deckId: number): Promise<OfficialPackDetail> {
+  return apiGet<OfficialPackDetail>(`/api/v1/content/decks/${encodeURIComponent(String(deckId))}/`);
+}
+
+export async function startOfficialPack(deckId: number): Promise<OfficialPackProgress> {
+  return apiJson<OfficialPackProgress>(
+    `/api/v1/content/decks/${encodeURIComponent(String(deckId))}/start/`,
+    { method: "POST" }
+  );
+}
+
+export async function updateOfficialPackProgress(
+  deckId: number,
+  input: Partial<{
+    mode_last: string;
+    last_card_id: number | null;
+    cards_seen_count: number;
+    cards_done_count: number;
+  }>
+): Promise<OfficialPackProgress> {
+  return apiJson<OfficialPackProgress>(
+    `/api/v1/content/decks/${encodeURIComponent(String(deckId))}/progress/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    }
+  );
 }
 
 export async function createDeck(name: string): Promise<{ id: number; name: string; is_default: boolean; sort_order: number }> {

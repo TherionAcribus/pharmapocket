@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MicroArticleListItem } from "@/lib/types";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
+const RETURN_TO_STORAGE_KEY = "pp_reader:returnTo";
 
 export function MicroCard({
   item,
@@ -33,6 +34,10 @@ export function MicroCard({
     if (!deckSlugs?.length) return;
     const index = typeof deckIndex === "number" ? deckIndex : deckSlugs.indexOf(item.slug);
     try {
+      window.sessionStorage.setItem(
+        RETURN_TO_STORAGE_KEY,
+        `${window.location.pathname}${window.location.search || ""}`
+      );
       window.sessionStorage.setItem(
         DECK_STORAGE_KEY,
         JSON.stringify({ slugs: deckSlugs, index, savedAt: Date.now() })
