@@ -270,7 +270,7 @@ export default function CardsPage() {
                   variant={selectedDeckId === d.id ? "default" : "outline"}
                   onClick={() => setSelectedDeckId(d.id)}
                 >
-                  {d.name} ({d.cards_count})
+                  {d.name}{d.source_pack_id ? " (Pack)" : ""} ({d.cards_count})
                 </Button>
               ))}
             </div>

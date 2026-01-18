@@ -853,6 +853,13 @@ class Deck(ClusterableModel):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PUBLISHED)
     is_default = models.BooleanField(default=False)
     sort_order = models.IntegerField(default=0)
+    source_pack = models.ForeignKey(
+        "content.Deck",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="copied_user_decks",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -879,6 +886,7 @@ class Deck(ClusterableModel):
             [
                 FieldPanel("is_default"),
                 FieldPanel("sort_order"),
+                FieldPanel("source_pack"),
             ],
             heading="Affichage",
         ),
@@ -914,11 +922,17 @@ class Deck(ClusterableModel):
                 raise ValidationError({"user": "Official decks must not have an owner."})
             if self.is_default:
                 raise ValidationError({"is_default": "Official decks cannot be default."})
+            if self.source_pack_id is not None:
+                raise ValidationError({"source_pack": "Official decks cannot have a source pack."})
             return
 
         if self.type == self.DeckType.USER:
             if self.user_id is None:
                 raise ValidationError({"user": "User decks must have an owner."})
+            if self.source_pack_id is not None:
+                src = Deck.objects.filter(id=self.source_pack_id).only("id", "type").first()
+                if src is None or src.type != Deck.DeckType.OFFICIAL:
+                    raise ValidationError({"source_pack": "source_pack must reference an official deck."})
             return
 
     def __str__(self) -> str:

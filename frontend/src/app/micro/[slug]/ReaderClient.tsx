@@ -33,6 +33,7 @@ import {
   saveMicroArticle,
   setMicroArticleReadState,
   unsaveMicroArticle,
+  updateOfficialPackProgress,
   updateCardDecks,
 } from "@/lib/api";
 import { addLessonTime, markLessonSeen, setLessonCompletion } from "@/lib/progressStore";
@@ -48,6 +49,7 @@ type DeckState = {
   slugs: string[];
   index: number;
   savedAt: number;
+  deckId?: number;
 };
 
 const LONG_PREVIEW_MAX_HEIGHT = 120;
@@ -70,10 +72,12 @@ function readDeckFromSession(): DeckState | null {
     const parsed = JSON.parse(raw) as Partial<DeckState>;
     if (!Array.isArray(parsed.slugs)) return null;
     const index = typeof parsed.index === "number" ? parsed.index : 0;
+    const deckId = typeof (parsed as { deckId?: unknown }).deckId === "number" ? parsed.deckId : undefined;
     return {
       slugs: parsed.slugs.filter((s) => typeof s === "string"),
       index,
       savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : Date.now(),
+      deckId,
     };
   } catch {
     return null;
@@ -453,6 +457,17 @@ export default function ReaderClient({
       setDeck(d);
     }
   }, [data.slug]);
+
+  React.useEffect(() => {
+    if (!isLoggedIn) return;
+    if (!deck?.deckId) return;
+    void updateOfficialPackProgress(deck.deckId, {
+      mode_last: "ordered",
+      last_card_id: data.id,
+    }).catch(() => {
+      // ignore
+    });
+  }, [data.id, deck?.deckId, isLoggedIn]);
 
   const positionText = React.useMemo(() => {
     if (!deck?.slugs?.length) return null;

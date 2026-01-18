@@ -630,6 +630,7 @@ class DeckListSerializer(serializers.Serializer):
     is_default = serializers.BooleanField()
     sort_order = serializers.IntegerField()
     cards_count = serializers.IntegerField()
+    source_pack_id = serializers.IntegerField(allow_null=True)
 
 
 class DeckListCreateView(APIView):
@@ -709,6 +710,7 @@ class DeckListCreateView(APIView):
                 "is_default": bool(d.is_default),
                 "sort_order": int(d.sort_order),
                 "cards_count": int(getattr(d, "cards_count", 0) or 0),
+                "source_pack_id": d.source_pack_id,
             }
             for d in qs
         ]
@@ -760,7 +762,7 @@ class DeckDetailView(APIView):
                 return Response(status=404)
 
         cards_qs = DeckCard.objects.filter(deck=deck).select_related("microarticle", "microarticle__cover_image")
-        if deck.type == Deck.DeckType.OFFICIAL:
+        if deck.type == Deck.DeckType.OFFICIAL or getattr(deck, "source_pack_id", None):
             cards_qs = cards_qs.order_by("sort_order", "id")
         else:
             cards_qs = cards_qs.order_by("-added_at")
@@ -787,6 +789,7 @@ class DeckDetailView(APIView):
             "estimated_minutes": deck.estimated_minutes,
             "status": deck.status,
             "type": deck.type,
+            "source_pack_id": getattr(deck, "source_pack_id", None),
             "cards_count": len(cards),
             "cards": cards,
         }
@@ -882,7 +885,7 @@ class DeckCardsView(APIView):
             DeckCard.objects.filter(deck=deck)
             .select_related("microarticle", "microarticle__cover_image")
         )
-        if deck.type == Deck.DeckType.OFFICIAL:
+        if deck.type == Deck.DeckType.OFFICIAL or getattr(deck, "source_pack_id", None):
             qs = qs.order_by("sort_order", "id")
         else:
             qs = qs.order_by("-added_at")
@@ -933,8 +936,116 @@ class DeckCardsView(APIView):
         except (TypeError, ValueError):
             raise DRFValidationError({"card_id": "card_id must be an integer"})
 
-        DeckCard.objects.get_or_create(deck=deck, microarticle_id=microarticle_id)
+        obj, created = DeckCard.objects.get_or_create(deck=deck, microarticle_id=microarticle_id)
+        if created and getattr(deck, "source_pack_id", None):
+            max_sort = (
+                DeckCard.objects.filter(deck_id=deck.id)
+                .exclude(id=obj.id)
+                .aggregate(models.Max("sort_order"))
+                .get("sort_order__max")
+            )
+            obj.sort_order = int(max_sort) + 1 if max_sort is not None else 0
+            obj.save(update_fields=["sort_order"])
         return Response({"ok": True})
+
+
+class DeckCardsBulkAddView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, deck_id: int):
+        deck = Deck.objects.filter(
+            id=deck_id,
+            user=request.user,
+            type=Deck.DeckType.USER,
+        ).first()
+        if deck is None:
+            return Response(status=404)
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        ids = payload.get("card_ids") or payload.get("microarticle_ids")
+        if not isinstance(ids, list):
+            raise DRFValidationError({"card_ids": "card_ids must be a list"})
+        try:
+            micro_ids = [int(x) for x in ids]
+        except (TypeError, ValueError):
+            raise DRFValidationError({"card_ids": "card_ids must be a list of integers"})
+        micro_ids = [mid for mid in micro_ids if mid > 0]
+        if not micro_ids:
+            return Response({"added": 0, "already_present": 0})
+
+        existing = set(
+            DeckCard.objects.filter(deck_id=deck.id, microarticle_id__in=micro_ids).values_list(
+                "microarticle_id", flat=True
+            )
+        )
+
+        to_add = [mid for mid in micro_ids if mid not in existing]
+        if not to_add:
+            return Response({"added": 0, "already_present": len(existing)})
+
+        max_sort = (
+            DeckCard.objects.filter(deck_id=deck.id)
+            .aggregate(models.Max("sort_order"))
+            .get("sort_order__max")
+        )
+        next_sort = int(max_sort) + 1 if max_sort is not None else 0
+
+        objs = []
+        for mid in to_add:
+            obj = DeckCard(deck=deck, microarticle_id=mid)
+            if getattr(deck, "source_pack_id", None):
+                obj.sort_order = next_sort
+                next_sort += 1
+            objs.append(obj)
+
+        DeckCard.objects.bulk_create(objs)
+        return Response({"added": len(objs), "already_present": len(existing)})
+
+
+class OfficialDeckCopyToUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, deck_id: int):
+        pack = Deck.objects.filter(
+            id=deck_id,
+            type=Deck.DeckType.OFFICIAL,
+            status=Deck.Status.PUBLISHED,
+        ).first()
+        if pack is None:
+            return Response(status=404)
+
+        _get_or_create_default_deck(request.user)
+        sort_order = (
+            Deck.objects.filter(user=request.user, type=Deck.DeckType.USER)
+            .aggregate(models.Max("sort_order"))
+            .get("sort_order__max")
+            or 0
+        )
+
+        desired = pack.name.strip() if isinstance(pack.name, str) else "Pack"
+        base_name = desired or "Pack"
+        name = base_name
+        idx = 2
+        while Deck.objects.filter(user=request.user, type=Deck.DeckType.USER, name=name).exists():
+            name = f"{base_name} ({idx})"
+            idx += 1
+
+        deck = Deck.objects.create(
+            user=request.user,
+            type=Deck.DeckType.USER,
+            name=name,
+            sort_order=int(sort_order) + 1,
+            source_pack=pack,
+        )
+
+        cards_qs = DeckCard.objects.filter(deck=pack).order_by("sort_order", "id")
+        objs = []
+        for i, c in enumerate(cards_qs):
+            objs.append(DeckCard(deck=deck, microarticle_id=c.microarticle_id, sort_order=i))
+        if objs:
+            DeckCard.objects.bulk_create(objs)
+
+        return Response({"deck_id": deck.id})
 
 
 class OfficialDeckStartView(APIView):

@@ -55,6 +55,7 @@ export type DeckSummary = {
   is_default: boolean;
   sort_order: number;
   cards_count: number;
+  source_pack_id?: number | null;
 };
 
 export type DeckMembership = {

@@ -14,6 +14,7 @@ export function MicroCard({
   item,
   deckSlugs,
   deckIndex,
+  deckId,
   isRead,
   selectMode,
   selected,
@@ -22,6 +23,7 @@ export function MicroCard({
   item: MicroArticleListItem;
   deckSlugs?: string[];
   deckIndex?: number;
+  deckId?: number;
   isRead?: boolean;
   selectMode?: boolean;
   selected?: boolean;
@@ -40,7 +42,7 @@ export function MicroCard({
       );
       window.sessionStorage.setItem(
         DECK_STORAGE_KEY,
-        JSON.stringify({ slugs: deckSlugs, index, savedAt: Date.now() })
+        JSON.stringify({ slugs: deckSlugs, index, savedAt: Date.now(), deckId })
       );
     } catch {
       // ignore

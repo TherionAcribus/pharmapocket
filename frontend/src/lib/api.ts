@@ -339,6 +339,29 @@ export async function removeCardFromDeck(deckId: number, cardId: number): Promis
   );
 }
 
+export async function bulkAddCardsToDeck(
+  deckId: number,
+  cardIds: number[]
+): Promise<{ added: number; already_present: number }> {
+  return apiJson<{ added: number; already_present: number }>(
+    `/api/v1/content/decks/${encodeURIComponent(String(deckId))}/cards/bulk-add/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ card_ids: cardIds }),
+    }
+  );
+}
+
+export async function copyOfficialPackToUserDeck(packId: number): Promise<{ deck_id: number }> {
+  return apiJson<{ deck_id: number }>(
+    `/api/v1/content/decks/${encodeURIComponent(String(packId))}/copy-to-user/`,
+    { method: "POST" }
+  );
+}
+
 export async function fetchCardDecks(cardId: number): Promise<DeckMembership[]> {
   return apiGet<DeckMembership[]>(
     `/api/v1/content/cards/${encodeURIComponent(String(cardId))}/decks/`
