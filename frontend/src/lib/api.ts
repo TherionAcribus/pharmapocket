@@ -514,6 +514,8 @@ export type CurrentUser = {
   id: number;
   email: string;
   username: string;
+  pseudo?: string;
+  has_usable_password?: boolean;
   is_staff: boolean;
   is_superuser: boolean;
   landing_redirect_enabled?: boolean;
@@ -522,6 +524,37 @@ export type CurrentUser = {
 
 export async function fetchMe(): Promise<CurrentUser> {
   return apiGet<CurrentUser>("/api/v1/auth/me/");
+}
+
+export type AccountSummary = {
+  email: string;
+  username: string;
+  pseudo: string;
+  has_usable_password: boolean;
+};
+
+export async function fetchAccount(): Promise<AccountSummary> {
+  return apiGet<AccountSummary>("/api/v1/auth/account/");
+}
+
+export async function patchAccount(input: Partial<{ pseudo: string }>): Promise<AccountSummary> {
+  return apiJson<AccountSummary>("/api/v1/auth/account/", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteAccount(input?: { password?: string }): Promise<void> {
+  await apiJson("/api/v1/auth/account/delete/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: input?.password ?? "" }),
+  });
 }
 
 export type LandingRedirectTarget = "start" | "discover" | "cards" | "review" | "quiz";
@@ -754,6 +787,35 @@ export async function authVerifyEmail(key: string): Promise<unknown> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ key }),
+  });
+}
+
+export async function accountChangeEmail(email: string): Promise<unknown> {
+  return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/account/email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email: email.trim() }),
+  });
+}
+
+export async function accountChangePassword(input: {
+  new_password: string;
+  current_password?: string;
+}): Promise<unknown> {
+  const payload: { new_password: string; current_password?: string } = {
+    new_password: input.new_password,
+  };
+  const current = (input.current_password ?? "").trim();
+  if (current) payload.current_password = current;
+
+  return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/account/password/change`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
   });
 }
 

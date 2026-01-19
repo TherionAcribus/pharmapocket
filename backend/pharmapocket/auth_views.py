@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -28,12 +29,80 @@ class MeView(APIView):
                 "id": user.id,
                 "email": user.email,
                 "username": user.get_username(),
+                "pseudo": getattr(user, "pseudo", "") or "",
+                "has_usable_password": bool(user.has_usable_password()),
                 "is_staff": user.is_staff,
                 "is_superuser": user.is_superuser,
                 "landing_redirect_enabled": bool(getattr(user, "landing_redirect_enabled", False)),
                 "landing_redirect_target": getattr(user, "landing_redirect_target", "start"),
             }
         )
+
+
+class AccountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response(
+            {
+                "email": user.email,
+                "username": user.get_username(),
+                "pseudo": getattr(user, "pseudo", "") or "",
+                "has_usable_password": bool(user.has_usable_password()),
+            }
+        )
+
+    def patch(self, request):
+        user = request.user
+        payload = request.data if isinstance(request.data, dict) else {}
+
+        if "pseudo" not in payload:
+            return Response({"detail": "No fields to update"}, status=400)
+
+        pseudo = payload.get("pseudo")
+        if pseudo is None:
+            pseudo = ""
+        if not isinstance(pseudo, str):
+            return Response({"pseudo": "Must be a string"}, status=400)
+        pseudo = pseudo.strip()
+        if len(pseudo) > 60:
+            return Response({"pseudo": "Max 60 characters"}, status=400)
+
+        user.pseudo = pseudo
+        user.save(update_fields=["pseudo"])
+
+        return Response(
+            {
+                "email": user.email,
+                "username": user.get_username(),
+                "pseudo": getattr(user, "pseudo", "") or "",
+                "has_usable_password": bool(user.has_usable_password()),
+            }
+        )
+
+
+class DeleteAccountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        payload = request.data if isinstance(request.data, dict) else {}
+
+        password = payload.get("password")
+        if password is None:
+            password = ""
+        if not isinstance(password, str):
+            return Response({"password": "Must be a string"}, status=400)
+
+        if user.has_usable_password():
+            if not user.check_password(password):
+                return Response({"password": "Incorrect password"}, status=400)
+
+        with transaction.atomic():
+            user.delete()
+
+        return Response(status=204)
 
 
 class PreferencesView(APIView):

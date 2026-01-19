@@ -16,3 +16,5 @@ class User(AbstractUser):
         choices=HomeRedirectTarget.choices,
         default=HomeRedirectTarget.START,
     )
+
+    pseudo = models.CharField(max_length=60, blank=True, default="")
