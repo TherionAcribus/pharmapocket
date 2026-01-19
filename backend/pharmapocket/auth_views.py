@@ -91,6 +91,18 @@ class AccountView(APIView):
         if len(pseudo) > 60:
             return Response({"pseudo": "Max 60 characters"}, status=400)
 
+        if "@" in pseudo:
+            return Response({"pseudo": "Must not contain '@'"}, status=400)
+
+        if pseudo:
+            user_model = get_user_model()
+            if (
+                user_model.objects.filter(pseudo__iexact=pseudo)
+                .exclude(id=user.id)
+                .exists()
+            ):
+                return Response({"pseudo": "Already taken"}, status=400)
+
         user.pseudo = pseudo
         user.save(update_fields=["pseudo"])
 

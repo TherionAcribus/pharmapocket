@@ -138,14 +138,19 @@ REST_FRAMEWORK = {
 AUTH_USER_MODEL = "users.User"
 
 AUTHENTICATION_BACKENDS = (
+    "users.auth_backends.PseudoAuthenticationBackend",
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 )
 
-ACCOUNT_LOGIN_METHODS = {"email"}
-ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_LOGIN_METHODS = ["email", "username"]
+ACCOUNT_AUTHENTICATION_METHOD = "username_email"
+ACCOUNT_USERNAME_REQUIRED = True
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_CHANGE_EMAIL = True
+
+ACCOUNT_ADAPTER = "users.adapters.AccountAdapter"
 
 HEADLESS_FRONTEND_URLS = {
     "account_confirm_email": os.environ.get(

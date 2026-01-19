@@ -63,7 +63,7 @@ function landingTargetToPath(target: string | null | undefined): string {
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = React.useState("");
+  const [identifier, setIdentifier] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -92,7 +92,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await ensureCsrf();
-      await authLogin({ email: email.trim(), password });
+      await authLogin({ identifier, password });
       const me = await fetchMe();
       const shouldRedirect = Boolean(me.landing_redirect_enabled);
       const target = shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover";
@@ -128,12 +128,12 @@ export default function LoginPage() {
         <div className="rounded-xl border bg-card p-4">
           <form onSubmit={onSubmit} className="space-y-3">
             <div className="space-y-1">
-              <div className="text-sm font-medium">Email</div>
+              <div className="text-sm font-medium">Email ou pseudo</div>
               <Input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                type="email"
-                autoComplete="email"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                type="text"
+                autoComplete="username"
                 required
               />
             </div>

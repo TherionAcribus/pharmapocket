@@ -749,20 +749,28 @@ export async function adminPackRemoveCard(packId: number, cardId: number): Promi
 const ALLAUTH_CLIENT = "browser";
 
 export async function authLogin(input: {
-  email: string;
+  identifier: string;
   password: string;
 }): Promise<unknown> {
+  const identifier = (input.identifier ?? "").trim();
+  const looksLikeEmail = identifier.includes("@");
+
   return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email: input.email, password: input.password }),
+    body: JSON.stringify(
+      looksLikeEmail
+        ? { email: identifier, password: input.password }
+        : { username: identifier, password: input.password }
+    ),
   });
 }
 
 export async function authSignup(input: {
   email: string;
+  username: string;
   password: string;
 }): Promise<unknown> {
   return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/signup`, {
@@ -770,7 +778,7 @@ export async function authSignup(input: {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email: input.email, password: input.password }),
+    body: JSON.stringify({ email: input.email, username: input.username, password: input.password }),
   });
 }
 

@@ -56,6 +56,7 @@ export default function SignupPage() {
   const router = useRouter();
 
   const [email, setEmail] = React.useState("");
+  const [pseudo, setPseudo] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -66,7 +67,7 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
     try {
-      await authSignup({ email: email.trim(), password });
+      await authSignup({ email: email.trim(), username: pseudo.trim(), password });
       setDone(true);
     } catch (err: unknown) {
       setError(toErrorMessage(err));
@@ -115,6 +116,17 @@ export default function SignupPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   type="email"
                   autoComplete="email"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-sm font-medium">Pseudo</div>
+                <Input
+                  value={pseudo}
+                  onChange={(e) => setPseudo(e.target.value)}
+                  type="text"
+                  autoComplete="username"
                   required
                 />
               </div>
