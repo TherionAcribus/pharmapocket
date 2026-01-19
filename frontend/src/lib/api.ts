@@ -665,9 +665,12 @@ export async function deleteAdminPack(packId: number): Promise<void> {
 
 export async function adminMicroArticleSearch(input: {
   q?: string;
+  recent?: boolean;
   tags?: string[];
   theme_nodes?: number[];
   theme_scope?: "exact" | "subtree";
+  maladies_nodes?: number[];
+  maladies_scope?: "exact" | "subtree";
   medicament_nodes?: number[];
   medicament_scope?: "exact" | "subtree";
   pharmacologie_nodes?: number[];
@@ -677,10 +680,15 @@ export async function adminMicroArticleSearch(input: {
   const q = (input.q ?? "").trim();
   if (q) usp.set("q", q);
 
+  if (input.recent) usp.set("recent", "1");
+
   if (input.tags?.length) usp.set("tags", input.tags.join(","));
 
   if (input.theme_nodes?.length) usp.set("theme_nodes", input.theme_nodes.join(","));
   if (input.theme_scope) usp.set("theme_scope", input.theme_scope);
+
+  if (input.maladies_nodes?.length) usp.set("maladies_nodes", input.maladies_nodes.join(","));
+  if (input.maladies_scope) usp.set("maladies_scope", input.maladies_scope);
 
   if (input.medicament_nodes?.length) usp.set("medicament_nodes", input.medicament_nodes.join(","));
   if (input.medicament_scope) usp.set("medicament_scope", input.medicament_scope);

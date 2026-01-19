@@ -1425,6 +1425,9 @@ class AdminMicroArticleSearchView(APIView):
         q = request.query_params.get("q")
         s = q.strip() if isinstance(q, str) else ""
 
+        recent_raw = request.query_params.get("recent")
+        recent = str(recent_raw).strip().lower() in ("1", "true", "yes")
+
         theme_nodes = _parse_csv_ints(
             request.query_params.get("theme_nodes") or request.query_params.get("theme_node")
         )
@@ -1435,6 +1438,11 @@ class AdminMicroArticleSearchView(APIView):
         )
         medicament_scope = request.query_params.get("medicament_scope") or "subtree"
 
+        maladies_nodes = _parse_csv_ints(
+            request.query_params.get("maladies_nodes") or request.query_params.get("maladies_node")
+        )
+        maladies_scope = request.query_params.get("maladies_scope") or "subtree"
+
         pharmacologie_nodes = _parse_csv_ints(
             request.query_params.get("pharmacologie_nodes") or request.query_params.get("pharmacologie_node")
         )
@@ -1442,7 +1450,7 @@ class AdminMicroArticleSearchView(APIView):
 
         tags = _parse_csv_strings(request.query_params.get("tags"))
 
-        has_filters = bool(theme_nodes or medicament_nodes or pharmacologie_nodes or tags)
+        has_filters = bool(theme_nodes or medicament_nodes or pharmacologie_nodes or maladies_nodes or tags or recent)
         if not s and not has_filters:
             return Response([])
 
@@ -1474,6 +1482,13 @@ class AdminMicroArticleSearchView(APIView):
         )
         qs = _apply_taxonomy_filter(
             qs,
+            model=CategoryMaladies,
+            rel="categories_maladies",
+            node_ids=maladies_nodes,
+            scope=maladies_scope,
+        )
+        qs = _apply_taxonomy_filter(
+            qs,
             model=CategoryMedicament,
             rel="categories_medicament",
             node_ids=medicament_nodes,
@@ -1489,10 +1504,38 @@ class AdminMicroArticleSearchView(APIView):
         if tags:
             qs = qs.filter(tags__slug__in=tags)
 
-        qs = qs.order_by("title").distinct().specific()
+        if recent:
+            qs = qs.order_by("-first_published_at", "-id")
+        else:
+            qs = qs.order_by("title")
+
+        qs = qs.distinct().specific()
+
+        results = list(qs[:30])
+        ids = [p.id for p in results]
+
+        packs_count_by_id: dict[int, int] = {}
+        if ids:
+            packs_count_by_id = {
+                row["microarticle_id"]: int(row["packs_count"])
+                for row in DeckCard.objects.filter(
+                    deck__type=Deck.DeckType.OFFICIAL,
+                    microarticle_id__in=ids,
+                )
+                .values("microarticle_id")
+                .annotate(packs_count=models.Count("deck_id", distinct=True))
+            }
+
         rows = []
-        for p in qs[:30]:
-            rows.append({"id": p.id, "slug": p.slug, "title": p.title})
+        for p in results:
+            rows.append(
+                {
+                    "id": p.id,
+                    "slug": p.slug,
+                    "title": p.title,
+                    "packs_count": int(packs_count_by_id.get(p.id, 0)),
+                }
+            )
         return Response(rows)
 
 

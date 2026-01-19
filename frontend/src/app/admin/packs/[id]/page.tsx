@@ -67,8 +67,10 @@ export default function AdminPackDetailPage() {
   const [bulkResult, setBulkResult] = React.useState<string | null>(null);
 
   const [searchQ, setSearchQ] = React.useState("");
+  const [searchRecent, setSearchRecent] = React.useState(false);
   const [searchLoading, setSearchLoading] = React.useState(false);
   const [searchResults, setSearchResults] = React.useState<AdminMicroArticleSearchResult[]>([]);
+  const [optimisticAddedIds, setOptimisticAddedIds] = React.useState<number[]>([]);
 
   const [tagQuery, setTagQuery] = React.useState("");
   const [tagsLoading, setTagsLoading] = React.useState(false);
@@ -77,14 +79,17 @@ export default function AdminPackDetailPage() {
 
   const [themeTree, setThemeTree] = React.useState<TaxonomyTreeResponse | null>(null);
   const [medicamentTree, setMedicamentTree] = React.useState<TaxonomyTreeResponse | null>(null);
+  const [maladiesTree, setMaladiesTree] = React.useState<TaxonomyTreeResponse | null>(null);
   const [pharmacologieTree, setPharmacologieTree] = React.useState<TaxonomyTreeResponse | null>(null);
 
   const [themeNodes, setThemeNodes] = React.useState<number[]>([]);
   const [medicamentNodes, setMedicamentNodes] = React.useState<number[]>([]);
+  const [maladiesNodes, setMaladiesNodes] = React.useState<number[]>([]);
   const [pharmacologieNodes, setPharmacologieNodes] = React.useState<number[]>([]);
 
   const [themeScope, setThemeScope] = React.useState<"exact" | "subtree">("subtree");
   const [medicamentScope, setMedicamentScope] = React.useState<"exact" | "subtree">("subtree");
+  const [maladiesScope, setMaladiesScope] = React.useState<"exact" | "subtree">("subtree");
   const [pharmacologieScope, setPharmacologieScope] = React.useState<"exact" | "subtree">("subtree");
 
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
@@ -143,6 +148,15 @@ export default function AdminPackDetailPage() {
         if (cancelled) return;
         setMedicamentTree(null);
       });
+    fetchTaxonomyTree("maladies")
+      .then((t) => {
+        if (cancelled) return;
+        setMaladiesTree(t);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMaladiesTree(null);
+      });
     fetchTaxonomyTree("pharmacologie")
       .then((t) => {
         if (cancelled) return;
@@ -164,6 +178,7 @@ export default function AdminPackDetailPage() {
     try {
       const p = await fetchAdminPack(packId);
       setPack(p);
+      setOptimisticAddedIds([]);
       setName(p.name);
       setDescription(p.description || "");
       setDifficulty(p.difficulty || "");
@@ -267,9 +282,12 @@ export default function AdminPackDetailPage() {
     try {
       const res = await adminMicroArticleSearch({
         q: searchQ,
+        recent: searchRecent,
         tags: selectedTags,
         theme_nodes: themeNodes,
         theme_scope: themeScope,
+        maladies_nodes: maladiesNodes,
+        maladies_scope: maladiesScope,
         medicament_nodes: medicamentNodes,
         medicament_scope: medicamentScope,
         pharmacologie_nodes: pharmacologieNodes,
@@ -283,6 +301,13 @@ export default function AdminPackDetailPage() {
       setSearchLoading(false);
     }
   };
+
+  const inCurrentPackIds = React.useMemo(() => {
+    const set = new Set<number>();
+    for (const c of pack?.cards ?? []) set.add(c.id);
+    for (const id of optimisticAddedIds) set.add(id);
+    return set;
+  }, [pack?.cards, optimisticAddedIds]);
 
   const toggleTag = (slug: string) => {
     setSelectedTags((prev) => {
@@ -343,12 +368,15 @@ export default function AdminPackDetailPage() {
 
   const onAddOne = async (id: number) => {
     if (!Number.isFinite(packId)) return;
+    if (inCurrentPackIds.has(id)) return;
     setSaving(true);
     setError(null);
+    setOptimisticAddedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
     try {
       await adminPackBulkAdd(packId, { microarticle_ids: [id] });
       await reload();
     } catch (e: unknown) {
+      setOptimisticAddedIds((prev) => prev.filter((x) => x !== id));
       setError(toErrorMessage(e));
     } finally {
       setSaving(false);
@@ -553,6 +581,14 @@ export default function AdminPackDetailPage() {
         <div className="grid gap-2">
           <div className="flex gap-2">
             <Input value={searchQ} onChange={(e) => setSearchQ(e.target.value)} placeholder="Texte (optionnel)…" />
+            <label className="flex items-center gap-2 rounded-md border bg-background px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={searchRecent}
+                onChange={(e) => setSearchRecent(e.target.checked)}
+              />
+              <span>Dernières</span>
+            </label>
             <Button type="button" variant="outline" onClick={() => void onSearch()} disabled={searchLoading}>
               {searchLoading ? "…" : "Rechercher"}
             </Button>
@@ -580,7 +616,7 @@ export default function AdminPackDetailPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-medium">Thème</div>
@@ -599,6 +635,31 @@ export default function AdminPackDetailPage() {
                       nodes={themeTree.tree}
                       selected={themeNodes}
                       onToggle={(id) => toggleNode(id, setThemeNodes)}
+                    />
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Aucun arbre.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Maladies</div>
+                  <select
+                    className="rounded border bg-background px-2 py-1 text-xs"
+                    value={maladiesScope}
+                    onChange={(e) => setMaladiesScope(e.target.value as "exact" | "subtree")}
+                  >
+                    <option value="subtree">subtree</option>
+                    <option value="exact">exact</option>
+                  </select>
+                </div>
+                <div className="max-h-56 overflow-auto rounded border p-2">
+                  {maladiesTree?.tree?.length ? (
+                    <TaxonomyMultiTree
+                      nodes={maladiesTree.tree}
+                      selected={maladiesNodes}
+                      onToggle={(id) => toggleNode(id, setMaladiesNodes)}
                     />
                   ) : (
                     <div className="text-xs text-muted-foreground">Aucun arbre.</div>
@@ -665,10 +726,26 @@ export default function AdminPackDetailPage() {
               <div key={r.id} className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium">{r.title}</div>
-                  <div className="text-xs text-muted-foreground">{r.slug} · #{r.id}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {r.slug} · #{r.id}
+                    {(() => {
+                      const inThisPack = inCurrentPackIds.has(r.id);
+                      const total = typeof r.packs_count === "number" ? r.packs_count : 0;
+                      const other = Math.max(0, total - (inThisPack ? 1 : 0));
+                      if (inThisPack && other > 0) return ` · dans ce pack + ${other} autre(s)`;
+                      if (inThisPack) return " · dans ce pack";
+                      if (other > 0) return ` · dans ${other} pack(s)`;
+                      return "";
+                    })()}
+                  </div>
                 </div>
-                <Button type="button" onClick={() => void onAddOne(r.id)} disabled={saving}>
-                  Ajouter
+                <Button
+                  type="button"
+                  onClick={() => void onAddOne(r.id)}
+                  disabled={saving || inCurrentPackIds.has(r.id)}
+                  variant={inCurrentPackIds.has(r.id) ? "outline" : "default"}
+                >
+                  {inCurrentPackIds.has(r.id) ? "Déjà dans le pack" : "Ajouter"}
                 </Button>
               </div>
             ))}

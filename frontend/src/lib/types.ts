@@ -103,6 +103,7 @@ export type AdminMicroArticleSearchResult = {
   id: number;
   slug: string;
   title: string;
+  packs_count?: number;
 };
 
 export type AdminPackSummary = {
