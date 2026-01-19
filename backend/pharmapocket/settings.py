@@ -145,6 +145,7 @@ AUTHENTICATION_BACKENDS = (
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_CHANGE_EMAIL = True
 
 HEADLESS_FRONTEND_URLS = {
     "account_confirm_email": os.environ.get(

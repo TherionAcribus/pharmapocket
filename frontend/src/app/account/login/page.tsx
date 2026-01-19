@@ -69,7 +69,21 @@ export default function LoginPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    let cancelled = false;
     void ensureCsrf();
+    fetchMe()
+      .then((me) => {
+        if (cancelled) return;
+        const shouldRedirect = Boolean(me.landing_redirect_enabled);
+        const target = shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover";
+        router.replace(target);
+      })
+      .catch(() => {
+        // ignore: not logged in
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const onSubmit = async (e: React.FormEvent) => {

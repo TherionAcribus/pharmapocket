@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
-import { authVerifyEmail } from "@/lib/api";
+import { authLogout, authVerifyEmail, ensureCsrf } from "@/lib/api";
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -28,6 +28,8 @@ export default function VerifyEmailPage() {
     setError(null);
     try {
       await authVerifyEmail(key);
+      await ensureCsrf();
+      await authLogout().catch(() => {});
       setDone(true);
     } catch (e: unknown) {
       setError(toErrorMessage(e));

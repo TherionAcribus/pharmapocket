@@ -6,6 +6,28 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+try:
+    from allauth.account.models import EmailAddress
+except Exception:  # pragma: no cover
+    EmailAddress = None
+
+
+def _get_display_email(user) -> str:
+    if EmailAddress is not None:
+        primary = (
+            EmailAddress.objects.filter(user=user, primary=True)
+            .order_by("-verified", "-id")
+            .first()
+        )
+        if primary and primary.email:
+            return primary.email
+
+        verified = EmailAddress.objects.filter(user=user, verified=True).order_by("-id").first()
+        if verified and verified.email:
+            return verified.email
+
+    return getattr(user, "email", "") or ""
+
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class CsrfView(APIView):
@@ -27,7 +49,7 @@ class MeView(APIView):
         return Response(
             {
                 "id": user.id,
-                "email": user.email,
+                "email": _get_display_email(user),
                 "username": user.get_username(),
                 "pseudo": getattr(user, "pseudo", "") or "",
                 "has_usable_password": bool(user.has_usable_password()),
@@ -46,7 +68,7 @@ class AccountView(APIView):
         user = request.user
         return Response(
             {
-                "email": user.email,
+                "email": _get_display_email(user),
                 "username": user.get_username(),
                 "pseudo": getattr(user, "pseudo", "") or "",
                 "has_usable_password": bool(user.has_usable_password()),
@@ -74,7 +96,7 @@ class AccountView(APIView):
 
         return Response(
             {
-                "email": user.email,
+                "email": _get_display_email(user),
                 "username": user.get_username(),
                 "pseudo": getattr(user, "pseudo", "") or "",
                 "has_usable_password": bool(user.has_usable_password()),
