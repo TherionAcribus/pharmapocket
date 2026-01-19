@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authLogin, ensureCsrf, fetchMe } from "@/lib/api";
+import { authLogin, authResendVerifyEmail, ensureCsrf, fetchMe } from "@/lib/api";
 
 function getBackendBaseUrlClient(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -52,6 +52,32 @@ function toErrorMessage(e: unknown): string {
   return String(e);
 }
 
+function parseAllauthAuthenticationResponseFromError(e: unknown):
+  | { flows: Array<{ id: string; is_pending?: boolean }> }
+  | null {
+  if (!(e instanceof Error)) return null;
+
+  // Error format from apiJson():
+  // "API 401 on /path (content-type: application/json): { ...json... }"
+  // We need the JSON at the end, but the message contains earlier colons.
+  const marker = "): ";
+  const idx = e.message.lastIndexOf(marker);
+  if (idx === -1) return null;
+  const jsonPart = e.message.slice(idx + marker.length).trim();
+  if (!jsonPart.startsWith("{")) return null;
+
+  try {
+    const parsed = JSON.parse(jsonPart) as {
+      data?: { flows?: Array<{ id: string; is_pending?: boolean }> };
+    };
+    const flows = parsed?.data?.flows;
+    if (!Array.isArray(flows)) return null;
+    return { flows };
+  } catch {
+    return null;
+  }
+}
+
 function landingTargetToPath(target: string | null | undefined): string {
   if (target === "discover") return "/discover";
   if (target === "cards") return "/cards";
@@ -67,6 +93,8 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [emailVerificationPending, setEmailVerificationPending] = React.useState(false);
+  const [resendDone, setResendDone] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -90,6 +118,8 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setEmailVerificationPending(false);
+    setResendDone(false);
     try {
       await ensureCsrf();
       await authLogin({ identifier, password });
@@ -98,7 +128,16 @@ export default function LoginPage() {
       const target = shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover";
       router.push(target);
     } catch (err: unknown) {
-      setError(toErrorMessage(err));
+      const auth = parseAllauthAuthenticationResponseFromError(err);
+      const pendingEmail = Boolean(
+        auth?.flows?.some((f) => f?.id === "verify_email" && Boolean(f?.is_pending))
+      );
+      if (pendingEmail) {
+        setEmailVerificationPending(true);
+        setError(null);
+      } else {
+        setError(toErrorMessage(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -155,9 +194,55 @@ export default function LoginPage() {
               </div>
             ) : null}
 
+            {emailVerificationPending ? (
+              <div className="rounded-md border bg-amber-500/10 p-2 text-sm">
+                <div className="font-medium">Adresse email à vérifier</div>
+                <div className="text-muted-foreground">
+                  Ton compte nécessite une confirmation par email avant de pouvoir te connecter.
+                </div>
+                <div className="pt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={async () => {
+                      setLoading(true);
+                      setError(null);
+                      setResendDone(false);
+                      try {
+                        await ensureCsrf();
+                        await authResendVerifyEmail();
+                        setResendDone(true);
+                      } catch (e: unknown) {
+                        setError(toErrorMessage(e));
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    disabled={loading}
+                  >
+                    Renvoyer l’email
+                  </Button>
+                </div>
+                {resendDone ? (
+                  <div className="pt-2 text-muted-foreground">
+                    Email renvoyé. Pense à vérifier tes spams.
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Connexion…" : "Se connecter"}
             </Button>
+
+            <button
+              type="button"
+              className="w-full text-left text-xs text-muted-foreground underline"
+              onClick={() => router.push("/account/password/forgot")}
+              disabled={loading}
+            >
+              Mot de passe oublié ?
+            </button>
           </form>
         </div>
 

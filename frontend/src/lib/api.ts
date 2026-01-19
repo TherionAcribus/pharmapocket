@@ -134,6 +134,34 @@ async function apiJson<T>(path: string, init: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function apiPostOkOr401(path: string, payload: unknown): Promise<void> {
+  const res = await apiFetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (res.status === 200 || res.status === 401) {
+    return;
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  const raw = await res.text();
+  let parsed: unknown = raw;
+  if (contentType.includes("application/json")) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = raw;
+    }
+  }
+  throw new Error(
+    `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(parsed)}`
+  );
+}
+
 export type FeedQuery = {
   cursor?: string | null;
   q?: string | null;
@@ -795,6 +823,23 @@ export async function authVerifyEmail(key: string): Promise<unknown> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ key }),
+  });
+}
+
+export async function authResendVerifyEmail(): Promise<unknown> {
+  return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/email/verify/resend`, {
+    method: "POST",
+  });
+}
+
+export async function authRequestPasswordReset(email: string): Promise<void> {
+  await apiPostOkOr401(`/auth/${ALLAUTH_CLIENT}/v1/auth/password/request`, { email: email.trim() });
+}
+
+export async function authResetPassword(input: { key: string; password: string }): Promise<void> {
+  await apiPostOkOr401(`/auth/${ALLAUTH_CLIENT}/v1/auth/password/reset`, {
+    key: input.key,
+    password: input.password,
   });
 }
 
