@@ -468,7 +468,15 @@ export default function AdminPackDetailPage() {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <div className="text-sm font-medium">Statut</div>
-              <Input value={status} onChange={(e) => setStatus(e.target.value)} placeholder="draft/published" />
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                <option value="draft">draft</option>
+                <option value="published">published</option>
+                <option value="archived">archived</option>
+              </select>
             </div>
             <div className="space-y-1">
               <div className="text-sm font-medium">Cover image id</div>
