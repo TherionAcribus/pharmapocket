@@ -39,6 +39,12 @@ function normalizePattern(value: string): PatternName {
   return "waves";
 }
 
+function normalizeHexForColorInput(value: string): string {
+  const v = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
+  return "#000000";
+}
+
 function PatternOverlay({ pattern, accent }: { pattern: PatternName; accent: string }) {
   const strokeWidth = 4;
   const opacity = 0.1;
@@ -161,6 +167,14 @@ export default function AdminVignettesPage() {
   const [editPattern, setEditPattern] = React.useState<PatternName>("waves");
   const [saving, setSaving] = React.useState(false);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+
+  const duplicateToCreate = (r: AdminRow) => {
+    setCreateSlug(`${r.pathology_slug}-bis`);
+    setCreateBg(r.bg);
+    setCreateAccent(r.accent);
+    setCreatePattern(r.pattern);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const reload = React.useCallback(async () => {
     setLoading(true);
@@ -291,8 +305,28 @@ export default function AdminVignettesPage() {
               placeholder="slug (ex: grippe)"
               disabled={creating}
             />
-            <Input value={createBg} onChange={(e) => setCreateBg(e.target.value)} disabled={creating} />
-            <Input value={createAccent} onChange={(e) => setCreateAccent(e.target.value)} disabled={creating} />
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                className="h-10 w-10 shrink-0 rounded-md border bg-background"
+                value={normalizeHexForColorInput(createBg)}
+                onChange={(e) => setCreateBg(e.target.value)}
+                disabled={creating}
+                aria-label="Couleur de fond"
+              />
+              <Input value={createBg} onChange={(e) => setCreateBg(e.target.value)} disabled={creating} />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                className="h-10 w-10 shrink-0 rounded-md border bg-background"
+                value={normalizeHexForColorInput(createAccent)}
+                onChange={(e) => setCreateAccent(e.target.value)}
+                disabled={creating}
+                aria-label="Couleur d'accent"
+              />
+              <Input value={createAccent} onChange={(e) => setCreateAccent(e.target.value)} disabled={creating} />
+            </div>
             <select
               className={cn(
                 "h-10 rounded-md border bg-background px-3 text-sm",
@@ -366,6 +400,15 @@ export default function AdminVignettesPage() {
                       </Button>
                       <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => duplicateToCreate(r)}
+                        disabled={saving || deleting != null}
+                      >
+                        Dupliquer
+                      </Button>
+                      <Button
+                        type="button"
                         variant="destructive"
                         size="sm"
                         onClick={() => void onDelete(r.pathology_slug)}
@@ -380,12 +423,28 @@ export default function AdminVignettesPage() {
                     <div className="mt-3 grid gap-2">
                       <div className="grid gap-2 sm:grid-cols-4">
                         <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value)} disabled={saving} />
-                        <Input value={editBg} onChange={(e) => setEditBg(e.target.value)} disabled={saving} />
-                        <Input
-                          value={editAccent}
-                          onChange={(e) => setEditAccent(e.target.value)}
-                          disabled={saving}
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            className="h-10 w-10 shrink-0 rounded-md border bg-background"
+                            value={normalizeHexForColorInput(editBg)}
+                            onChange={(e) => setEditBg(e.target.value)}
+                            disabled={saving}
+                            aria-label="Couleur de fond"
+                          />
+                          <Input value={editBg} onChange={(e) => setEditBg(e.target.value)} disabled={saving} />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            className="h-10 w-10 shrink-0 rounded-md border bg-background"
+                            value={normalizeHexForColorInput(editAccent)}
+                            onChange={(e) => setEditAccent(e.target.value)}
+                            disabled={saving}
+                            aria-label="Couleur d'accent"
+                          />
+                          <Input value={editAccent} onChange={(e) => setEditAccent(e.target.value)} disabled={saving} />
+                        </div>
                         <select
                           className={cn(
                             "h-10 rounded-md border bg-background px-3 text-sm",

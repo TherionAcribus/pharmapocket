@@ -37,15 +37,6 @@ function inferDomainFromPathologySlug(slug: string | null | undefined): "infecti
 function resolveVisualCode(pathologySlug?: string | null): VisualCode {
   const slug = (pathologySlug ?? "").toLowerCase();
 
-  const hardcoded: Record<string, VisualCode> = {
-    grippe: { bg: "#6D5BD0", accent: "#D7D2FF", pattern: "waves" },
-    zona: { bg: "#7A3E9D", accent: "#E6C8F7", pattern: "chevrons" },
-    diabete: { bg: "#2D74DA", accent: "#CFE3FF", pattern: "dots" },
-    hta: { bg: "#D64545", accent: "#FFD0D0", pattern: "vlines" },
-  };
-
-  if (slug && hardcoded[slug]) return hardcoded[slug];
-
   const domain = inferDomainFromPathologySlug(slug);
   const byDomain: Record<ReturnType<typeof inferDomainFromPathologySlug>, Omit<VisualCode, "pattern"> & { patterns: PatternName[] }> = {
     infectio: { bg: "#6D5BD0", accent: "#D7D2FF", patterns: ["waves", "chevrons"] },
