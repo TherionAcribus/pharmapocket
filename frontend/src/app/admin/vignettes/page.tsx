@@ -11,12 +11,13 @@ import {
   deleteAdminThumbOverride,
   fetchAdminThumbOverrides,
   fetchMe,
+  fetchTaxonomyTree,
   patchAdminThumbOverride,
 } from "@/lib/api";
+import type { TaxonomyNode, TaxonomyTreeResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useThumbOverrides } from "@/components/ThumbOverridesProvider";
-
-type PatternName = "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+import { PATTERN_OPTIONS, ThumbPatternOverlay, normalizePattern, type PatternName } from "@/components/thumbPatterns";
 
 type AdminRow = {
   id: number;
@@ -32,11 +33,8 @@ function toErrorMessage(e: unknown): string {
   return String(e);
 }
 
-function normalizePattern(value: string): PatternName {
-  if (value === "waves" || value === "chevrons" || value === "dots" || value === "vlines" || value === "diagonals") {
-    return value;
-  }
-  return "waves";
+function parsePattern(value: string): PatternName {
+  return normalizePattern(value) ?? "waves";
 }
 
 function normalizeHexForColorInput(value: string): string {
@@ -45,103 +43,33 @@ function normalizeHexForColorInput(value: string): string {
   return "#000000";
 }
 
-function PatternOverlay({ pattern, accent }: { pattern: PatternName; accent: string }) {
-  const strokeWidth = 4;
-  const opacity = 0.1;
-
-  if (pattern === "dots") {
-    const dots: React.ReactNode[] = [];
-    for (let y = 8; y <= 56; y += 12) {
-      for (let x = 8; x <= 56; x += 12) {
-        dots.push(<circle key={`${x}-${y}`} cx={x} cy={y} r={2.2} fill={accent} opacity={opacity} />);
-      }
-    }
-    return <>{dots}</>;
-  }
-
-  if (pattern === "vlines") {
-    const lines: React.ReactNode[] = [];
-    for (let x = -8; x <= 72; x += 12) {
-      lines.push(
-        <line
-          key={x}
-          x1={x}
-          y1={0}
-          x2={x}
-          y2={64}
-          stroke={accent}
-          strokeWidth={strokeWidth}
-          opacity={opacity}
-        />
-      );
-    }
-    return <>{lines}</>;
-  }
-
-  if (pattern === "diagonals") {
-    const lines: React.ReactNode[] = [];
-    for (let x = -64; x <= 64; x += 12) {
-      lines.push(
-        <line
-          key={x}
-          x1={x}
-          y1={64}
-          x2={x + 64}
-          y2={0}
-          stroke={accent}
-          strokeWidth={strokeWidth}
-          opacity={opacity}
-        />
-      );
-    }
-    return <>{lines}</>;
-  }
-
-  if (pattern === "chevrons") {
-    const polys: React.ReactNode[] = [];
-    for (let y = -8; y <= 72; y += 16) {
-      polys.push(
-        <polyline
-          key={y}
-          points={`-8,${y} 16,${y + 12} 40,${y} 64,${y + 12} 88,${y}`}
-          fill="none"
-          stroke={accent}
-          strokeWidth={strokeWidth}
-          opacity={opacity}
-          strokeLinejoin="round"
-        />
-      );
-    }
-    return <>{polys}</>;
-  }
-
-  const waves: React.ReactNode[] = [];
-  for (let y = 10; y <= 70; y += 14) {
-    waves.push(
-      <path
-        key={y}
-        d={`M -8 ${y} C 8 ${y - 6}, 24 ${y + 6}, 40 ${y} S 72 ${y - 6}, 88 ${y}`}
-        fill="none"
-        stroke={accent}
-        strokeWidth={strokeWidth}
-        opacity={opacity}
-        strokeLinecap="round"
-      />
-    );
-  }
-  return <>{waves}</>;
-}
-
 function ThumbPreview({ bg, accent, pattern }: { bg: string; accent: string; pattern: PatternName }) {
   return (
     <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted">
       <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
         <rect x="0" y="0" width="64" height="64" fill={bg} />
-        <PatternOverlay pattern={pattern} accent={accent} />
+        <ThumbPatternOverlay pattern={pattern} accent={accent} />
         <rect x="0" y="0" width="64" height="64" fill="#000" opacity="0.06" />
       </svg>
     </div>
   );
+}
+
+type MaladieChoice = {
+  id: number;
+  slug: string;
+  name: string;
+  path: string;
+};
+
+function flattenNodes(nodes: TaxonomyNode[], prefix: string[] = []): MaladieChoice[] {
+  const out: MaladieChoice[] = [];
+  for (const n of nodes) {
+    const nextPrefix = [...prefix, n.name];
+    out.push({ id: n.id, slug: n.slug, name: n.name, path: nextPrefix.join(" / ") });
+    if (n.children?.length) out.push(...flattenNodes(n.children, nextPrefix));
+  }
+  return out;
 }
 
 export default function AdminVignettesPage() {
@@ -151,6 +79,10 @@ export default function AdminVignettesPage() {
   const [checking, setChecking] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  const [maladiesTree, setMaladiesTree] = React.useState<TaxonomyTreeResponse | null>(null);
+  const [maladiesLoading, setMaladiesLoading] = React.useState(false);
+  const [maladieQuery, setMaladieQuery] = React.useState("");
 
   const [rows, setRows] = React.useState<AdminRow[]>([]);
 
@@ -214,6 +146,40 @@ export default function AdminVignettesPage() {
       cancelled = true;
     };
   }, [reload, router]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setMaladiesLoading(true);
+    fetchTaxonomyTree("maladies")
+      .then((t) => {
+        if (cancelled) return;
+        setMaladiesTree(t);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMaladiesTree(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setMaladiesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const maladieChoices = React.useMemo(() => {
+    const tree = maladiesTree?.tree;
+    if (!tree) return [] as MaladieChoice[];
+    return flattenNodes(tree);
+  }, [maladiesTree?.tree]);
+
+  const maladieMatches = React.useMemo(() => {
+    const q = maladieQuery.trim().toLowerCase();
+    if (!q) return [] as MaladieChoice[];
+    const res = maladieChoices.filter((c) => c.slug.toLowerCase().includes(q) || c.path.toLowerCase().includes(q));
+    return res.slice(0, 30);
+  }, [maladieChoices, maladieQuery]);
 
   const startEdit = (r: AdminRow) => {
     setEditingSlug(r.pathology_slug);
@@ -333,15 +299,49 @@ export default function AdminVignettesPage() {
                 creating ? "opacity-70" : ""
               )}
               value={createPattern}
-              onChange={(e) => setCreatePattern(normalizePattern(e.target.value))}
+              onChange={(e) => setCreatePattern(parsePattern(e.target.value))}
               disabled={creating}
             >
-              <option value="waves">waves</option>
-              <option value="chevrons">chevrons</option>
-              <option value="dots">dots</option>
-              <option value="vlines">vlines</option>
-              <option value="diagonals">diagonals</option>
+              {PATTERN_OPTIONS.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
             </select>
+          </div>
+
+          <div className="rounded-lg border bg-background p-3">
+            <div className="text-xs font-semibold text-muted-foreground">Choisir une maladie existante</div>
+            <div className="mt-2 grid gap-2">
+              <Input
+                value={maladieQuery}
+                onChange={(e) => setMaladieQuery(e.target.value)}
+                placeholder={maladiesLoading ? "Chargement…" : "Rechercher une maladie (nom ou slug)"}
+                disabled={creating || maladiesLoading}
+              />
+
+              {maladieQuery.trim() && maladieMatches.length ? (
+                <div className="max-h-56 overflow-auto rounded-md border">
+                  {maladieMatches.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                      onClick={() => {
+                        setCreateSlug(c.slug);
+                        setMaladieQuery("");
+                      }}
+                      disabled={creating}
+                    >
+                      <div className="font-medium">{c.name}</div>
+                      <div className="text-xs text-muted-foreground">{c.slug} · {c.path}</div>
+                    </button>
+                  ))}
+                </div>
+              ) : maladieQuery.trim() ? (
+                <div className="text-xs text-muted-foreground">Aucun résultat.</div>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-2">
@@ -451,15 +451,49 @@ export default function AdminVignettesPage() {
                             saving ? "opacity-70" : ""
                           )}
                           value={editPattern}
-                          onChange={(e) => setEditPattern(normalizePattern(e.target.value))}
+                          onChange={(e) => setEditPattern(parsePattern(e.target.value))}
                           disabled={saving}
                         >
-                          <option value="waves">waves</option>
-                          <option value="chevrons">chevrons</option>
-                          <option value="dots">dots</option>
-                          <option value="vlines">vlines</option>
-                          <option value="diagonals">diagonals</option>
+                          {PATTERN_OPTIONS.map((p) => (
+                            <option key={p} value={p}>
+                              {p}
+                            </option>
+                          ))}
                         </select>
+                      </div>
+
+                      <div className="rounded-lg border bg-background p-3">
+                        <div className="text-xs font-semibold text-muted-foreground">Changer la maladie</div>
+                        <div className="mt-2 grid gap-2">
+                          <Input
+                            value={maladieQuery}
+                            onChange={(e) => setMaladieQuery(e.target.value)}
+                            placeholder={maladiesLoading ? "Chargement…" : "Rechercher une maladie (nom ou slug)"}
+                            disabled={saving || maladiesLoading}
+                          />
+
+                          {maladieQuery.trim() && maladieMatches.length ? (
+                            <div className="max-h-56 overflow-auto rounded-md border">
+                              {maladieMatches.map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                                  onClick={() => {
+                                    setEditSlug(c.slug);
+                                    setMaladieQuery("");
+                                  }}
+                                  disabled={saving}
+                                >
+                                  <div className="font-medium">{c.name}</div>
+                                  <div className="text-xs text-muted-foreground">{c.slug} · {c.path}</div>
+                                </button>
+                              ))}
+                            </div>
+                          ) : maladieQuery.trim() ? (
+                            <div className="text-xs text-muted-foreground">Aucun résultat.</div>
+                          ) : null}
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between gap-2">

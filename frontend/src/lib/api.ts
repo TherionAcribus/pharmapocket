@@ -614,7 +614,17 @@ export type ThumbOverridePublic = {
   pathology_slug: string;
   bg: string;
   accent: string;
-  pattern: "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+  pattern:
+    | "waves"
+    | "chevrons"
+    | "dots"
+    | "vlines"
+    | "diagonals"
+    | "grid"
+    | "crosshatch"
+    | "rings"
+    | "pluses"
+    | "triangles";
 };
 
 export async function fetchThumbOverridesPublic(): Promise<ThumbOverridePublic[]> {
@@ -630,7 +640,17 @@ export type AdminThumbOverride = {
   pathology_slug: string;
   bg: string;
   accent: string;
-  pattern: "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+  pattern:
+    | "waves"
+    | "chevrons"
+    | "dots"
+    | "vlines"
+    | "diagonals"
+    | "grid"
+    | "crosshatch"
+    | "rings"
+    | "pluses"
+    | "triangles";
   updated_at?: string;
 };
 
@@ -642,7 +662,17 @@ export async function createAdminThumbOverride(input: {
   pathology_slug: string;
   bg: string;
   accent: string;
-  pattern: "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+  pattern:
+    | "waves"
+    | "chevrons"
+    | "dots"
+    | "vlines"
+    | "diagonals"
+    | "grid"
+    | "crosshatch"
+    | "rings"
+    | "pluses"
+    | "triangles";
 }): Promise<AdminThumbOverride> {
   return apiJson<AdminThumbOverride>("/api/v1/content/admin/thumb-overrides/", {
     method: "POST",
@@ -659,7 +689,17 @@ export async function patchAdminThumbOverride(
     pathology_slug: string;
     bg: string;
     accent: string;
-    pattern: "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+    pattern:
+      | "waves"
+      | "chevrons"
+      | "dots"
+      | "vlines"
+      | "diagonals"
+      | "grid"
+      | "crosshatch"
+      | "rings"
+      | "pluses"
+      | "triangles";
   }>
 ): Promise<AdminThumbOverride> {
   return apiJson<AdminThumbOverride>(

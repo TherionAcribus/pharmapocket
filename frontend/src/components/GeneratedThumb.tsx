@@ -5,8 +5,8 @@ import { Gavel, Leaf, Lightbulb, Pill, Scale, Shield, Stethoscope } from "lucide
 
 import type { CategoryPayload, MicroArticleListItem } from "@/lib/types";
 import { useThumbOverrides } from "@/components/ThumbOverridesProvider";
-
-type PatternName = "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+import type { PatternName } from "@/components/thumbPatterns";
+import { ThumbPatternOverlay } from "@/components/thumbPatterns";
 
 type VisualCode = {
   bg: string;
@@ -39,10 +39,10 @@ function resolveVisualCode(pathologySlug?: string | null): VisualCode {
 
   const domain = inferDomainFromPathologySlug(slug);
   const byDomain: Record<ReturnType<typeof inferDomainFromPathologySlug>, Omit<VisualCode, "pattern"> & { patterns: PatternName[] }> = {
-    infectio: { bg: "#6D5BD0", accent: "#D7D2FF", patterns: ["waves", "chevrons"] },
-    cardio: { bg: "#D64545", accent: "#FFD0D0", patterns: ["vlines", "diagonals"] },
-    endocrino: { bg: "#2D74DA", accent: "#CFE3FF", patterns: ["dots", "diagonals"] },
-    other: { bg: "#444B59", accent: "#DDE1EA", patterns: ["diagonals", "dots"] },
+    infectio: { bg: "#6D5BD0", accent: "#D7D2FF", patterns: ["waves", "chevrons", "grid"] },
+    cardio: { bg: "#D64545", accent: "#FFD0D0", patterns: ["vlines", "diagonals", "crosshatch"] },
+    endocrino: { bg: "#2D74DA", accent: "#CFE3FF", patterns: ["dots", "rings", "triangles"] },
+    other: { bg: "#444B59", accent: "#DDE1EA", patterns: ["diagonals", "dots", "pluses", "grid"] },
   };
 
   const seed = hashString(slug || "other");
@@ -170,94 +170,6 @@ export function resolveGeneratedThumbMetaWithOverrides(
   return { ...meta, visual: override };
 }
 
-function PatternOverlay({ pattern, accent }: { pattern: PatternName; accent: string }) {
-  const strokeWidth = 4;
-  const opacity = 0.1;
-
-  if (pattern === "dots") {
-    const dots: React.ReactNode[] = [];
-    for (let y = 8; y <= 56; y += 12) {
-      for (let x = 8; x <= 56; x += 12) {
-        dots.push(<circle key={`${x}-${y}`} cx={x} cy={y} r={2.2} fill={accent} opacity={opacity} />);
-      }
-    }
-    return <>{dots}</>;
-  }
-
-  if (pattern === "vlines") {
-    const lines: React.ReactNode[] = [];
-    for (let x = -8; x <= 72; x += 12) {
-      lines.push(
-        <line
-          key={x}
-          x1={x}
-          y1={0}
-          x2={x}
-          y2={64}
-          stroke={accent}
-          strokeWidth={strokeWidth}
-          opacity={opacity}
-        />
-      );
-    }
-    return <>{lines}</>;
-  }
-
-  if (pattern === "diagonals") {
-    const lines: React.ReactNode[] = [];
-    for (let x = -64; x <= 64; x += 12) {
-      lines.push(
-        <line
-          key={x}
-          x1={x}
-          y1={64}
-          x2={x + 64}
-          y2={0}
-          stroke={accent}
-          strokeWidth={strokeWidth}
-          opacity={opacity}
-        />
-      );
-    }
-    return <>{lines}</>;
-  }
-
-  if (pattern === "chevrons") {
-    const polys: React.ReactNode[] = [];
-    for (let y = -8; y <= 72; y += 16) {
-      polys.push(
-        <polyline
-          key={y}
-          points={`-8,${y} 16,${y + 12} 40,${y} 64,${y + 12} 88,${y}`}
-          fill="none"
-          stroke={accent}
-          strokeWidth={strokeWidth}
-          opacity={opacity}
-          strokeLinejoin="round"
-        />
-      );
-    }
-    return <>{polys}</>;
-  }
-
-  // waves
-  const waves: React.ReactNode[] = [];
-  for (let y = 10; y <= 70; y += 14) {
-    waves.push(
-      <path
-        key={y}
-        d={`M -8 ${y} C 8 ${y - 6}, 24 ${y + 6}, 40 ${y} S 72 ${y - 6}, 88 ${y}`}
-        fill="none"
-        stroke={accent}
-        strokeWidth={strokeWidth}
-        opacity={opacity}
-        strokeLinecap="round"
-      />
-    );
-  }
-  return <>{waves}</>;
-}
-
 export function GeneratedThumb({
   item,
   className,
@@ -278,7 +190,7 @@ export function GeneratedThumb({
         xmlns="http://www.w3.org/2000/svg"
       >
         <rect x="0" y="0" width="64" height="64" fill={visual.bg} />
-        <PatternOverlay pattern={visual.pattern} accent={visual.accent} />
+        <ThumbPatternOverlay pattern={visual.pattern} accent={visual.accent} />
         <rect x="0" y="0" width="64" height="64" fill="#000" opacity="0.06" />
       </svg>
 

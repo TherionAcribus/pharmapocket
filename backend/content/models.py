@@ -32,6 +32,11 @@ class PathologyThumbOverride(models.Model):
         DOTS = "dots", "dots"
         VLINES = "vlines", "vlines"
         DIAGONALS = "diagonals", "diagonals"
+        GRID = "grid", "grid"
+        CROSSHATCH = "crosshatch", "crosshatch"
+        RINGS = "rings", "rings"
+        PLUSES = "pluses", "pluses"
+        TRIANGLES = "triangles", "triangles"
 
     pathology_slug = models.SlugField(max_length=140, unique=True)
     bg = models.CharField(max_length=20)

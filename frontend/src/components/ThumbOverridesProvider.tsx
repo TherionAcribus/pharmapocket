@@ -3,8 +3,8 @@
 import * as React from "react";
 
 import { fetchThumbOverridesPublic } from "@/lib/api";
-
-type PatternName = "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+import type { PatternName } from "@/components/thumbPatterns";
+import { normalizePattern } from "@/components/thumbPatterns";
 
 export type VisualCode = {
   bg: string;
@@ -29,13 +29,6 @@ type ThumbOverridesContextValue = {
 };
 
 const ThumbOverridesContext = React.createContext<ThumbOverridesContextValue | null>(null);
-
-function normalizePattern(value: unknown): PatternName | null {
-  if (value === "waves" || value === "chevrons" || value === "dots" || value === "vlines" || value === "diagonals") {
-    return value;
-  }
-  return null;
-}
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
