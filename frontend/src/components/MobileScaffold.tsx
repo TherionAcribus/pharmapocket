@@ -113,6 +113,14 @@ export function MobileScaffold({
   const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
   const [currentUserIsStaff, setCurrentUserIsStaff] = React.useState(false);
 
+  const navTabs = React.useMemo<TabItem[]>(
+    () =>
+      currentUserIsStaff
+        ? [...tabs, { href: "/admin", label: "Admin", Icon: SettingsIcon }]
+        : tabs,
+    [currentUserIsStaff]
+  );
+
   React.useEffect(() => {
     let cancelled = false;
     setLoadingTree(true);
@@ -211,6 +219,23 @@ export function MobileScaffold({
                         </Link>
                       </SheetClose>
                     ))}
+                    {currentUserIsStaff ? (
+                      <>
+                        <Separator className="my-2" />
+                        <SheetClose asChild>
+                          <Link
+                            href="/admin"
+                            className={cn(
+                              "flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent",
+                              isActivePath(pathname, "/admin") ? "bg-accent" : ""
+                            )}
+                          >
+                            <SettingsIcon className="size-4" />
+                            <span className="truncate">Admin</span>
+                          </Link>
+                        </SheetClose>
+                      </>
+                    ) : null}
                   </div>
 
                   <Separator className="my-2" />
@@ -377,7 +402,7 @@ export function MobileScaffold({
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/90 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-3xl">
-          {tabs.map(({ href, label, Icon }) => {
+          {navTabs.map(({ href, label, Icon }) => {
             const active = isActivePath(pathname, href);
             return (
               <Link
