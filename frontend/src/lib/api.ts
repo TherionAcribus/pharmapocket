@@ -610,8 +610,75 @@ export async function fetchLanding(): Promise<LandingPayload> {
   return apiGet<LandingPayload>("/api/v1/content/landing/");
 }
 
+export type ThumbOverridePublic = {
+  pathology_slug: string;
+  bg: string;
+  accent: string;
+  pattern: "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+};
+
+export async function fetchThumbOverridesPublic(): Promise<ThumbOverridePublic[]> {
+  return apiGet<ThumbOverridePublic[]>("/api/v1/content/thumb-overrides/");
+}
+
 export async function fetchAdminPacks(): Promise<AdminPackSummary[]> {
   return apiGet<AdminPackSummary[]>("/api/v1/content/admin/packs/");
+}
+
+export type AdminThumbOverride = {
+  id: number;
+  pathology_slug: string;
+  bg: string;
+  accent: string;
+  pattern: "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+  updated_at?: string;
+};
+
+export async function fetchAdminThumbOverrides(): Promise<AdminThumbOverride[]> {
+  return apiGet<AdminThumbOverride[]>("/api/v1/content/admin/thumb-overrides/");
+}
+
+export async function createAdminThumbOverride(input: {
+  pathology_slug: string;
+  bg: string;
+  accent: string;
+  pattern: "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+}): Promise<AdminThumbOverride> {
+  return apiJson<AdminThumbOverride>("/api/v1/content/admin/thumb-overrides/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function patchAdminThumbOverride(
+  pathologySlug: string,
+  input: Partial<{
+    pathology_slug: string;
+    bg: string;
+    accent: string;
+    pattern: "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
+  }>
+): Promise<AdminThumbOverride> {
+  return apiJson<AdminThumbOverride>(
+    `/api/v1/content/admin/thumb-overrides/${encodeURIComponent(pathologySlug)}/`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export async function deleteAdminThumbOverride(pathologySlug: string): Promise<void> {
+  await apiJson<void>(
+    `/api/v1/content/admin/thumb-overrides/${encodeURIComponent(pathologySlug)}/`,
+    { method: "DELETE" }
+  );
 }
 
 export async function createAdminPack(input: {

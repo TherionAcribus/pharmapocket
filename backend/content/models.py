@@ -25,6 +25,29 @@ from wagtail.snippets.widgets import AdminSnippetChooser
 from .blocks import ImageWithCaptionBlock, LandingCardBlock, LandingStepBlock, Mechanism3StepsBlock, ReferenceBlock
 
 
+class PathologyThumbOverride(models.Model):
+    class Pattern(models.TextChoices):
+        WAVES = "waves", "waves"
+        CHEVRONS = "chevrons", "chevrons"
+        DOTS = "dots", "dots"
+        VLINES = "vlines", "vlines"
+        DIAGONALS = "diagonals", "diagonals"
+
+    pathology_slug = models.SlugField(max_length=140, unique=True)
+    bg = models.CharField(max_length=20)
+    accent = models.CharField(max_length=20)
+    pattern = models.CharField(max_length=20, choices=Pattern.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Override vignette pathologie"
+        verbose_name_plural = "Overrides vignettes pathologies"
+
+    def __str__(self) -> str:
+        return self.pathology_slug
+
+
 @register_snippet
 class ImageLicense(models.Model):
     name = models.CharField(max_length=120, unique=True)

@@ -8,6 +8,7 @@ import {
   Brain as BrainIcon,
   Clock as ClockIcon,
   Home as HomeIcon,
+  Image as ImageIcon,
   LayoutGrid as LayoutGridIcon,
   Layers as LayersIcon,
   Package as PackageIcon,
@@ -110,6 +111,7 @@ export function MobileScaffold({
   const [loadingTree, setLoadingTree] = React.useState(false);
 
   const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+  const [currentUserIsStaff, setCurrentUserIsStaff] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -134,10 +136,12 @@ export function MobileScaffold({
       .then((me) => {
         if (cancelled) return;
         setCurrentUserEmail(me.email || null);
+        setCurrentUserIsStaff(Boolean(me.is_staff));
       })
       .catch(() => {
         if (cancelled) return;
         setCurrentUserEmail(null);
+        setCurrentUserIsStaff(false);
       });
     return () => {
       cancelled = true;
@@ -256,6 +260,34 @@ export function MobileScaffold({
                         <div className="px-3 py-1 text-xs text-muted-foreground truncate">
                           {currentUserEmail}
                         </div>
+
+                        {currentUserIsStaff ? (
+                          <>
+                            <div className="px-3 pt-3 pb-1 text-xs font-semibold text-muted-foreground">
+                              Admin
+                            </div>
+
+                            <SheetClose asChild>
+                              <Link
+                                href="/admin/packs"
+                                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent"
+                              >
+                                <PackageIcon className="size-4" />
+                                <span className="truncate">Packs</span>
+                              </Link>
+                            </SheetClose>
+
+                            <SheetClose asChild>
+                              <Link
+                                href="/admin/vignettes"
+                                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent"
+                              >
+                                <ImageIcon className="size-4" />
+                                <span className="truncate">Vignettes</span>
+                              </Link>
+                            </SheetClose>
+                          </>
+                        ) : null}
 
                         <SheetClose asChild>
                           <Link

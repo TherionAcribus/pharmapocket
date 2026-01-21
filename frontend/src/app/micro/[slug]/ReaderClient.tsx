@@ -15,7 +15,8 @@ import {
   BookOpen as BookOpenIcon,
 } from "lucide-react";
 
-import { ThemeIcon, resolveGeneratedThumbMeta } from "@/components/GeneratedThumb";
+import { ThemeIcon, resolveGeneratedThumbMetaWithOverrides } from "@/components/GeneratedThumb";
+import { useThumbOverrides } from "@/components/ThumbOverridesProvider";
 import { SeeMoreRenderer } from "@/components/SeeMoreRenderer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -187,6 +188,8 @@ export default function ReaderClient({
   data: MicroArticleDetail;
 }) {
   const router = useRouter();
+
+  const { overrides } = useThumbOverrides();
 
   const returnTo = React.useMemo(() => readReturnToFromSession(), []);
 
@@ -556,12 +559,20 @@ export default function ReaderClient({
 
   const headerMeta = React.useMemo(
     () =>
-      resolveGeneratedThumbMeta({
-        categories_theme_payload: data.categories_theme_payload,
-        categories_maladies_payload: data.categories_maladies_payload,
-        categories_medicament_payload: data.categories_medicament_payload,
-      }),
-    [data.categories_maladies_payload, data.categories_medicament_payload, data.categories_theme_payload]
+      resolveGeneratedThumbMetaWithOverrides(
+        {
+          categories_theme_payload: data.categories_theme_payload,
+          categories_maladies_payload: data.categories_maladies_payload,
+          categories_medicament_payload: data.categories_medicament_payload,
+        },
+        overrides
+      ),
+    [
+      data.categories_maladies_payload,
+      data.categories_medicament_payload,
+      data.categories_theme_payload,
+      overrides,
+    ]
   );
 
   React.useEffect(() => {

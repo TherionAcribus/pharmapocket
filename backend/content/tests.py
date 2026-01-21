@@ -8,6 +8,7 @@ from wagtail.models import Page, Site
 from .models import (
     CategoryMedicament,
     CategoryPharmacologie,
+    PathologyThumbOverride,
     MicroArticleIndexPage,
     MicroArticlePage,
 )
@@ -96,3 +97,18 @@ class PublicApiSmokeTests(APITestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("tags", resp.data)
         self.assertIn("invalid", resp.data)
+
+    def test_thumb_overrides_public_smoke(self):
+        PathologyThumbOverride.objects.create(
+            pathology_slug="grippe",
+            bg="#6D5BD0",
+            accent="#D7D2FF",
+            pattern=PathologyThumbOverride.Pattern.WAVES,
+        )
+        resp = self.client.get("/api/v1/content/thumb-overrides/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(any(r.get("pathology_slug") == "grippe" for r in resp.data))
+
+    def test_admin_thumb_overrides_requires_auth(self):
+        resp = self.client.get("/api/v1/content/admin/thumb-overrides/")
+        self.assertIn(resp.status_code, (401, 403))

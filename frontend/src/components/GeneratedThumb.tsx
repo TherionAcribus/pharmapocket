@@ -4,6 +4,7 @@ import * as React from "react";
 import { Gavel, Leaf, Lightbulb, Pill, Scale, Shield, Stethoscope } from "lucide-react";
 
 import type { CategoryPayload, MicroArticleListItem } from "@/lib/types";
+import { useThumbOverrides } from "@/components/ThumbOverridesProvider";
 
 type PatternName = "waves" | "chevrons" | "dots" | "vlines" | "diagonals";
 
@@ -161,6 +162,23 @@ export function resolveGeneratedThumbMeta(source: ThumbMetaSource): {
   return { theme, visual, labelRaw, label };
 }
 
+export function resolveGeneratedThumbMetaWithOverrides(
+  source: ThumbMetaSource,
+  overrides: Record<string, VisualCode> | null | undefined
+): {
+  theme: ThemeKey;
+  visual: VisualCode;
+  labelRaw: string;
+  label: string;
+} {
+  const meta = resolveGeneratedThumbMeta(source);
+  const pathology = pickFirst(source.categories_maladies_payload);
+  const slug = (pathology?.slug ?? "").toLowerCase();
+  const override = slug && overrides ? overrides[slug] : null;
+  if (!override) return meta;
+  return { ...meta, visual: override };
+}
+
 function PatternOverlay({ pattern, accent }: { pattern: PatternName; accent: string }) {
   const strokeWidth = 4;
   const opacity = 0.1;
@@ -256,7 +274,8 @@ export function GeneratedThumb({
   item: MicroArticleListItem;
   className?: string;
 }) {
-  const { theme, visual, labelRaw, label } = resolveGeneratedThumbMeta(item);
+  const { overrides } = useThumbOverrides();
+  const { theme, visual, labelRaw, label } = resolveGeneratedThumbMetaWithOverrides(item, overrides);
 
   return (
     <div className={className ?? "relative h-full w-full"} aria-hidden="true">

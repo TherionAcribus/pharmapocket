@@ -8,6 +8,8 @@ from .views import (
     AdminPackListCreateView,
     AdminPackRemoveCardView,
     AdminPackReorderCardsView,
+    AdminThumbOverrideDetailView,
+    AdminThumbOverrideListCreateView,
     CardDecksView,
     DeckCardDetailView,
     DeckCardsBulkAddView,
@@ -25,6 +27,7 @@ from .views import (
     SavedMicroArticleDetailView,
     SavedMicroArticleListView,
     SourceSearchView,
+    ThumbOverridesPublicView,
 )
 
 urlpatterns = [
@@ -32,6 +35,9 @@ urlpatterns = [
     path("microarticles/", MicroArticleListView.as_view(), name="microarticle-list"),
     # use <str:slug> to allow unicode slugs (accents)
     path("microarticles/<str:slug>/", MicroArticleDetailView.as_view(), name="microarticle-detail"),
+
+    # Generated thumb overrides (public read)
+    path("thumb-overrides/", ThumbOverridesPublicView.as_view(), name="thumb-overrides"),
 
     # Admin pack builder (staff only)
     path("admin/packs/", AdminPackListCreateView.as_view(), name="admin-pack-list"),
@@ -60,6 +66,14 @@ urlpatterns = [
         "admin/images/upload/",
         AdminImageUploadView.as_view(),
         name="admin-image-upload",
+    ),
+
+    # Admin thumb overrides (staff only)
+    path("admin/thumb-overrides/", AdminThumbOverrideListCreateView.as_view(), name="admin-thumb-override-list"),
+    path(
+        "admin/thumb-overrides/<str:pathology_slug>/",
+        AdminThumbOverrideDetailView.as_view(),
+        name="admin-thumb-override-detail",
     ),
 
     path("decks/", DeckListCreateView.as_view(), name="deck-list"),
