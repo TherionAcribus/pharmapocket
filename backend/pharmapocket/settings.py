@@ -81,9 +81,13 @@ TEMPLATES = [
 WSGI_APPLICATION = "pharmapocket.wsgi.application"
 ASGI_APPLICATION = "pharmapocket.asgi.application"
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required for the application to start")
+
 DATABASES = {
     "default": dj_database_url.config(
-        default=f"sqlite:///{(BASE_DIR / 'db.sqlite3').as_posix()}",
+        default=DATABASE_URL,
         conn_max_age=600,
     )
 }
