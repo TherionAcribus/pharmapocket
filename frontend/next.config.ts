@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+  output: "export",
   // Autorise les requêtes dev depuis l’IP du poste et l’IP réseau du container
   allowedDevOrigins: [
     "http://192.168.86.41:3000",
@@ -11,8 +12,8 @@ const nextConfig: NextConfig = {
     "http://127.0.0.1:3000",
   ],
   images: {
-    // En dev, évite le blocage sur IP privée / optimizer Next
-    unoptimized: process.env.NODE_ENV !== "production",
+    // Optimizer désactivé pour permettre un export statique
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "http",

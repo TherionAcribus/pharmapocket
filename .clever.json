@@ -1,0 +1,21 @@
+{
+  "apps": [
+    {
+      "app_id": "app_60c2e80a-ea03-4848-8671-527e8989633b",
+      "org_id": "user_c652d7fb-49c3-47e2-b110-5cd3ea34607a",
+      "deploy_url": "https://github.com/TherionAcribus/pharmapocket.git",
+      "git_ssh_url": "https://github.com/TherionAcribus/pharmapocket.git",
+      "name": "pharmapocket",
+      "alias": "back"
+    },
+    {
+      "app_id": "app_eb2a5389-f197-403d-9647-cff8ecc3f94f",
+      "org_id": "user_c652d7fb-49c3-47e2-b110-5cd3ea34607a",
+      "deploy_url": "https://github.com/TherionAcribus/pharmapocket.git",
+      "git_ssh_url": "https://github.com/TherionAcribus/pharmapocket.git",
+      "name": "pharmapocket",
+      "alias": "front"
+    }
+  ],
+  "default": "app_eb2a5389-f197-403d-9647-cff8ecc3f94f"
+}
