@@ -1,17 +1,10 @@
-"use client";
-
-import { FeedClient } from "@/components/FeedClient";
-import { FilterSheet } from "@/components/FilterSheet";
-import { MobileScaffold } from "@/components/MobileScaffold";
+import { Suspense } from "react";
+import LibraryClient from "./LibraryClient";
 
 export default function LibraryPage() {
   return (
-    <MobileScaffold
-      title="Bibliothèque"
-      headerRight={<FilterSheet basePath="/library" />}
-      contentClassName="space-y-4"
-    >
-      <FeedClient basePath="/library" embedded />
-    </MobileScaffold>
+    <Suspense>
+      <LibraryClient />
+    </Suspense>
   );
 }
