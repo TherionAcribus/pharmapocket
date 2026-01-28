@@ -193,3 +193,6 @@ CSRF_TRUSTED_ORIGINS = [
     for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "http://localhost:3000").split(",")
     if o.strip()
 ]
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
