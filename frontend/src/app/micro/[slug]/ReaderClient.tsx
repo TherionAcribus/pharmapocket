@@ -18,6 +18,7 @@ import {
 import { ThemeIcon, resolveGeneratedThumbMetaWithOverrides } from "@/components/GeneratedThumb";
 import { useThumbOverrides } from "@/components/ThumbOverridesProvider";
 import { SeeMoreRenderer } from "@/components/SeeMoreRenderer";
+import { CardTypeBadge, ParentRecapLinks, RecapPointsList } from "@/components/SubjectNavigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -956,6 +957,7 @@ export default function ReaderClient({
             }
           >
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <CardTypeBadge cardType={data.card_type} />
               {headerMeta.labelRaw ? (
                 <Badge
                   variant="secondary"
@@ -1038,6 +1040,20 @@ export default function ReaderClient({
                   </Badge>
                 ))}
               </div>
+            ) : null}
+
+            {data.card_type === "recap" && data.recap_points?.length ? (
+              <RecapPointsList
+                points={data.recap_points}
+                className="mt-4"
+              />
+            ) : null}
+
+            {data.parent_recap_cards?.length ? (
+              <ParentRecapLinks
+                recapCards={data.parent_recap_cards}
+                className="mt-4"
+              />
             ) : null}
 
             {hasDetails ? (

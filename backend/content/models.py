@@ -21,6 +21,7 @@ from wagtail.models import Orderable, Page
 from wagtail.search import index
 from wagtail.snippets.models import register_snippet
 from wagtail.snippets.widgets import AdminSnippetChooser
+from wagtail.admin.widgets import AdminPageChooser
 
 from .blocks import ImageWithCaptionBlock, LandingCardBlock, LandingStepBlock, Mechanism3StepsBlock, ReferenceBlock
 
@@ -498,6 +499,12 @@ class LandingPage(Page):
     subpage_types: list[str] = []
 
 
+class CardType(models.TextChoices):
+    STANDARD = "standard", "Standard"
+    RECAP = "recap", "Récap"
+    DETAIL = "detail", "Détail"
+
+
 class MicroArticlePageTag(TaggedItemBase):
     content_object = ParentalKey(
         "content.MicroArticlePage",
@@ -523,7 +530,47 @@ class MicroArticleQuestion(Orderable):
     ]
 
 
+class RecapPoint(Orderable):
+    """Point d'une fiche récap, avec lien optionnel vers une fiche détail."""
+
+    recap_card = ParentalKey(
+        "content.MicroArticlePage",
+        on_delete=models.CASCADE,
+        related_name="recap_points",
+    )
+    text = models.CharField(
+        max_length=200,
+        help_text="Texte du point (ex: 'utilisation d'une contraception').",
+    )
+    detail_card = models.ForeignKey(
+        "content.MicroArticlePage",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recap_point_links",
+        help_text="Fiche détail associée (optionnel).",
+    )
+
+    panels = [
+        FieldPanel("text"),
+        PageChooserPanel("detail_card", ["content.MicroArticlePage"]),
+    ]
+
+    class Meta(Orderable.Meta):
+        verbose_name = "Point récap"
+        verbose_name_plural = "Points récap"
+
+    def __str__(self):
+        return self.text[:50]
+
+
 class MicroArticlePage(Page):
+    card_type = models.CharField(
+        max_length=16,
+        choices=CardType.choices,
+        default=CardType.STANDARD,
+        help_text="Type de carte : standard, récap (vue d'ensemble), ou détail (atomique).",
+    )
     answer_express = RichTextField(
         features=["bold", "italic", "link", "ol", "ul"],
         blank=True,
@@ -663,6 +710,14 @@ class MicroArticlePage(Page):
     tags = ClusterTaggableManager(through=MicroArticlePageTag, blank=True)
 
     content_panels = Page.content_panels + [
+        FieldPanel("card_type"),
+        MultiFieldPanel(
+            [
+                InlinePanel("recap_points", label="Points récap"),
+            ],
+            heading="Points récap (pour cartes récap uniquement)",
+            classname="collapsed",
+        ),
         MultiFieldPanel(
             [
                 FieldPanel("answer_express"),
@@ -768,6 +823,39 @@ class MicroArticlePage(Page):
                 "references": r.question.references,
             }
             for r in rows
+        ]
+
+    def api_recap_points(self) -> list[dict]:
+        """Retourne les points récap avec leur fiche détail associée."""
+        rows = (
+            self.recap_points.select_related("detail_card")
+            .all()
+            .order_by("sort_order")
+        )
+        return [
+            {
+                "id": r.id,
+                "text": r.text,
+                "sort_order": r.sort_order,
+                "detail_card": {
+                    "id": r.detail_card.id,
+                    "slug": r.detail_card.slug,
+                    "title": r.detail_card.title,
+                } if r.detail_card else None,
+            }
+            for r in rows
+        ]
+
+    def get_parent_recap_cards(self) -> list:
+        """Retourne les fiches récap qui référencent cette carte comme détail."""
+        from .models import RecapPoint
+        return [
+            {
+                "id": rp.recap_card.id,
+                "slug": rp.recap_card.slug,
+                "title": rp.recap_card.title,
+            }
+            for rp in RecapPoint.objects.filter(detail_card=self).select_related("recap_card")
         ]
 
     api_fields = [
@@ -920,6 +1008,12 @@ class Deck(ClusterableModel):
         ),
         MultiFieldPanel(
             [
+                InlinePanel("deck_subjects", label="Sujets"),
+            ],
+            heading="Sujets",
+        ),
+        MultiFieldPanel(
+            [
                 InlinePanel("deck_cards", label="Cartes"),
             ],
             heading="Cartes",
@@ -998,6 +1092,12 @@ class Pack(Deck):
                 FieldPanel("sort_order"),
             ],
             heading="Affichage",
+        ),
+        MultiFieldPanel(
+            [
+                InlinePanel("deck_subjects", label="Sujets"),
+            ],
+            heading="Sujets",
         ),
         MultiFieldPanel(
             [
@@ -1126,3 +1226,149 @@ class MicroArticleReadState(models.Model):
         indexes = [
             models.Index(fields=["user", "updated_at"]),
         ]
+
+
+@register_snippet
+class Subject(index.Indexed, ClusterableModel):
+    """
+    Sujet/dossier intermédiaire entre Pack et Cards.
+    Regroupe 0..1 fiche récap + N fiches détails.
+    Peut être rattaché à plusieurs Packs.
+    """
+
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=140, unique=True, blank=True)
+    description = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    search_fields = [
+        index.SearchField("name"),
+        index.SearchField("slug"),
+        index.SearchField("description"),
+        index.AutocompleteField("name"),
+    ]
+
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("slug"),
+        FieldPanel("description"),
+        InlinePanel("subject_cards", label="Cartes du sujet"),
+    ]
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Sujet"
+        verbose_name_plural = "Sujets"
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return self.name
+
+    def get_recap_card(self):
+        """Retourne la carte récap si elle existe, sinon None."""
+        link = self.subject_cards.filter(
+            microarticle__card_type=CardType.RECAP
+        ).select_related("microarticle").first()
+        return link.microarticle if link else None
+
+    def get_detail_cards(self):
+        """Retourne les cartes détails ordonnées."""
+        return [
+            sc.microarticle
+            for sc in self.subject_cards.filter(
+                microarticle__card_type=CardType.DETAIL
+            ).select_related("microarticle").order_by("sort_order")
+        ]
+
+    def get_all_cards(self):
+        """Retourne toutes les cartes du sujet ordonnées."""
+        return [
+            sc.microarticle
+            for sc in self.subject_cards.select_related("microarticle").order_by("sort_order")
+        ]
+
+
+class SubjectCard(Orderable):
+    """
+    Relation Subject ↔ MicroArticlePage avec ordre et label.
+    """
+
+    subject = ParentalKey(
+        "content.Subject",
+        on_delete=models.CASCADE,
+        related_name="subject_cards",
+    )
+    microarticle = models.ForeignKey(
+        "content.MicroArticlePage",
+        on_delete=models.CASCADE,
+        related_name="subject_links",
+    )
+    label = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Nom court du point (affiché dans la liste récap).",
+    )
+
+    panels = [
+        PageChooserPanel("microarticle", page_type="content.MicroArticlePage"),
+        FieldPanel("label"),
+    ]
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subject", "microarticle"],
+                name="uniq_subject_card",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["subject", "sort_order"]),
+            models.Index(fields=["microarticle"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.subject.name} → {self.microarticle.title}"
+
+
+class DeckSubject(Orderable):
+    """
+    Relation Deck/Pack ↔ Subject (many-to-many avec ordre).
+    """
+
+    deck = ParentalKey(
+        "content.Deck",
+        on_delete=models.CASCADE,
+        related_name="deck_subjects",
+    )
+    subject = models.ForeignKey(
+        "content.Subject",
+        on_delete=models.CASCADE,
+        related_name="deck_links",
+    )
+
+    panels = [
+        FieldPanel("subject"),
+    ]
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["deck", "subject"],
+                name="uniq_deck_subject",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["deck", "sort_order"]),
+            models.Index(fields=["subject"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.deck.name} → {self.subject.name}"

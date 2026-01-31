@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { GeneratedThumb } from "@/components/GeneratedThumb";
+import { CardTypeBadge } from "@/components/SubjectNavigation";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MicroArticleListItem } from "@/lib/types";
@@ -67,7 +68,10 @@ export function MicroCard({
       ) : null}
 
       <div className="min-w-0 flex-1">
-        <div className="line-clamp-2 text-base font-semibold leading-snug">{item.title}</div>
+        <div className="flex items-start gap-2">
+          <div className="line-clamp-2 flex-1 text-base font-semibold leading-snug">{item.title}</div>
+          <CardTypeBadge cardType={item.card_type} className="shrink-0" />
+        </div>
 
         {sharedDecksCount && sharedDecksCount > 1 ? (
           <div className="mt-2 flex flex-wrap gap-1">

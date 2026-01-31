@@ -990,3 +990,135 @@ export async function accountChangePassword(input: {
 export async function ensureCsrf(): Promise<void> {
   await ensureCsrfCookie();
 }
+
+// =============================================================================
+// Subject API
+// =============================================================================
+
+export type SubjectListItem = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  cards_count: number;
+  has_recap: boolean;
+};
+
+export type SubjectDetail = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  detail_cards: Array<{
+    id: number;
+    slug: string;
+    title: string;
+    label: string;
+    sort_order: number;
+  }>;
+  recap_card: {
+    id: number;
+    slug: string;
+    title: string;
+  } | null;
+};
+
+export type SubjectCardItem = {
+  id: number;
+  microarticle_id: number;
+  slug: string;
+  title: string;
+  card_type: string;
+  label: string;
+  sort_order: number;
+};
+
+export async function fetchSubjects(q?: string): Promise<SubjectListItem[]> {
+  const qs = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+  return apiGet<SubjectListItem[]>(`/api/v1/content/subjects/${qs}`);
+}
+
+export async function fetchSubject(slug: string): Promise<SubjectDetail> {
+  return apiGet<SubjectDetail>(`/api/v1/content/subjects/${encodeURIComponent(slug)}/`);
+}
+
+export async function createSubject(input: {
+  name: string;
+  slug?: string;
+  description?: string;
+}): Promise<{ id: number; name: string; slug: string; description: string }> {
+  return apiJson(`/api/v1/content/subjects/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function patchSubject(
+  slug: string,
+  input: Partial<{ name: string; slug: string; description: string }>
+): Promise<{ id: number; name: string; slug: string; description: string }> {
+  return apiJson(`/api/v1/content/subjects/${encodeURIComponent(slug)}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteSubject(slug: string): Promise<void> {
+  await apiJson(`/api/v1/content/subjects/${encodeURIComponent(slug)}/`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchSubjectCards(slug: string): Promise<SubjectCardItem[]> {
+  return apiGet<SubjectCardItem[]>(`/api/v1/content/subjects/${encodeURIComponent(slug)}/cards/`);
+}
+
+export async function addCardToSubject(
+  subjectSlug: string,
+  cardSlug: string,
+  label?: string
+): Promise<SubjectCardItem> {
+  return apiJson(`/api/v1/content/subjects/${encodeURIComponent(subjectSlug)}/cards/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ card_slug: cardSlug, label: label || "" }),
+  });
+}
+
+export async function patchSubjectCard(
+  subjectSlug: string,
+  cardId: number,
+  input: Partial<{ label: string; sort_order: number }>
+): Promise<{ id: number; microarticle_id: number; label: string; sort_order: number }> {
+  return apiJson(
+    `/api/v1/content/subjects/${encodeURIComponent(subjectSlug)}/cards/${cardId}/`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export async function removeCardFromSubject(subjectSlug: string, cardId: number): Promise<void> {
+  await apiJson(
+    `/api/v1/content/subjects/${encodeURIComponent(subjectSlug)}/cards/${cardId}/`,
+    { method: "DELETE" }
+  );
+}
+
+export async function reorderSubjectCards(
+  subjectSlug: string,
+  cardIds: number[]
+): Promise<{ ok: boolean }> {
+  return apiJson(
+    `/api/v1/content/subjects/${encodeURIComponent(subjectSlug)}/cards/reorder/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: cardIds }),
+    }
+  );
+}

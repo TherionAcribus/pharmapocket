@@ -20,6 +20,8 @@ class MicroArticleListSerializer(serializers.Serializer):
     categories_medicament_payload = serializers.ListField(child=serializers.DictField(), required=False)
     categories_pharmacologie_payload = serializers.ListField(child=serializers.DictField(), required=False)
     published_at = serializers.DateTimeField(allow_null=True, required=False)
+    card_type = serializers.CharField(required=False)
+    subject = serializers.DictField(allow_null=True, required=False)
 
 
 class MicroArticleDetailSerializer(serializers.Serializer):
@@ -47,3 +49,9 @@ class MicroArticleDetailSerializer(serializers.Serializer):
     categories_pharmacologie_payload = serializers.ListField(child=serializers.DictField(), required=False)
     questions = serializers.ListField(child=serializers.DictField(), required=False)
     published_at = serializers.DateTimeField(allow_null=True, required=False)
+    card_type = serializers.CharField(required=False)
+    subject = serializers.DictField(allow_null=True, required=False)
+    detail_cards = serializers.ListField(child=serializers.DictField(), required=False)
+    recap_card = serializers.DictField(allow_null=True, required=False)
+    recap_points = serializers.ListField(child=serializers.DictField(), required=False)
+    parent_recap_cards = serializers.ListField(child=serializers.DictField(), required=False)

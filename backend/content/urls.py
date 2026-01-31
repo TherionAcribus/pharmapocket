@@ -27,6 +27,11 @@ from .views import (
     SavedMicroArticleDetailView,
     SavedMicroArticleListView,
     SourceSearchView,
+    SubjectCardDetailView,
+    SubjectCardsReorderView,
+    SubjectCardsView,
+    SubjectDetailView,
+    SubjectListCreateView,
     ThumbOverridesPublicView,
 )
 
@@ -118,4 +123,19 @@ urlpatterns = [
     ),
     path("read-state/", MicroArticleReadStateView.as_view(), name="microarticle-read-state"),
     path("sources/search/", SourceSearchView.as_view(), name="source-search"),
+
+    # Subject API endpoints
+    path("subjects/", SubjectListCreateView.as_view(), name="subject-list"),
+    path("subjects/<str:slug>/", SubjectDetailView.as_view(), name="subject-detail"),
+    path("subjects/<str:slug>/cards/", SubjectCardsView.as_view(), name="subject-cards"),
+    path(
+        "subjects/<str:slug>/cards/reorder/",
+        SubjectCardsReorderView.as_view(),
+        name="subject-cards-reorder",
+    ),
+    path(
+        "subjects/<str:slug>/cards/<int:card_id>/",
+        SubjectCardDetailView.as_view(),
+        name="subject-card-detail",
+    ),
 ]

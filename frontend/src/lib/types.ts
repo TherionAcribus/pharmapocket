@@ -28,6 +28,46 @@ export type CategoryPayload = {
   slug: string;
 };
 
+export type CardType = "standard" | "recap" | "detail";
+
+export type SubjectSummary = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+};
+
+export type SubjectDetailCard = {
+  id: number;
+  slug: string;
+  title: string;
+  label: string;
+  sort_order: number;
+};
+
+export type SubjectRecapCard = {
+  id: number;
+  slug: string;
+  title: string;
+};
+
+export type RecapPoint = {
+  id: number;
+  text: string;
+  sort_order: number;
+  detail_card: {
+    id: number;
+    slug: string;
+    title: string;
+  } | null;
+};
+
+export type ParentRecapCard = {
+  id: number;
+  slug: string;
+  title: string;
+};
+
 export type MicroArticleListItem = {
   id: number;
   slug: string;
@@ -47,6 +87,8 @@ export type MicroArticleListItem = {
   categories_classes_payload?: CategoryPayload[];
   published_at?: string | null;
   decks_count?: number;
+  card_type?: CardType;
+  subject?: SubjectSummary | null;
 };
 
 export type DeckSummary = {
@@ -173,6 +215,12 @@ export type MicroArticleDetail = {
     references?: unknown;
   }>;
   published_at?: string | null;
+  card_type?: CardType;
+  subject?: SubjectSummary | null;
+  detail_cards?: SubjectDetailCard[];
+  recap_card?: SubjectRecapCard | null;
+  recap_points?: RecapPoint[];
+  parent_recap_cards?: ParentRecapCard[];
 };
 
 export type TaxonomyNode = {

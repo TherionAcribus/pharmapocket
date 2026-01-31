@@ -19,17 +19,21 @@ from wagtail.images import get_image_model
 from wagtail.models import Collection
 
 from .models import (
+    CardType,
     CategoryMedicament,
     CategoryMaladies,
     CategoryPharmacologie,
     CategoryTheme,
     Deck,
     DeckCard,
+    DeckSubject,
     LandingPage,
     MicroArticlePage,
     MicroArticleReadState,
     PathologyThumbOverride,
     Source,
+    Subject,
+    SubjectCard,
     UserDeckProgress,
 )
 from .pagination import MicroArticleCursorPagination
@@ -427,6 +431,69 @@ def _questions_payload(page: MicroArticlePage) -> list[dict]:
     ]
 
 
+def _subject_payload(subject: Subject | None) -> dict | None:
+    """Retourne les données d'un sujet."""
+    if subject is None:
+        return None
+    return {
+        "id": subject.id,
+        "name": subject.name,
+        "slug": subject.slug,
+        "description": subject.description,
+    }
+
+
+def _get_subject_for_card(page: MicroArticlePage) -> Subject | None:
+    """Retourne le sujet auquel la carte appartient (si existant)."""
+    link = SubjectCard.objects.filter(microarticle=page).select_related("subject").first()
+    return link.subject if link else None
+
+
+def _subject_card_summary(page: MicroArticlePage) -> dict:
+    """Retourne un résumé minimal de la carte pour les listes récap."""
+    return {
+        "id": page.id,
+        "slug": page.slug,
+        "title": page.title,
+        "card_type": page.card_type,
+    }
+
+
+def _subject_detail_cards(subject: Subject) -> list[dict]:
+    """Retourne les cartes détails d'un sujet avec leur label."""
+    links = (
+        subject.subject_cards.filter(microarticle__card_type=CardType.DETAIL)
+        .select_related("microarticle")
+        .order_by("sort_order")
+    )
+    return [
+        {
+            "id": link.microarticle.id,
+            "slug": link.microarticle.slug,
+            "title": link.microarticle.title,
+            "label": link.label or link.microarticle.title,
+            "sort_order": link.sort_order,
+        }
+        for link in links
+    ]
+
+
+def _subject_recap_card(subject: Subject) -> dict | None:
+    """Retourne la carte récap d'un sujet (si existante)."""
+    link = (
+        subject.subject_cards.filter(microarticle__card_type=CardType.RECAP)
+        .select_related("microarticle")
+        .first()
+    )
+    if link is None:
+        return None
+    return {
+        "id": link.microarticle.id,
+        "slug": link.microarticle.slug,
+        "title": link.microarticle.title,
+    }
+
+
 def _taxonomy_model(taxonomy: str):
     if taxonomy == "theme":
         return CategoryTheme, "categories_theme"
@@ -613,6 +680,7 @@ class MicroArticleListView(ListAPIView):
                 "categories_medicament_payload": _cat_payload(p.categories_medicament),
                 "categories_pharmacologie_payload": _cat_payload(p.categories_pharmacologie),
                 "published_at": p.first_published_at,
+                "card_type": p.card_type,
             }
             for p in page
         ]
@@ -680,6 +748,12 @@ class MicroArticleDetailView(RetrieveAPIView):
             if refs:
                 see_more_blocks = see_more_blocks + [{"type": "references", "value": refs}]
 
+        # Get subject info if card belongs to a subject
+        subject = _get_subject_for_card(page)
+        subject_data = _subject_payload(subject)
+        detail_cards = _subject_detail_cards(subject) if subject else []
+        recap_card = _subject_recap_card(subject) if subject else None
+
         data = {
             "id": page.id,
             "slug": page.slug,
@@ -704,6 +778,12 @@ class MicroArticleDetailView(RetrieveAPIView):
             "categories_pharmacologie_payload": _cat_payload(page.categories_pharmacologie),
             "questions": _questions_payload(page),
             "published_at": page.first_published_at,
+            "card_type": page.card_type,
+            "subject": subject_data,
+            "detail_cards": detail_cards,
+            "recap_card": recap_card,
+            "recap_points": page.api_recap_points() if page.card_type == "recap" else [],
+            "parent_recap_cards": page.get_parent_recap_cards(),
         }
 
         if request.user.is_authenticated:
@@ -2063,3 +2143,332 @@ class SourceSearchView(ListAPIView):
                 | Q(author__icontains=q)
             )
         return qs
+
+
+# =============================================================================
+# Subject API Views
+# =============================================================================
+
+
+class SubjectListCreateView(APIView):
+    """List all subjects or create a new one (admin only)."""
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get(self, request):
+        qs = Subject.objects.all().order_by("name")
+
+        q = request.query_params.get("q")
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(slug__icontains=q))
+
+        items = [
+            {
+                "id": s.id,
+                "name": s.name,
+                "slug": s.slug,
+                "description": s.description,
+                "cards_count": s.subject_cards.count(),
+                "has_recap": s.subject_cards.filter(
+                    microarticle__card_type=CardType.RECAP
+                ).exists(),
+            }
+            for s in qs[:100]
+        ]
+        return Response(items)
+
+    def post(self, request):
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        name = payload.get("name")
+        if not name or not isinstance(name, str) or not name.strip():
+            raise DRFValidationError({"name": "name is required"})
+
+        slug = payload.get("slug")
+        if slug:
+            slug = slugify(slug)
+        else:
+            slug = slugify(name)
+
+        if Subject.objects.filter(slug=slug).exists():
+            raise DRFValidationError({"slug": "slug already exists"})
+
+        subject = Subject.objects.create(
+            name=name.strip(),
+            slug=slug,
+            description=payload.get("description", ""),
+        )
+        return Response(
+            {
+                "id": subject.id,
+                "name": subject.name,
+                "slug": subject.slug,
+                "description": subject.description,
+            },
+            status=201,
+        )
+
+
+class SubjectDetailView(APIView):
+    """Get, update or delete a subject (admin only for write operations)."""
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get(self, request, slug: str):
+        subject = Subject.objects.filter(slug=slug).first()
+        if subject is None:
+            return Response(status=404)
+
+        detail_cards = _subject_detail_cards(subject)
+        recap_card = _subject_recap_card(subject)
+
+        return Response(
+            {
+                "id": subject.id,
+                "name": subject.name,
+                "slug": subject.slug,
+                "description": subject.description,
+                "detail_cards": detail_cards,
+                "recap_card": recap_card,
+            }
+        )
+
+    def patch(self, request, slug: str):
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        subject = Subject.objects.filter(slug=slug).first()
+        if subject is None:
+            return Response(status=404)
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        update_fields = ["updated_at"]
+
+        if "name" in payload:
+            name = payload.get("name")
+            if not isinstance(name, str) or not name.strip():
+                raise DRFValidationError({"name": "name must be a non-empty string"})
+            subject.name = name.strip()
+            update_fields.append("name")
+
+        if "slug" in payload:
+            new_slug = slugify(payload.get("slug") or "")
+            if not new_slug:
+                raise DRFValidationError({"slug": "Invalid slug"})
+            if new_slug != subject.slug and Subject.objects.filter(slug=new_slug).exists():
+                raise DRFValidationError({"slug": "slug already exists"})
+            subject.slug = new_slug
+            update_fields.append("slug")
+
+        if "description" in payload:
+            subject.description = payload.get("description") or ""
+            update_fields.append("description")
+
+        if len(update_fields) == 1:
+            raise DRFValidationError({"detail": "No fields to update"})
+
+        subject.save(update_fields=update_fields)
+        return Response(
+            {
+                "id": subject.id,
+                "name": subject.name,
+                "slug": subject.slug,
+                "description": subject.description,
+            }
+        )
+
+    def delete(self, request, slug: str):
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        subject = Subject.objects.filter(slug=slug).first()
+        if subject is None:
+            return Response(status=404)
+
+        subject.delete()
+        return Response(status=204)
+
+
+class SubjectCardsView(APIView):
+    """Manage cards within a subject (admin only)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug: str):
+        """Get all cards in a subject with their labels and order."""
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        subject = Subject.objects.filter(slug=slug).first()
+        if subject is None:
+            return Response(status=404)
+
+        links = (
+            subject.subject_cards.select_related("microarticle")
+            .order_by("sort_order")
+        )
+        items = [
+            {
+                "id": link.id,
+                "microarticle_id": link.microarticle_id,
+                "slug": link.microarticle.slug,
+                "title": link.microarticle.title,
+                "card_type": link.microarticle.card_type,
+                "label": link.label,
+                "sort_order": link.sort_order,
+            }
+            for link in links
+        ]
+        return Response(items)
+
+    def post(self, request, slug: str):
+        """Add a card to a subject."""
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        subject = Subject.objects.filter(slug=slug).first()
+        if subject is None:
+            return Response(status=404)
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        card_slug = payload.get("card_slug")
+        if not card_slug or not isinstance(card_slug, str):
+            raise DRFValidationError({"card_slug": "card_slug is required"})
+
+        page = MicroArticlePage.objects.live().public().filter(slug=card_slug).first()
+        if page is None:
+            raise DRFValidationError({"card_slug": "Unknown card"})
+
+        # Check for recap uniqueness
+        if page.card_type == CardType.RECAP:
+            existing_recap = subject.subject_cards.filter(
+                microarticle__card_type=CardType.RECAP
+            ).exclude(microarticle=page).exists()
+            if existing_recap:
+                raise DRFValidationError(
+                    {"card_slug": "Subject already has a recap card"}
+                )
+
+        label = payload.get("label", "") or ""
+        max_order = subject.subject_cards.aggregate(m=models.Max("sort_order"))["m"] or 0
+
+        link, created = SubjectCard.objects.get_or_create(
+            subject=subject,
+            microarticle=page,
+            defaults={"label": label, "sort_order": max_order + 1},
+        )
+        if not created and label:
+            link.label = label
+            link.save(update_fields=["label"])
+
+        return Response(
+            {
+                "id": link.id,
+                "microarticle_id": page.id,
+                "slug": page.slug,
+                "title": page.title,
+                "card_type": page.card_type,
+                "label": link.label,
+                "sort_order": link.sort_order,
+            },
+            status=201 if created else 200,
+        )
+
+
+class SubjectCardDetailView(APIView):
+    """Update or remove a card from a subject (admin only)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, slug: str, card_id: int):
+        """Update a card's label or order within a subject."""
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        subject = Subject.objects.filter(slug=slug).first()
+        if subject is None:
+            return Response(status=404)
+
+        link = SubjectCard.objects.filter(subject=subject, id=card_id).first()
+        if link is None:
+            return Response(status=404)
+
+        payload = request.data if isinstance(request.data, dict) else {}
+
+        if "label" in payload:
+            link.label = payload.get("label") or ""
+            link.save(update_fields=["label"])
+
+        if "sort_order" in payload:
+            new_order = payload.get("sort_order")
+            if isinstance(new_order, int):
+                link.sort_order = new_order
+                link.save(update_fields=["sort_order"])
+
+        return Response(
+            {
+                "id": link.id,
+                "microarticle_id": link.microarticle_id,
+                "label": link.label,
+                "sort_order": link.sort_order,
+            }
+        )
+
+    def delete(self, request, slug: str, card_id: int):
+        """Remove a card from a subject."""
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        subject = Subject.objects.filter(slug=slug).first()
+        if subject is None:
+            return Response(status=404)
+
+        link = SubjectCard.objects.filter(subject=subject, id=card_id).first()
+        if link is None:
+            return Response(status=404)
+
+        link.delete()
+        return Response(status=204)
+
+
+class SubjectCardsReorderView(APIView):
+    """Reorder cards within a subject (admin only)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug: str):
+        denied = _require_staff(request)
+        if denied is not None:
+            return denied
+
+        subject = Subject.objects.filter(slug=slug).first()
+        if subject is None:
+            return Response(status=404)
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        order = payload.get("order")
+        if not isinstance(order, list):
+            raise DRFValidationError({"order": "order must be a list of card IDs"})
+
+        links = {link.id: link for link in subject.subject_cards.all()}
+        for idx, card_id in enumerate(order):
+            if card_id in links:
+                links[card_id].sort_order = idx
+                links[card_id].save(update_fields=["sort_order"])
+
+        return Response({"ok": True})
