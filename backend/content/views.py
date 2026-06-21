@@ -18,6 +18,7 @@ from wagtail.documents.models import Document
 from wagtail.images import get_image_model
 from wagtail.models import Collection
 
+from .html import sanitize_rich_text
 from .models import (
     CardType,
     CategoryMedicament,
@@ -315,8 +316,8 @@ def _microarticle_list_item(p: MicroArticlePage) -> dict:
         "id": p.id,
         "slug": p.slug,
         "title": p.title,
-        "answer_express": p.answer_express,
-        "takeaway": p.takeaway,
+        "answer_express": sanitize_rich_text(p.answer_express),
+        "takeaway": sanitize_rich_text(p.takeaway),
         "key_points": _key_points(p),
         "cover_image_url": _cover_url(p),
         "cover_image_credit": _cover_credit(p),
@@ -575,7 +576,7 @@ def _sanitize_stream_value(value):
 
     if hasattr(value, "source") and isinstance(getattr(value, "source", None), str):
         # Wagtail RichText
-        return str(value)
+        return sanitize_rich_text(value)
 
     if hasattr(value, "__iter__") and hasattr(value, "items"):
         try:
@@ -667,8 +668,8 @@ class MicroArticleListView(ListAPIView):
                 "id": p.id,
                 "slug": p.slug,
                 "title": p.title,
-                "answer_express": p.answer_express,
-                "takeaway": p.takeaway,
+                "answer_express": sanitize_rich_text(p.answer_express),
+                "takeaway": sanitize_rich_text(p.takeaway),
                 "key_points": _key_points(p),
                 "cover_image_url": _cover_url(p),
                 "cover_image_credit": _cover_credit(p),
@@ -737,7 +738,9 @@ class MicroArticleDetailView(RetrieveAPIView):
 
         # Inject legacy fields into see_more so the frontend always receives long content + sources
         if page.answer_detail and page.answer_detail.strip():
-            see_more_blocks = [{"type": "detail", "value": page.answer_detail}] + see_more_blocks
+            see_more_blocks = [
+                {"type": "detail", "value": sanitize_rich_text(page.answer_detail)}
+            ] + see_more_blocks
         if page.sources:
             refs = []
             for b in page.sources:
@@ -758,8 +761,8 @@ class MicroArticleDetailView(RetrieveAPIView):
             "id": page.id,
             "slug": page.slug,
             "title": page.title,
-            "answer_express": page.answer_express,
-            "takeaway": page.takeaway,
+            "answer_express": sanitize_rich_text(page.answer_express),
+            "takeaway": sanitize_rich_text(page.takeaway),
             "key_points": _key_points(page),
             "cover_image_url": _cover_url(page),
             "cover_image_credit": _cover_credit(page),
@@ -810,7 +813,10 @@ class SavedMicroArticleListView(APIView):
     def get(self, request):
         default_deck = _get_or_create_default_deck(request.user)
         rows = (
-            DeckCard.objects.filter(deck=default_deck)
+            DeckCard.objects.filter(
+                deck=default_deck,
+                microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+            )
             .select_related("microarticle", "microarticle__cover_image")
             .order_by("-added_at")
         )
@@ -842,7 +848,7 @@ class SavedMicroArticleDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, slug: str):
-        page = MicroArticlePage.objects.filter(slug=slug).first()
+        page = MicroArticlePage.objects.live().public().filter(slug=slug).first()
         if page is None:
             return Response({"saved": False})
         default_deck = Deck.objects.filter(
@@ -857,7 +863,7 @@ class SavedMicroArticleDetailView(APIView):
         )
 
     def delete(self, request, slug: str):
-        page = MicroArticlePage.objects.filter(slug=slug).first()
+        page = MicroArticlePage.objects.live().public().filter(slug=slug).first()
         if page is None:
             return Response(status=204)
         default_deck = Deck.objects.filter(
@@ -889,12 +895,18 @@ class DeckListCreateView(APIView):
 
     def get(self, request):
         req_type = request.query_params.get("type")
+        public_card_ids = MicroArticlePage.objects.live().public().values_list("id", flat=True)
         if req_type == Deck.DeckType.OFFICIAL:
             qs = (
                 Deck.objects.filter(type=Deck.DeckType.OFFICIAL, status=Deck.Status.PUBLISHED)
                 .select_related("cover_image")
                 .order_by("sort_order", "id")
-                .annotate(cards_count=models.Count("deck_cards"))
+                .annotate(
+                    cards_count=models.Count(
+                        "deck_cards",
+                        filter=Q(deck_cards__microarticle_id__in=public_card_ids),
+                    )
+                )
             )
 
             progress_by_deck_id: dict[int, UserDeckProgress] = {}
@@ -917,7 +929,9 @@ class DeckListCreateView(APIView):
                 rows = DeckCard.objects.filter(
                     deck_id__in=deck_ids,
                     microarticle_id__in=card_ids,
-                ).values("deck_id", "microarticle_id", "sort_order")
+                ).filter(microarticle_id__in=public_card_ids).values(
+                    "deck_id", "microarticle_id", "sort_order"
+                )
                 for r in rows:
                     did = int(r["deck_id"])
                     if last_card_by_deck_id.get(did) == int(r["microarticle_id"]):
@@ -971,7 +985,12 @@ class DeckListCreateView(APIView):
         qs = (
             Deck.objects.filter(user=request.user, type=Deck.DeckType.USER)
             .order_by("sort_order", "id")
-            .annotate(cards_count=models.Count("deck_cards"))
+            .annotate(
+                cards_count=models.Count(
+                    "deck_cards",
+                    filter=Q(deck_cards__microarticle_id__in=public_card_ids),
+                )
+            )
         )
         items = [
             {
@@ -1031,7 +1050,10 @@ class DeckDetailView(APIView):
             if deck.user_id != request.user.id:
                 return Response(status=404)
 
-        cards_qs = DeckCard.objects.filter(deck=deck).select_related("microarticle", "microarticle__cover_image")
+        cards_qs = DeckCard.objects.filter(
+            deck=deck,
+            microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+        ).select_related("microarticle", "microarticle__cover_image")
         if deck.type == Deck.DeckType.OFFICIAL or getattr(deck, "source_pack_id", None):
             cards_qs = cards_qs.order_by("sort_order", "id")
         else:
@@ -1165,7 +1187,10 @@ class DeckCardsView(APIView):
 
         search = request.query_params.get("search")
         qs = (
-            DeckCard.objects.filter(deck=deck)
+            DeckCard.objects.filter(
+                deck=deck,
+                microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+            )
             .select_related("microarticle", "microarticle__cover_image")
         )
         if deck.type == Deck.DeckType.OFFICIAL or getattr(deck, "source_pack_id", None):
@@ -1219,6 +1244,9 @@ class DeckCardsView(APIView):
         except (TypeError, ValueError):
             raise DRFValidationError({"card_id": "card_id must be an integer"})
 
+        if not MicroArticlePage.objects.live().public().filter(id=microarticle_id).exists():
+            raise DRFValidationError({"card_id": "Unknown or unavailable card"})
+
         obj, created = DeckCard.objects.get_or_create(deck=deck, microarticle_id=microarticle_id)
         if created and getattr(deck, "source_pack_id", None):
             max_sort = (
@@ -1252,9 +1280,18 @@ class DeckCardsBulkAddView(APIView):
             micro_ids = [int(x) for x in ids]
         except (TypeError, ValueError):
             raise DRFValidationError({"card_ids": "card_ids must be a list of integers"})
-        micro_ids = [mid for mid in micro_ids if mid > 0]
+        micro_ids = list(dict.fromkeys(mid for mid in micro_ids if mid > 0))
         if not micro_ids:
             return Response({"added": 0, "already_present": 0})
+
+        public_ids = set(
+            MicroArticlePage.objects.live()
+            .public()
+            .filter(id__in=micro_ids)
+            .values_list("id", flat=True)
+        )
+        if len(public_ids) != len(micro_ids):
+            raise DRFValidationError({"card_ids": "Contains an unknown or unavailable card"})
 
         existing = set(
             DeckCard.objects.filter(deck_id=deck.id, microarticle_id__in=micro_ids).values_list(
@@ -1321,7 +1358,10 @@ class OfficialDeckCopyToUserView(APIView):
             source_pack=pack,
         )
 
-        cards_qs = DeckCard.objects.filter(deck=pack).order_by("sort_order", "id")
+        cards_qs = DeckCard.objects.filter(
+            deck=pack,
+            microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+        ).order_by("sort_order", "id")
         objs = []
         for i, c in enumerate(cards_qs):
             objs.append(DeckCard(deck=deck, microarticle_id=c.microarticle_id, sort_order=i))
@@ -1352,7 +1392,10 @@ class OfficialDeckStartView(APIView):
             obj.last_seen_at = timezone.now()
             obj.save(update_fields=["last_seen_at"])
 
-        cards_count = DeckCard.objects.filter(deck_id=deck.id).count()
+        cards_count = DeckCard.objects.filter(
+            deck_id=deck.id,
+            microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+        ).count()
         effective = max(int(obj.cards_done_count or 0), int(obj.cards_seen_count or 0))
         progress_pct = int(round((effective / cards_count) * 100)) if cards_count else 0
         return Response(
@@ -1403,7 +1446,15 @@ class OfficialDeckProgressView(APIView):
 
         if last_card_id is not None:
             try:
-                obj.last_card_id = int(last_card_id)
+                candidate_card_id = int(last_card_id)
+                is_available = DeckCard.objects.filter(
+                    deck_id=deck.id,
+                    microarticle_id=candidate_card_id,
+                    microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+                ).exists()
+                if not is_available:
+                    raise DRFValidationError({"last_card_id": "Unknown or unavailable card in this deck"})
+                obj.last_card_id = candidate_card_id
                 update_fields.append("last_card")
             except (TypeError, ValueError):
                 raise DRFValidationError({"last_card_id": "last_card_id must be an integer"})
@@ -1436,7 +1487,10 @@ class OfficialDeckProgressView(APIView):
         # Always persist last_seen_at
         obj.save(update_fields=list(dict.fromkeys(update_fields)))
 
-        cards_count = DeckCard.objects.filter(deck_id=deck.id).count()
+        cards_count = DeckCard.objects.filter(
+            deck_id=deck.id,
+            microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+        ).count()
         effective = max(int(obj.cards_done_count or 0), int(obj.cards_seen_count or 0))
         progress_pct = int(round((effective / cards_count) * 100)) if cards_count else 0
 
@@ -2010,6 +2064,8 @@ class CardDecksView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, card_id: int):
+        if not MicroArticlePage.objects.live().public().filter(id=card_id).exists():
+            return Response(status=404)
         _get_or_create_default_deck(request.user)
         decks = list(Deck.objects.filter(user=request.user, type=Deck.DeckType.USER).order_by("sort_order", "id"))
         member_deck_ids = set(
@@ -2029,6 +2085,8 @@ class CardDecksView(APIView):
         return Response(items)
 
     def put(self, request, card_id: int):
+        if not MicroArticlePage.objects.live().public().filter(id=card_id).exists():
+            return Response(status=404)
         deck_ids = request.data.get("deck_ids") if isinstance(request.data, dict) else None
         if not isinstance(deck_ids, list):
             raise DRFValidationError({"deck_ids": "deck_ids must be a list"})

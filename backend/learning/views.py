@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
+from content.html import sanitize_rich_text
 from content.models import Deck, DeckCard, MicroArticlePage
 
 from .models import CardSRSState, LessonProgress
@@ -70,12 +71,22 @@ def _merge_progress(
     return existing
 
 
+def _public_microarticle_by_id(microarticle_id: int, *, select_cover: bool = False):
+    queryset = MicroArticlePage.objects.live().public().filter(id=microarticle_id)
+    if select_cover:
+        queryset = queryset.select_related("cover_image")
+    return queryset.specific().first()
+
+
 class ProgressListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         rows = (
-            LessonProgress.objects.filter(user=request.user)
+            LessonProgress.objects.filter(
+                user=request.user,
+                lesson_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+            )
             .select_related("lesson")
             .order_by("lesson_id")
         )
@@ -104,7 +115,7 @@ class ProgressUpsertView(APIView):
         serializer = LessonProgressUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        lesson = MicroArticlePage.objects.filter(id=lesson_id).specific().first()
+        lesson = _public_microarticle_by_id(lesson_id)
         if lesson is None:
             return Response({"detail": "Lesson not found."}, status=404)
 
@@ -154,7 +165,7 @@ class ProgressImportView(APIView):
                 except ValueError:
                     continue
 
-                lesson = MicroArticlePage.objects.filter(id=lesson_id).specific().first()
+                lesson = _public_microarticle_by_id(lesson_id)
                 if lesson is None:
                     continue
 
@@ -242,8 +253,8 @@ def _card_payload(page: MicroArticlePage) -> dict:
         "id": page.id,
         "slug": page.slug,
         "title": page.title,
-        "answer_express": page.answer_express,
-        "takeaway": page.takeaway,
+        "answer_express": sanitize_rich_text(page.answer_express),
+        "takeaway": sanitize_rich_text(page.takeaway),
         "key_points": _key_points(page),
         "cover_image_url": _cover_url(page),
         "cover_image_credit": _cover_credit(page),
@@ -379,7 +390,7 @@ class SRSReviewView(APIView):
         card_id: int = serializer.validated_data["card_id"]
         rating: str = serializer.validated_data["rating"]
 
-        page = MicroArticlePage.objects.filter(id=card_id).select_related("cover_image").first()
+        page = _public_microarticle_by_id(card_id, select_cover=True)
         if page is None:
             return Response({"detail": "Card not found."}, status=404)
 

@@ -46,7 +46,10 @@ class SrsApiTests(APITestCase):
         DeckCard.objects.get_or_create(deck=self.deck, microarticle_id=self.card.id)
 
     def test_srs_next_returns_unseen_due_card(self):
-        resp = self.client.get(f"/api/v1/learning/srs/next/?scope=deck&deck_id={self.deck.id}")
+        resp = self.client.get(
+            f"/api/v1/learning/srs/next/?scope=deck&deck_id={self.deck.id}",
+            secure=True,
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertIsNotNone(resp.data.get("card"))
         self.assertEqual(resp.data["card"]["id"], self.card.id)
@@ -57,6 +60,7 @@ class SrsApiTests(APITestCase):
             "/api/v1/learning/srs/review/",
             {"card_id": self.card.id, "rating": "know"},
             format="json",
+            secure=True,
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["card"]["id"], self.card.id)
@@ -66,7 +70,8 @@ class SrsApiTests(APITestCase):
         self.assertTrue(due_at)
 
         resp2 = self.client.get(
-            f"/api/v1/learning/srs/next/?scope=deck&deck_id={self.deck.id}&only_due=true"
+            f"/api/v1/learning/srs/next/?scope=deck&deck_id={self.deck.id}&only_due=true",
+            secure=True,
         )
         self.assertEqual(resp2.status_code, 200)
         self.assertIsNone(resp2.data.get("card"))
@@ -77,6 +82,35 @@ class SrsApiTests(APITestCase):
             due_at=timezone.now() - timedelta(days=1)
         )
 
-        resp3 = self.client.get(f"/api/v1/learning/srs/next/?scope=deck&deck_id={self.deck.id}")
+        resp3 = self.client.get(
+            f"/api/v1/learning/srs/next/?scope=deck&deck_id={self.deck.id}",
+            secure=True,
+        )
         self.assertEqual(resp3.status_code, 200)
         self.assertIsNotNone(resp3.data.get("card"))
+
+    def test_unpublished_card_cannot_be_reviewed_or_receive_progress(self):
+        index = MicroArticleIndexPage.objects.first()
+        assert index is not None
+        draft = MicroArticlePage(
+            title="Brouillon interne",
+            slug="brouillon-interne",
+            live=False,
+        )
+        index.add_child(instance=draft)
+
+        review = self.client.post(
+            "/api/v1/learning/srs/review/",
+            {"card_id": draft.id, "rating": "know"},
+            format="json",
+            secure=True,
+        )
+        self.assertEqual(review.status_code, 404)
+
+        progress = self.client.patch(
+            f"/api/v1/learning/progress/{draft.id}/",
+            {"seen": True, "updated_at": timezone.now().isoformat()},
+            format="json",
+            secure=True,
+        )
+        self.assertEqual(progress.status_code, 404)

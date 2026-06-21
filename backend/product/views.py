@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from content.html import sanitize_rich_text
 from content.models import CategoryMedicament, CategoryMaladies, CategoryPharmacologie, CategoryTheme, MicroArticlePage
 from learning.models import LessonProgress
 
@@ -240,8 +241,8 @@ class FeedView(ListAPIView):
                 "id": p.id,
                 "slug": p.slug,
                 "title": p.title,
-                "answer_express": p.answer_express,
-                "takeaway": p.takeaway,
+                "answer_express": sanitize_rich_text(p.answer_express),
+                "takeaway": sanitize_rich_text(p.takeaway),
                 "key_points": _key_points(p),
                 "cover_image_url": _cover_url(p),
                 "cover_image_credit": _cover_credit(p),
@@ -287,8 +288,8 @@ class MicroBySlugView(RetrieveAPIView):
             "id": page.id,
             "slug": page.slug,
             "title": page.title,
-            "answer_express": page.answer_express,
-            "takeaway": page.takeaway,
+            "answer_express": sanitize_rich_text(page.answer_express),
+            "takeaway": sanitize_rich_text(page.takeaway),
             "key_points": _key_points(page),
             "cover_image_url": _cover_url(page),
             "cover_image_credit": _cover_credit(page),
