@@ -237,6 +237,7 @@ CSRF_COOKIE_SAMESITE = _cookie_samesite(
     "DJANGO_CSRF_COOKIE_SAMESITE",
     default="Lax" if DEBUG else "None",
 )
+CSRF_COOKIE_DOMAIN = os.environ.get("DJANGO_CSRF_COOKIE_DOMAIN") or None
 
 SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool(
