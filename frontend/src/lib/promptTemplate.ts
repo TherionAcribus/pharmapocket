@@ -29,6 +29,7 @@ export type PromptInput = {
   cardCount: string;
   source: PromptSource;
   taxonomies: PromptTaxonomies;
+  tags: string[];
 };
 
 /** Aplatit l'arbre en lignes indentées « slug — Nom », lisibles par le LLM. */
@@ -131,7 +132,10 @@ La lecture se fait en deux niveaux :
    *décisif* de la fiche. Pour un QCM, la **bonne réponse est toujours en première
    position** (l'application mélange les propositions) et les 3 distracteurs doivent
    être plausibles.
-9. **Tags** (0 à 6) : mots-clés transversaux en minuscules (ex : \`iec\`, \`grossesse\`).
+9. **Tags** (0 à 6) : mots-clés transversaux en minuscules, sans accent. Le
+   vocabulaire déjà utilisé est listé plus bas : **réutilise-le en priorité, à
+   l'identique**. N'invente un tag que si aucun existant ne recouvre l'idée — un
+   quasi-doublon (\`iec\` / \`inhibiteur-ec\`) casse le filtrage par facettes.
 
 # Catégories
 
@@ -311,6 +315,14 @@ ${taxonomySection("categories_maladies", taxonomies.maladies)}
 ${taxonomySection("categories_medicament", taxonomies.medicament)}
 
 ${taxonomySection("categories_pharmacologie", taxonomies.pharmacologie)}
+
+# TAGS EXISTANTS
+
+${
+  input.tags.length
+    ? input.tags.join(", ")
+    : "(aucun tag pour le moment — choisis des mots-clés simples et réutilisables)"
+}
 
 # SOURCE
 

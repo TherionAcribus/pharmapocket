@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useTaxonomyTree } from "@/lib/queries";
+import { useTags, useTaxonomyTree } from "@/lib/queries";
 import { buildCardPrompt, type PromptSource } from "@/lib/promptTemplate";
 
 const FIELD_CLASS =
@@ -28,6 +28,7 @@ export function PromptBuilder({ enabled }: { enabled: boolean }) {
   const maladies = useTaxonomyTree("maladies", enabled);
   const medicament = useTaxonomyTree("medicament", enabled);
   const pharmacologie = useTaxonomyTree("pharmacologie", enabled);
+  const tags = useTags();
 
   const [information, setInformation] = React.useState("");
   const [cardCount, setCardCount] = React.useState("");
@@ -39,7 +40,11 @@ export function PromptBuilder({ enabled }: { enabled: boolean }) {
     setSource((prev) => ({ ...prev, [field]: value }));
 
   const loading =
-    theme.isPending || maladies.isPending || medicament.isPending || pharmacologie.isPending;
+    theme.isPending ||
+    maladies.isPending ||
+    medicament.isPending ||
+    pharmacologie.isPending ||
+    tags.isPending;
 
   const prompt = React.useMemo(
     () =>
@@ -53,6 +58,7 @@ export function PromptBuilder({ enabled }: { enabled: boolean }) {
           medicament: medicament.data?.tree ?? [],
           pharmacologie: pharmacologie.data?.tree ?? [],
         },
+        tags: (tags.data ?? []).map((tag) => tag.name),
       }),
     [
       information,
@@ -62,6 +68,7 @@ export function PromptBuilder({ enabled }: { enabled: boolean }) {
       maladies.data,
       medicament.data,
       pharmacologie.data,
+      tags.data,
     ]
   );
 
@@ -75,9 +82,9 @@ export function PromptBuilder({ enabled }: { enabled: boolean }) {
     <div className="rounded-xl border bg-card p-4 space-y-3">
       <div className="text-sm font-semibold">1 · Générer le prompt</div>
       <p className="text-xs text-muted-foreground">
-        Les catégories existantes sont injectées automatiquement. Colle le contenu de la
-        source : le modèle n&apos;a pas forcément accès à l&apos;URL, et le prompt lui
-        interdit alors d&apos;inventer.
+        Les catégories et les tags existants sont injectés automatiquement. Colle le
+        contenu de la source : le modèle n&apos;a pas forcément accès à l&apos;URL, et le
+        prompt lui interdit alors d&apos;inventer.
       </p>
 
       <div className="space-y-1">

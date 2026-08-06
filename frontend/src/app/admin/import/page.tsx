@@ -65,10 +65,16 @@ function ResultCard({ result }: { result: AdminCardImportResult }) {
         </div>
       ) : null}
 
-      {result.ok && (result.created_sources?.length || result.created_questions) ? (
+      {result.ok &&
+      (result.created_sources?.length ||
+        result.created_tags?.length ||
+        result.created_questions) ? (
         <div className="mt-1 text-xs text-muted-foreground">
           {result.created_sources?.length
             ? `Sources créées : ${result.created_sources.join(", ")}. `
+            : ""}
+          {result.created_tags?.length
+            ? `Nouveaux tags : ${result.created_tags.join(", ")}. `
             : ""}
           {result.created_questions ? `${result.created_questions} question(s) créée(s).` : ""}
         </div>

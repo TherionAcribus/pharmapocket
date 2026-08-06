@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
+from taggit.models import Tag
 from wagtail.images import get_image_model
 from wagtail.models import Page, Site
 
@@ -130,6 +131,29 @@ class CardImportTests(APITestCase):
         self.assertTrue(report["ok"], report)
         self.assertEqual(Source.objects.filter(url="https://ansm.example/iec").count(), 1)
         self.assertEqual(report["results"][0]["created_sources"], [])
+
+    def test_new_tags_are_reported(self):
+        report = import_cards([_card(tags=["iec", "biologie"])])
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(sorted(report["results"][0]["created_tags"]), ["biologie", "iec"])
+
+    def test_tag_differing_only_by_case_or_accent_is_attached_to_the_existing_one(self):
+        import_cards([_card(tags=["iec", "insuffisance-renale"])])
+
+        report = import_cards(
+            [_card(title="Deuxième fiche", tags=["IEC", "Insuffisance-Rénale"])]
+        )
+
+        self.assertTrue(report["ok"], report)
+        result = report["results"][0]
+        self.assertEqual(result["tags"], ["iec", "insuffisance-renale"])
+        self.assertEqual(result["created_tags"], [])
+        self.assertEqual(Tag.objects.filter(name__in=["IEC", "iec"]).count(), 1)
+
+        page = MicroArticlePage.objects.get(id=result["id"])
+        self.assertEqual(sorted(t.name for t in page.tags.all()), ["iec", "insuffisance-renale"])
+        self.assertIn("rattaché au tag existant", " ".join(result["warnings"]))
 
     def test_existing_question_is_reused(self):
         question = Question.objects.create(

@@ -5,8 +5,8 @@ La page fait les deux moitiés du travail.
 
 1. **Générer le prompt** : on saisit l'information à faire passer, les références
    de la source et — surtout — **le contenu de la source collé**. Les quatre
-   taxonomies sont injectées automatiquement depuis la base. Bouton *Copier le
-   prompt* → à coller dans le LLM.
+   taxonomies **et le vocabulaire de tags** sont injectés automatiquement depuis
+   la base. Bouton *Copier le prompt* → à coller dans le LLM.
 2. **Importer le JSON** : on colle la réponse, on regarde l'**Aperçu** (le rendu
    réel de la carte, HTML nettoyé comme à l'enregistrement, avec les compteurs de
    caractères), on *Vérifie* (dry-run), on crée. Si le modèle a proposé des
@@ -58,10 +58,16 @@ rapport liste, carte par carte, ce qu'il faut corriger. Les fiches sont créées
   `--- REMARQUES ---`, hors JSON. La page d'import extrait le tableau JSON même
   quand ces remarques suivent, ou quand la réponse est encadrée par des ```.
 
-**Catégories**
+**Catégories et tags**
 
 - Les catégories existantes sont injectées dans le prompt (slug + nom, arbre
   indenté) ; le modèle doit **recopier les slugs à l'identique**.
+- Le vocabulaire de tags déjà utilisé est injecté lui aussi, avec consigne de le
+  réutiliser en priorité : un quasi-doublon (`iec` / `inhibiteur-ec`) casse le
+  filtrage par facettes. À l'import, un tag qui ne diffère que par la casse ou
+  les accents est **rattaché au tag existant** plutôt que dupliqué ; les tags
+  réellement nouveaux sont listés dans le rapport, pour attraper une coquille
+  avant qu'elle n'entre au vocabulaire.
 - Quand aucune ne convient, il **doit en proposer une nouvelle**, en écrivant son
   **nom complet en français** (« Insuffisance rénale chronique »), pas un slug
   inventé, et justifier son choix dans les remarques.
@@ -115,7 +121,7 @@ Un type inconnu est refusé, avec la liste des types acceptés dans le message.
 | `slug` | dérivé du titre si absent ; refusé s'il existe déjà, sauf en mode mise à jour |
 | Sources | retrouvées par `url` puis par `name` (+ `publisher`) ; **créées** si inconnues |
 | Catégories | retrouvées par slug, par nom (accents/casse ignorés) ou par chemin `parent/enfant` ; **jamais créées en silence** — elles remontent dans `unknown_categories` |
-| Tags | créés à la volée |
+| Tags | rattachés au tag existant quand ils n'en diffèrent que par la casse ou les accents (avec avertissement) ; créés sinon, et listés dans le rapport |
 | `detail_card_slug`, `related_articles` | cherchés d'abord dans le lot en cours, puis en base |
 | `subject` | retrouvé par slug, **créé** s'il n'existe pas ; la fiche est ajoutée en fin de liste |
 | Questions | une question de même énoncé et de même type est réutilisée |

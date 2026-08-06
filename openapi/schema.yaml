@@ -1847,6 +1847,10 @@ components:
           type: array
           items:
             type: string
+        created_tags:
+          type: array
+          items:
+            type: string
         created_questions:
           type: integer
         reused_questions:

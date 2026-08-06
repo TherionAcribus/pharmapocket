@@ -107,6 +107,7 @@ class _Ctx:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     created_sources: list[str] = field(default_factory=list)
+    created_tags: list[str] = field(default_factory=list)
     created_questions: int = 0
     reused_questions: int = 0
     # Catégories proposées par le LLM et absentes de l'arbre : une erreur, mais
@@ -167,6 +168,31 @@ def _str_list(value: Any, label: str, ctx: _Ctx) -> list[str]:
 # ---------------------------------------------------------------------------
 # Résolution des objets référencés
 # ---------------------------------------------------------------------------
+
+
+def _resolve_tags(values: list[str], ctx: _Ctx) -> list[str]:
+    """Rattache les tags au vocabulaire existant, à la casse et aux accents près.
+
+    `taggit` compare les noms littéralement : sans ce recalage, « IEC » et « iec »
+    feraient deux facettes distinctes, et l'index se dégraderait à chaque import.
+    Le rattachement est signalé plutôt que silencieux.
+    """
+    from taggit.models import Tag
+
+    existing = {_normalize(tag.name): tag.name for tag in Tag.objects.all()}
+
+    resolved: list[str] = []
+    for value in values:
+        canonical = existing.get(_normalize(value))
+        if canonical is None:
+            ctx.created_tags.append(value)
+            resolved.append(value)
+            continue
+        if canonical != value:
+            ctx.warn(f"tags : « {value} » rattaché au tag existant « {canonical} ».")
+        if canonical not in resolved:
+            resolved.append(canonical)
+    return resolved
 
 
 def _resolve_taxonomy(model, values: list[str], field_name: str, taxonomy: str, ctx: _Ctx) -> list:
@@ -659,7 +685,7 @@ def _import_one(
     if not theme_values:
         ctx.error("categories_theme : au moins une catégorie thème est obligatoire.")
 
-    tags = _str_list(payload.get("tags"), "tags", ctx)
+    tags = _resolve_tags(_str_list(payload.get("tags"), "tags", ctx), ctx)
 
     cover_image = None
     if payload.get("cover_image_id") not in (None, ""):
@@ -805,6 +831,7 @@ def _import_one(
         "action": "updated" if updating else "created",
         "subject": subject_name,
         "created_sources": ctx.created_sources,
+        "created_tags": ctx.created_tags,
         "created_questions": ctx.created_questions,
         "reused_questions": ctx.reused_questions,
         "tags": tags,

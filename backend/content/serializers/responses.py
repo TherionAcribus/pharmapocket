@@ -232,6 +232,7 @@ class AdminCardImportResultSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=["created", "updated"], required=False)
     subject = serializers.CharField(allow_null=True, required=False)
     created_sources = serializers.ListField(child=serializers.CharField(), required=False)
+    created_tags = serializers.ListField(child=serializers.CharField(), required=False)
     created_questions = serializers.IntegerField(required=False)
     reused_questions = serializers.IntegerField(required=False)
     tags = serializers.ListField(child=serializers.CharField(), required=False)
