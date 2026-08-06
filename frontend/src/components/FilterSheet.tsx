@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { fetchTags, fetchTaxonomyTree } from "@/lib/api";
-import { TagPayload, TaxonomyNode, TaxonomyTreeResponse } from "@/lib/types";
+import { useTags, useTaxonomyTree } from "@/lib/queries";
+import { TaxonomyNode } from "@/lib/types";
 
 type Taxonomy = "pharmacologie" | "maladies" | "classes" | "theme" | "medicament";
 type Scope = "exact" | "subtree";
@@ -110,46 +110,10 @@ export function FilterSheet({ basePath = "/discover" }: { basePath?: string }) {
   const currentQ = sp.get("q") ?? "";
 
   const [tagQuery, setTagQuery] = useState("");
-  const [tags, setTags] = useState<TagPayload[]>([]);
-  const [loadingTags, setLoadingTags] = useState(false);
+  const { data: tags = [], isPending: loadingTags } = useTags(tagQuery, 200);
 
   const [taxonomy, setTaxonomy] = useState<Taxonomy>(currentTaxonomy ?? "pharmacologie");
-  const [tree, setTree] = useState<TaxonomyTreeResponse | null>(null);
-  const [loadingTree, setLoadingTree] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingTags(true);
-    fetchTags(tagQuery, 200)
-      .then((rows) => {
-        if (cancelled) return;
-        setTags(rows);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoadingTags(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tagQuery]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingTree(true);
-    fetchTaxonomyTree(taxonomy)
-      .then((t) => {
-        if (cancelled) return;
-        setTree(t);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoadingTree(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [taxonomy]);
+  const { data: tree, isPending: loadingTree } = useTaxonomyTree(taxonomy);
 
   const toggleTag = (slug: string) => {
     const set = new Set(currentTags);

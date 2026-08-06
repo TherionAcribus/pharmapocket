@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useQueryClient } from "@tanstack/react-query";
+
 import { authLogin, authResendVerifyEmail, ensureCsrf, fetchMe, isApiError } from "@/lib/api";
+import { queryKeys, resetSessionCache, useMe } from "@/lib/queries";
 
 function getBackendBaseUrlClient(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -75,6 +78,8 @@ function landingTargetToPath(target: string | null | undefined): string {
 
 export default function LoginPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: me } = useMe();
 
   const [identifier, setIdentifier] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -84,22 +89,15 @@ export default function LoginPage() {
   const [resendDone, setResendDone] = React.useState(false);
 
   React.useEffect(() => {
-    let cancelled = false;
     void ensureCsrf();
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        const shouldRedirect = Boolean(me.landing_redirect_enabled);
-        const target = shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover";
-        router.replace(target);
-      })
-      .catch(() => {
-        // ignore: not logged in
-      });
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  // Déjà connecté : cette page n'a rien à proposer.
+  React.useEffect(() => {
+    if (!me) return;
+    const shouldRedirect = Boolean(me.landing_redirect_enabled);
+    router.replace(shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover");
+  }, [me, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,9 +108,16 @@ export default function LoginPage() {
     try {
       await ensureCsrf();
       await authLogin({ identifier, password });
-      const me = await fetchMe();
-      const shouldRedirect = Boolean(me.landing_redirect_enabled);
-      const target = shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover";
+
+      // Tout ce qui a été mis en cache l'a été en tant qu'anonyme.
+      await resetSessionCache(queryClient);
+      const loggedIn = await fetchMe();
+      queryClient.setQueryData(queryKeys.me, loggedIn);
+
+      const shouldRedirect = Boolean(loggedIn.landing_redirect_enabled);
+      const target = shouldRedirect
+        ? landingTargetToPath(loggedIn.landing_redirect_target)
+        : "/discover";
       router.push(target);
     } catch (err: unknown) {
       const auth = parseAllauthAuthenticationResponseFromError(err);

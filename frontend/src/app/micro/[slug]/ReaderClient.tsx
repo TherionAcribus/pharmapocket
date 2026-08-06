@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import { ThemeIcon, resolveGeneratedThumbMetaWithOverrides } from "@/components/GeneratedThumb";
-import { useThumbOverrides } from "@/components/ThumbOverridesProvider";
+import { useThumbOverrides } from "@/lib/thumbOverrides";
 import { SeeMoreRenderer } from "@/components/SeeMoreRenderer";
 import { CardTypeBadge, ParentRecapLinks, RecapPointsList } from "@/components/SubjectNavigation";
 import { Badge } from "@/components/ui/badge";
@@ -28,16 +28,15 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
-  createDeck,
-  fetchCardDecks,
-  fetchMe,
-  fetchMicroArticleSavedStatus,
-  saveMicroArticle,
-  setMicroArticleReadState,
-  unsaveMicroArticle,
-  updateOfficialPackProgress,
-  updateCardDecks,
-} from "@/lib/api";
+  useCardDecks,
+  useCreateDeck,
+  useMe,
+  useSavedStatus,
+  useSetReadState,
+  useToggleSaved,
+  useUpdateCardDecks,
+  useUpdateOfficialPackProgress,
+} from "@/lib/queries";
 import { addLessonTime, markLessonSeen, setLessonCompletion } from "@/lib/progressStore";
 import { ensureProgressSyncLoop, scheduleProgressSync, setProgressSyncEnabled } from "@/lib/progressSync";
 import type { DeckMembership, MicroArticleDetail, StreamBlock } from "@/lib/types";
@@ -200,7 +199,8 @@ export default function ReaderClient({
   const [isReadLoading, setIsReadLoading] = React.useState(false);
   const [largeText, setLargeText] = React.useState(false);
 
-  const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+  const { data: me } = useMe();
+  const currentUserEmail = me?.email || null;
   const [message, setMessage] = React.useState<string | null>(null);
 
   const [slideTransitionEnabled, setSlideTransitionEnabled] = React.useState<boolean>(() =>
@@ -280,11 +280,29 @@ export default function ReaderClient({
   }, [data.slug, isLoggedIn, slideTransitionEnabled]);
 
   const [deckPickerOpen, setDeckPickerOpen] = React.useState(false);
-  const [deckMembership, setDeckMembership] = React.useState<DeckMembership[] | null>(null);
-  const [deckPickerLoading, setDeckPickerLoading] = React.useState(false);
-  const [deckPickerSaving, setDeckPickerSaving] = React.useState(false);
   const [deckCreateName, setDeckCreateName] = React.useState("");
-  const [deckCreateLoading, setDeckCreateLoading] = React.useState(false);
+
+  const {
+    data: cardDecks,
+    isPending: deckPickerLoading,
+    refetch: refetchCardDecks,
+  } = useCardDecks(data.id, deckPickerOpen && isLoggedIn);
+
+  // Copie locale : les cases à cocher basculent immédiatement, la requête
+  // confirme (ou la resynchronisation annule) derrière.
+  const [deckMembership, setDeckMembership] = React.useState<DeckMembership[] | null>(null);
+  React.useEffect(() => {
+    if (cardDecks) setDeckMembership(cardDecks);
+  }, [cardDecks]);
+
+  const updateCardDecksMutation = useUpdateCardDecks();
+  const createDeckMutation = useCreateDeck();
+  const toggleSavedMutation = useToggleSaved();
+  const setReadStateMutation = useSetReadState();
+  const updatePackProgressMutation = useUpdateOfficialPackProgress();
+
+  const deckPickerSaving = updateCardDecksMutation.isPending;
+  const deckCreateLoading = createDeckMutation.isPending;
 
   const [deck, setDeck] = React.useState<DeckState | null>(null);
 
@@ -319,20 +337,6 @@ export default function ReaderClient({
     return base;
   }, [incomingSlideActive, incomingSlideDir, outgoingSlideDir]);
 
-  const loadDeckMembership = React.useCallback(async () => {
-    if (!isLoggedIn) return;
-    setDeckPickerLoading(true);
-    try {
-      const rows = await fetchCardDecks(data.id);
-      setDeckMembership(rows);
-    } catch {
-      setDeckMembership(null);
-      showMessage("Impossible de charger les decks.");
-    } finally {
-      setDeckPickerLoading(false);
-    }
-  }, [data.id, isLoggedIn]);
-
   const openDeckPicker = React.useCallback(() => {
     if (!isLoggedIn) {
       showMessage("Connecte-toi pour sauvegarder cette carte.");
@@ -342,27 +346,6 @@ export default function ReaderClient({
   }, [isLoggedIn]);
 
   React.useEffect(() => {
-    if (!deckPickerOpen) return;
-    void loadDeckMembership();
-  }, [deckPickerOpen, loadDeckMembership]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        setCurrentUserEmail(me.email || null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setCurrentUserEmail(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  React.useEffect(() => {
     setSaved(Boolean(data.is_saved));
   }, [data.slug, data.is_saved]);
 
@@ -370,36 +353,25 @@ export default function ReaderClient({
     setIsRead(Boolean(data.is_read));
   }, [data.slug, data.is_read]);
 
-  React.useEffect(() => {
-    if (!isLoggedIn) return;
-    let cancelled = false;
-    fetchMicroArticleSavedStatus(data.slug)
-      .then((res) => {
-        if (cancelled) return;
-        setSaved(Boolean(res.saved));
-      })
-      .catch(() => {
-        // ignore: keep current state
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn, data.slug]);
+  const { data: savedStatus } = useSavedStatus(data.slug, isLoggedIn);
 
   React.useEffect(() => {
+    if (!savedStatus) return;
+    setSaved(Boolean(savedStatus.saved));
+  }, [savedStatus]);
+
+  // Ouvrir la fiche vaut lecture : on l'affiche tout de suite et on prévient
+  // le serveur en arrière-plan.
+  React.useEffect(() => {
     if (!isLoggedIn) return;
-    let cancelled = false;
     setIsRead(true);
     setLessonCompletion(data.id, true);
     scheduleProgressSync("auto_read");
-    setMicroArticleReadState(data.slug, true).catch(() => {
-      if (cancelled) return;
-      // ignore: keep optimistic state
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn, data.slug]);
+    setReadStateMutation.mutate({ slug: data.slug, isRead: true });
+    // `setReadStateMutation` est recréé à chaque rendu : l'inclure relancerait
+    // la requête en boucle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, data.slug, data.id]);
 
   const toggleSaved = async (source: "button" | "double_tap") => {
     if (!isLoggedIn) {
@@ -410,8 +382,7 @@ export default function ReaderClient({
     const next = !saved;
     setSaved(next);
     try {
-      if (next) await saveMicroArticle(data.slug);
-      else await unsaveMicroArticle(data.slug);
+      await toggleSavedMutation.mutateAsync({ slug: data.slug, saved: next });
     } catch {
       setSaved(!next);
       showMessage(
@@ -435,7 +406,7 @@ export default function ReaderClient({
     scheduleProgressSync("toggle_read");
     setIsReadLoading(true);
     try {
-      await setMicroArticleReadState(data.slug, next);
+      await setReadStateMutation.mutateAsync({ slug: data.slug, isRead: next });
       showMessage(next ? "Carte marquée comme lue." : "Carte marquée comme non lue.");
     } catch {
       setIsRead(!next);
@@ -465,12 +436,11 @@ export default function ReaderClient({
   React.useEffect(() => {
     if (!isLoggedIn) return;
     if (!deck?.deckId) return;
-    void updateOfficialPackProgress(deck.deckId, {
-      mode_last: "ordered",
-      last_card_id: data.id,
-    }).catch(() => {
-      // ignore
+    updatePackProgressMutation.mutate({
+      deckId: deck.deckId,
+      input: { mode_last: "ordered", last_card_id: data.id },
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.id, deck?.deckId, isLoggedIn]);
 
   const positionText = React.useMemo(() => {
@@ -712,31 +682,24 @@ export default function ReaderClient({
     setDeckMembership(next);
 
     const nextDeckIds = next.filter((d) => d.is_member).map((d) => d.id);
-    setDeckPickerSaving(true);
     try {
-      await updateCardDecks(data.id, nextDeckIds);
+      await updateCardDecksMutation.mutateAsync({ cardId: data.id, deckIds: nextDeckIds });
     } catch {
       showMessage("Impossible de mettre à jour les decks.");
-      await loadDeckMembership();
-    } finally {
-      setDeckPickerSaving(false);
+      void refetchCardDecks();
     }
   };
 
   const onCreateDeckFromPicker = async () => {
     const name = deckCreateName.trim();
     if (!name || deckCreateLoading || deckPickerSaving) return;
-    setDeckCreateLoading(true);
     try {
-      const created = await createDeck(name);
+      const created = await createDeckMutation.mutateAsync(name);
       const nextDeckIds = Array.from(new Set([...selectedDeckIds, created.id]));
-      await updateCardDecks(data.id, nextDeckIds);
+      await updateCardDecksMutation.mutateAsync({ cardId: data.id, deckIds: nextDeckIds });
       setDeckCreateName("");
-      await loadDeckMembership();
     } catch {
       showMessage("Impossible de créer le deck.");
-    } finally {
-      setDeckCreateLoading(false);
     }
   };
 

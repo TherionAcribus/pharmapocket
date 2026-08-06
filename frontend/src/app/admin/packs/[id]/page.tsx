@@ -8,25 +8,19 @@ import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  adminUploadImage,
-  adminMicroArticleSearch,
-  adminPackBulkAdd,
-  adminPackRemoveCard,
-  adminPackReorder,
-  deleteAdminPack,
-  fetchAdminPack,
-  fetchMe,
-  fetchTags,
-  fetchTaxonomyTree,
-  patchAdminPack,
-} from "@/lib/api";
-import type {
-  AdminMicroArticleSearchResult,
-  AdminPackDetail,
-  TagPayload,
-  TaxonomyNode,
-  TaxonomyTreeResponse,
-} from "@/lib/types";
+  useAdminMicroArticleSearch,
+  useAdminPack,
+  useAdminPackBulkAdd,
+  useAdminPackRemoveCard,
+  useAdminPackReorder,
+  useAdminUploadImage,
+  useDeleteAdminPack,
+  usePatchAdminPack,
+  useTags,
+  useTaxonomyTree,
+} from "@/lib/queries";
+import { useStaffGuard } from "@/lib/staffGuard";
+import type { AdminPackDetail, TaxonomyNode } from "@/lib/types";
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -46,12 +40,32 @@ export default function AdminPackDetailPage() {
   const routeParams = useParams<{ id: string }>();
   const packId = Number(routeParams?.id);
 
-  const [checking, setChecking] = React.useState(true);
+  const { checking, isStaff } = useStaffGuard();
 
-  const [pack, setPack] = React.useState<AdminPackDetail | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const {
+    data: pack,
+    isFetching: loading,
+    error: packError,
+    refetch: reload,
+  } = useAdminPack(packId, isStaff);
+
+  const patchPackMutation = usePatchAdminPack();
+  const deletePackMutation = useDeleteAdminPack();
+  const bulkAddMutation = useAdminPackBulkAdd();
+  const removeCardMutation = useAdminPackRemoveCard();
+  const reorderMutation = useAdminPackReorder();
+  const uploadImageMutation = useAdminUploadImage();
+  const searchMutation = useAdminMicroArticleSearch();
+
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const error = actionError ?? (packError ? toErrorMessage(packError) : null);
+
+  const saving =
+    patchPackMutation.isPending ||
+    deletePackMutation.isPending ||
+    bulkAddMutation.isPending ||
+    removeCardMutation.isPending ||
+    reorderMutation.isPending;
 
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -61,26 +75,25 @@ export default function AdminPackDetailPage() {
   const [coverImageId, setCoverImageId] = React.useState<string>("");
 
   const [coverFile, setCoverFile] = React.useState<File | null>(null);
-  const [coverUploading, setCoverUploading] = React.useState(false);
+  const coverUploading = uploadImageMutation.isPending;
 
   const [bulkItems, setBulkItems] = React.useState("");
   const [bulkResult, setBulkResult] = React.useState<string | null>(null);
 
   const [searchQ, setSearchQ] = React.useState("");
   const [searchRecent, setSearchRecent] = React.useState(false);
-  const [searchLoading, setSearchLoading] = React.useState(false);
-  const [searchResults, setSearchResults] = React.useState<AdminMicroArticleSearchResult[]>([]);
+  const searchLoading = searchMutation.isPending;
+  const searchResults = searchMutation.data ?? [];
   const [optimisticAddedIds, setOptimisticAddedIds] = React.useState<number[]>([]);
 
   const [tagQuery, setTagQuery] = React.useState("");
-  const [tagsLoading, setTagsLoading] = React.useState(false);
-  const [tags, setTags] = React.useState<TagPayload[]>([]);
+  const { data: tags = [], isPending: tagsLoading } = useTags(tagQuery, 100);
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
 
-  const [themeTree, setThemeTree] = React.useState<TaxonomyTreeResponse | null>(null);
-  const [medicamentTree, setMedicamentTree] = React.useState<TaxonomyTreeResponse | null>(null);
-  const [maladiesTree, setMaladiesTree] = React.useState<TaxonomyTreeResponse | null>(null);
-  const [pharmacologieTree, setPharmacologieTree] = React.useState<TaxonomyTreeResponse | null>(null);
+  const { data: themeTree } = useTaxonomyTree("theme");
+  const { data: medicamentTree } = useTaxonomyTree("medicament");
+  const { data: maladiesTree } = useTaxonomyTree("maladies");
+  const { data: pharmacologieTree } = useTaxonomyTree("pharmacologie");
 
   const [themeNodes, setThemeNodes] = React.useState<number[]>([]);
   const [medicamentNodes, setMedicamentNodes] = React.useState<number[]>([]);
@@ -111,195 +124,88 @@ export default function AdminPackDetailPage() {
     }
   }, [pack?.cover_image_url]);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    setTagsLoading(true);
-    fetchTags(tagQuery, 100)
-      .then((rows) => {
-        if (cancelled) return;
-        setTags(rows);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setTagsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tagQuery]);
+  // L'ordre est manipulé localement (drag & drop) avant d'être posté :
+  // il repart du serveur à chaque rechargement du pack.
+  const [orderedCards, setOrderedCards] = React.useState<AdminPackDetail["cards"]>([]);
 
   React.useEffect(() => {
-    let cancelled = false;
-    fetchTaxonomyTree("theme")
-      .then((t) => {
-        if (cancelled) return;
-        setThemeTree(t);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setThemeTree(null);
-      });
-    fetchTaxonomyTree("medicament")
-      .then((t) => {
-        if (cancelled) return;
-        setMedicamentTree(t);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMedicamentTree(null);
-      });
-    fetchTaxonomyTree("maladies")
-      .then((t) => {
-        if (cancelled) return;
-        setMaladiesTree(t);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMaladiesTree(null);
-      });
-    fetchTaxonomyTree("pharmacologie")
-      .then((t) => {
-        if (cancelled) return;
-        setPharmacologieTree(t);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setPharmacologieTree(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const reload = React.useCallback(async () => {
-    if (!Number.isFinite(packId)) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const p = await fetchAdminPack(packId);
-      setPack(p);
-      setOptimisticAddedIds([]);
-      setName(p.name);
-      setDescription(p.description || "");
-      setDifficulty(p.difficulty || "");
-      setEstimatedMinutes(p.estimated_minutes != null ? String(p.estimated_minutes) : "");
-      setStatus(p.status || "draft");
-      setCoverImageId(p.cover_image?.id != null ? String(p.cover_image.id) : "");
-    } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [packId]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setChecking(true);
-
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        if (!me.is_staff) {
-          router.replace("/discover");
-          return;
-        }
-        void reload();
-      })
-      .catch(() => {
-        if (cancelled) return;
-        router.replace("/account/login");
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setChecking(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reload, router]);
+    if (!pack) return;
+    setOrderedCards(pack.cards);
+    setOptimisticAddedIds([]);
+    setName(pack.name);
+    setDescription(pack.description || "");
+    setDifficulty(pack.difficulty || "");
+    setEstimatedMinutes(pack.estimated_minutes != null ? String(pack.estimated_minutes) : "");
+    setStatus(pack.status || "draft");
+    setCoverImageId(pack.cover_image?.id != null ? String(pack.cover_image.id) : "");
+  }, [pack]);
 
   const onSaveMeta = async () => {
     if (!Number.isFinite(packId)) return;
-    setSaving(true);
-    setError(null);
+    setActionError(null);
     try {
-      await patchAdminPack(packId, {
-        name: name.trim(),
-        description,
-        difficulty,
-        estimated_minutes: clampIntOrNull(estimatedMinutes),
-        status,
-        cover_image_id: clampIntOrNull(coverImageId),
+      await patchPackMutation.mutateAsync({
+        packId,
+        input: {
+          name: name.trim(),
+          description,
+          difficulty,
+          estimated_minutes: clampIntOrNull(estimatedMinutes),
+          status,
+          cover_image_id: clampIntOrNull(coverImageId),
+        },
       });
-      await reload();
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setSaving(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
   const onUploadCover = async () => {
     if (!coverFile) {
-      setError("Choisis d’abord un fichier image avant de cliquer sur Uploader.");
+      setActionError("Choisis d’abord un fichier image avant de cliquer sur Uploader.");
       return;
     }
-    setCoverUploading(true);
-    setError(null);
+    setActionError(null);
     try {
-      const uploaded = await adminUploadImage({ file: coverFile, title: `Pack ${packId} cover` });
+      const uploaded = await uploadImageMutation.mutateAsync({
+        file: coverFile,
+        title: `Pack ${packId} cover`,
+      });
       setCoverImageId(String(uploaded.id));
-      await patchAdminPack(packId, { cover_image_id: uploaded.id });
-      await reload();
+      await patchPackMutation.mutateAsync({ packId, input: { cover_image_id: uploaded.id } });
       setCoverFile(null);
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setCoverUploading(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
   const onBulkAdd = async () => {
     if (!Number.isFinite(packId)) return;
-    setSaving(true);
-    setError(null);
+    setActionError(null);
     setBulkResult(null);
     try {
-      const res = await adminPackBulkAdd(packId, { items: bulkItems });
+      const res = await bulkAddMutation.mutateAsync({ packId, input: { items: bulkItems } });
       setBulkResult(`Ajoutées: ${res.added}, déjà présentes: ${res.already_present}, introuvables: ${res.not_found}`);
       setBulkItems("");
-      await reload();
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setSaving(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
-  const onSearch = async () => {
-    setSearchLoading(true);
-    try {
-      const res = await adminMicroArticleSearch({
-        q: searchQ,
-        recent: searchRecent,
-        tags: selectedTags,
-        theme_nodes: themeNodes,
-        theme_scope: themeScope,
-        maladies_nodes: maladiesNodes,
-        maladies_scope: maladiesScope,
-        medicament_nodes: medicamentNodes,
-        medicament_scope: medicamentScope,
-        pharmacologie_nodes: pharmacologieNodes,
-        pharmacologie_scope: pharmacologieScope,
-      });
-      setSearchResults(res);
-      if (!res.length) {
-        // keep quiet; UI already shows "Aucun résultat"
-      }
-    } finally {
-      setSearchLoading(false);
-    }
+  const onSearch = () => {
+    searchMutation.mutate({
+      q: searchQ,
+      recent: searchRecent,
+      tags: selectedTags,
+      theme_nodes: themeNodes,
+      theme_scope: themeScope,
+      maladies_nodes: maladiesNodes,
+      maladies_scope: maladiesScope,
+      medicament_nodes: medicamentNodes,
+      medicament_scope: medicamentScope,
+      pharmacologie_nodes: pharmacologieNodes,
+      pharmacologie_scope: pharmacologieScope,
+    });
   };
 
   const inCurrentPackIds = React.useMemo(() => {
@@ -369,70 +275,58 @@ export default function AdminPackDetailPage() {
   const onAddOne = async (id: number) => {
     if (!Number.isFinite(packId)) return;
     if (inCurrentPackIds.has(id)) return;
-    setSaving(true);
-    setError(null);
+    setActionError(null);
     setOptimisticAddedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
     try {
-      await adminPackBulkAdd(packId, { microarticle_ids: [id] });
-      await reload();
+      await bulkAddMutation.mutateAsync({ packId, input: { microarticle_ids: [id] } });
     } catch (e: unknown) {
       setOptimisticAddedIds((prev) => prev.filter((x) => x !== id));
-      setError(toErrorMessage(e));
-    } finally {
-      setSaving(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
   const onRemove = async (id: number) => {
     if (!Number.isFinite(packId)) return;
-    setSaving(true);
-    setError(null);
+    setActionError(null);
     try {
-      await adminPackRemoveCard(packId, id);
-      await reload();
+      await removeCardMutation.mutateAsync({ packId, cardId: id });
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setSaving(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
   const moveCard = (from: number, to: number) => {
-    if (!pack) return;
     if (from === to) return;
-    const next = pack.cards.slice();
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
-    setPack({ ...pack, cards: next });
+    setOrderedCards((prev) => {
+      const next = prev.slice();
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
   };
 
   const onSaveOrder = async () => {
-    if (!Number.isFinite(packId) || !pack) return;
-    setSaving(true);
-    setError(null);
+    if (!Number.isFinite(packId) || !orderedCards.length) return;
+    setActionError(null);
     try {
-      const ids = pack.cards.map((c) => c.id);
-      await adminPackReorder(packId, ids);
-      await reload();
+      await reorderMutation.mutateAsync({
+        packId,
+        cardIds: orderedCards.map((c) => c.id),
+      });
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setSaving(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
   const onDeletePack = async () => {
     if (!Number.isFinite(packId)) return;
     if (!confirm("Supprimer ce pack ?")) return;
-    setSaving(true);
-    setError(null);
+    setActionError(null);
     try {
-      await deleteAdminPack(packId);
+      await deletePackMutation.mutateAsync(packId);
       router.replace("/admin/packs");
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setSaving(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
@@ -761,16 +655,16 @@ export default function AdminPackDetailPage() {
             <div className="text-sm font-semibold">Cartes du pack</div>
             <div className="text-xs text-muted-foreground">Drag & drop puis “Sauvegarder l’ordre”</div>
           </div>
-          <Button type="button" onClick={() => void onSaveOrder()} disabled={saving || !pack?.cards?.length}>
+          <Button type="button" onClick={() => void onSaveOrder()} disabled={saving || !orderedCards.length}>
             Sauvegarder l’ordre
           </Button>
         </div>
 
-        {!pack?.cards?.length ? (
+        {!orderedCards.length ? (
           <div className="text-sm text-muted-foreground">Aucune carte.</div>
         ) : (
           <div className="grid gap-2">
-            {pack.cards.map((c, idx) => (
+            {orderedCards.map((c, idx) => (
               <div
                 key={c.id}
                 draggable

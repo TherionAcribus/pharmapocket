@@ -1,22 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  createAdminThumbOverride,
-  deleteAdminThumbOverride,
-  fetchAdminThumbOverrides,
-  fetchMe,
-  fetchTaxonomyTree,
-  patchAdminThumbOverride,
-} from "@/lib/api";
-import type { TaxonomyNode, TaxonomyTreeResponse } from "@/lib/types";
+  useAdminThumbOverrides,
+  useCreateAdminThumbOverride,
+  useDeleteAdminThumbOverride,
+  usePatchAdminThumbOverride,
+  useTaxonomyTree,
+} from "@/lib/queries";
+import { useStaffGuard } from "@/lib/staffGuard";
+import type { TaxonomyNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useThumbOverrides } from "@/components/ThumbOverridesProvider";
 import { PATTERN_OPTIONS, ThumbPatternOverlay, normalizePattern, type PatternName } from "@/components/thumbPatterns";
 
 type AdminRow = {
@@ -73,32 +71,38 @@ function flattenNodes(nodes: TaxonomyNode[], prefix: string[] = []): MaladieChoi
 }
 
 export default function AdminVignettesPage() {
-  const router = useRouter();
-  const { reload: reloadPublicOverrides } = useThumbOverrides();
+  const { checking, isStaff } = useStaffGuard();
 
-  const [checking, setChecking] = React.useState(true);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const {
+    data: rows = [],
+    isFetching: loading,
+    error: rowsError,
+    refetch,
+  } = useAdminThumbOverrides(isStaff);
 
-  const [maladiesTree, setMaladiesTree] = React.useState<TaxonomyTreeResponse | null>(null);
-  const [maladiesLoading, setMaladiesLoading] = React.useState(false);
+  const createMutation = useCreateAdminThumbOverride();
+  const patchMutation = usePatchAdminThumbOverride();
+  const deleteMutation = useDeleteAdminThumbOverride();
+
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const error = actionError ?? (rowsError ? toErrorMessage(rowsError) : null);
+
+  const { data: maladiesTree, isPending: maladiesLoading } = useTaxonomyTree("maladies");
   const [maladieQuery, setMaladieQuery] = React.useState("");
-
-  const [rows, setRows] = React.useState<AdminRow[]>([]);
 
   const [createSlug, setCreateSlug] = React.useState("");
   const [createBg, setCreateBg] = React.useState("#6D5BD0");
   const [createAccent, setCreateAccent] = React.useState("#D7D2FF");
   const [createPattern, setCreatePattern] = React.useState<PatternName>("waves");
-  const [creating, setCreating] = React.useState(false);
+  const creating = createMutation.isPending;
 
   const [editingSlug, setEditingSlug] = React.useState<string | null>(null);
   const [editSlug, setEditSlug] = React.useState("");
   const [editBg, setEditBg] = React.useState("");
   const [editAccent, setEditAccent] = React.useState("");
   const [editPattern, setEditPattern] = React.useState<PatternName>("waves");
-  const [saving, setSaving] = React.useState(false);
-  const [deleting, setDeleting] = React.useState<string | null>(null);
+  const saving = patchMutation.isPending;
+  const deleting = deleteMutation.isPending ? deleteMutation.variables ?? null : null;
 
   const duplicateToCreate = (r: AdminRow) => {
     setCreateSlug(`${r.pathology_slug}-bis`);
@@ -107,66 +111,6 @@ export default function AdminVignettesPage() {
     setCreatePattern(r.pattern);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  const reload = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const next = (await fetchAdminThumbOverrides()) as AdminRow[];
-      setRows(next);
-    } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setChecking(true);
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        if (!me.is_staff) {
-          router.replace("/discover");
-          return;
-        }
-        void reload();
-      })
-      .catch(() => {
-        if (cancelled) return;
-        router.replace("/account/login");
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setChecking(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reload, router]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setMaladiesLoading(true);
-    fetchTaxonomyTree("maladies")
-      .then((t) => {
-        if (cancelled) return;
-        setMaladiesTree(t);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMaladiesTree(null);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setMaladiesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const maladieChoices = React.useMemo(() => {
     const tree = maladiesTree?.tree;
@@ -202,58 +146,46 @@ export default function AdminVignettesPage() {
     const slug = createSlug.trim();
     if (!slug) return;
 
-    setCreating(true);
-    setError(null);
+    setActionError(null);
     try {
-      await createAdminThumbOverride({
+      await createMutation.mutateAsync({
         pathology_slug: slug,
         bg: createBg.trim(),
         accent: createAccent.trim(),
         pattern: createPattern,
       });
       setCreateSlug("");
-      await reload();
-      await reloadPublicOverrides();
     } catch (err: unknown) {
-      setError(toErrorMessage(err));
-    } finally {
-      setCreating(false);
+      setActionError(toErrorMessage(err));
     }
   };
 
   const onSaveEdit = async () => {
     if (!editingSlug) return;
-    setSaving(true);
-    setError(null);
+    setActionError(null);
     try {
-      await patchAdminThumbOverride(editingSlug, {
-        pathology_slug: editSlug.trim(),
-        bg: editBg.trim(),
-        accent: editAccent.trim(),
-        pattern: editPattern,
+      await patchMutation.mutateAsync({
+        pathologySlug: editingSlug,
+        input: {
+          pathology_slug: editSlug.trim(),
+          bg: editBg.trim(),
+          accent: editAccent.trim(),
+          pattern: editPattern,
+        },
       });
       cancelEdit();
-      await reload();
-      await reloadPublicOverrides();
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setSaving(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
   const onDelete = async (slug: string) => {
     if (!slug) return;
-    setDeleting(slug);
-    setError(null);
+    setActionError(null);
     try {
-      await deleteAdminThumbOverride(slug);
-      await reload();
-      await reloadPublicOverrides();
+      await deleteMutation.mutateAsync(slug);
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setDeleting(null);
+      setActionError(toErrorMessage(e));
     }
   };
 
@@ -360,7 +292,7 @@ export default function AdminVignettesPage() {
       <div className="rounded-xl border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold">Overrides existants</div>
-          <Button type="button" variant="outline" onClick={() => void reload()} disabled={loading}>
+          <Button type="button" variant="outline" onClick={() => void refetch()} disabled={loading}>
             {loading ? "Actualisation…" : "Actualiser"}
           </Button>
         </div>

@@ -1,42 +1,14 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Image as ImageIcon, Package as PackageIcon } from "lucide-react";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
-import { fetchMe } from "@/lib/api";
+import { useStaffGuard } from "@/lib/staffGuard";
 
 export default function AdminHomePage() {
-  const router = useRouter();
-  const [checking, setChecking] = React.useState(true);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setChecking(true);
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        if (!me.is_staff) {
-          router.replace("/discover");
-          return;
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        router.replace("/account/login");
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setChecking(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+  const { checking } = useStaffGuard();
 
   return (
     <MobileScaffold title="Admin" contentClassName="space-y-4">

@@ -6,7 +6,6 @@ import { FeedClient } from "@/components/FeedClient";
 import { FilterSheet } from "@/components/FilterSheet";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
-import { fetchDiscoverFeed } from "@/lib/api";
 
 export default function DiscoverClient() {
   return (
@@ -43,12 +42,7 @@ export default function DiscoverClient() {
 
       <div className="space-y-3">
         <div className="text-sm font-semibold">Nouveautés</div>
-        <FeedClient
-          basePath="/discover"
-          embedded
-          showSearch={false}
-          fetchPage={fetchDiscoverFeed}
-        />
+        <FeedClient basePath="/discover" embedded showSearch={false} source="discover" />
       </div>
     </MobileScaffold>
   );

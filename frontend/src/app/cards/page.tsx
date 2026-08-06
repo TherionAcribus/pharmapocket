@@ -9,27 +9,57 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
-  createDeck,
-  deleteDeck,
-  fetchDeckCards,
-  fetchDecks,
-  fetchMe,
-  patchDeck,
-  removeCardFromDeck,
-} from "@/lib/api";
-import type { DeckSummary, MicroArticleListItem } from "@/lib/types";
+  useCreateDeck,
+  useDeckCards,
+  useDecks,
+  useDeleteDeck,
+  useMe,
+  usePatchDeck,
+  useRemoveCardsFromDeck,
+} from "@/lib/queries";
+
+function toErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : "Erreur";
+}
 
 export default function CardsPage() {
-  const [decks, setDecks] = React.useState<DeckSummary[]>([]);
-  const [selectedDeckId, setSelectedDeckId] = React.useState<number | null>(null);
-  const [items, setItems] = React.useState<MicroArticleListItem[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [isLoggedIn, setIsLoggedIn] = React.useState<boolean>(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [newDeckName, setNewDeckName] = React.useState<string>("");
-  const [isCreatingDeck, setIsCreatingDeck] = React.useState(false);
+  const { data: me, isPending: mePending } = useMe();
+  const isLoggedIn = Boolean(me);
 
-  const [deckActionLoading, setDeckActionLoading] = React.useState(false);
+  const { data: decks = [], isPending: decksPending, error: decksError } = useDecks(isLoggedIn);
+
+  const [selectedDeckId, setSelectedDeckId] = React.useState<number | null>(null);
+
+  // La sélection suit la liste : deck par défaut au premier chargement, et
+  // repli automatique quand le deck sélectionné disparaît (suppression).
+  React.useEffect(() => {
+    if (!decks.length) {
+      setSelectedDeckId(null);
+      return;
+    }
+    setSelectedDeckId((prev) => {
+      if (prev != null && decks.some((d) => d.id === prev)) return prev;
+      const fallback = decks.find((d) => d.is_default) ?? decks[0];
+      return fallback ? fallback.id : null;
+    });
+  }, [decks]);
+
+  const {
+    data: deckCards,
+    isPending: cardsPending,
+    error: cardsError,
+  } = useDeckCards(isLoggedIn ? selectedDeckId : null);
+
+  const items = React.useMemo(() => deckCards?.results ?? [], [deckCards]);
+
+  const createDeckMutation = useCreateDeck();
+  const patchDeckMutation = usePatchDeck();
+  const deleteDeckMutation = useDeleteDeck();
+  const removeCardsMutation = useRemoveCardsFromDeck();
+
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [newDeckName, setNewDeckName] = React.useState<string>("");
+
   const [selectMode, setSelectMode] = React.useState(false);
   const [selectedCardIds, setSelectedCardIds] = React.useState<number[]>([]);
 
@@ -38,76 +68,14 @@ export default function CardsPage() {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [removeOpen, setRemoveOpen] = React.useState(false);
 
-  React.useEffect(() => {
-    let cancelled = false;
+  const loading =
+    mePending || (isLoggedIn && (decksPending || (selectedDeckId != null && cardsPending)));
 
-    setLoading(true);
-    fetchMe()
-      .then(() => {
-        if (cancelled) return;
-        setIsLoggedIn(true);
-        return fetchDecks()
-          .then((rows) => {
-            if (cancelled) return;
-            setDecks(rows);
-            const defaultDeck = rows.find((d) => d.is_default) ?? rows[0] ?? null;
-            setSelectedDeckId(defaultDeck ? defaultDeck.id : null);
-            setError(null);
-          })
-          .catch((e) => {
-            if (cancelled) return;
-            setDecks([]);
-            setSelectedDeckId(null);
-            setError(e instanceof Error ? e.message : "Erreur");
-          });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setIsLoggedIn(false);
-        setDecks([]);
-        setSelectedDeckId(null);
-        setError(null);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
+  const isCreatingDeck = createDeckMutation.isPending;
+  const deckActionLoading =
+    patchDeckMutation.isPending || deleteDeckMutation.isPending || removeCardsMutation.isPending;
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (!isLoggedIn) return;
-    if (!selectedDeckId) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    fetchDeckCards(selectedDeckId)
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.results);
-        setError(null);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setItems([]);
-        setError(e instanceof Error ? e.message : "Erreur");
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn, selectedDeckId]);
+  const error = actionError ?? (decksError || cardsError ? "Erreur lors du chargement." : null);
 
   const deckSlugs = React.useMemo(() => items.map((i) => i.slug), [items]);
 
@@ -127,37 +95,17 @@ export default function CardsPage() {
   }, [selectedDeckId]);
 
   const onCreateDeck = async () => {
-    if (!newDeckName.trim() || isCreatingDeck) return;
-    setIsCreatingDeck(true);
+    const name = newDeckName.trim();
+    if (!name || isCreatingDeck) return;
+    setActionError(null);
     try {
-      await createDeck(newDeckName.trim());
-      const nextDecks = await fetchDecks();
-      setDecks(nextDecks);
-      const created = nextDecks.find((d) => d.name === newDeckName.trim()) ?? null;
-      if (created) setSelectedDeckId(created.id);
+      const created = await createDeckMutation.mutateAsync(name);
+      setSelectedDeckId(created.id);
       setNewDeckName("");
-      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
-    } finally {
-      setIsCreatingDeck(false);
+      setActionError(toErrorMessage(e));
     }
   };
-
-  const reloadDecks = React.useCallback(async () => {
-    const nextDecks = await fetchDecks();
-    setDecks(nextDecks);
-    return nextDecks;
-  }, []);
-
-  const reloadSelectedDeckCards = React.useCallback(async () => {
-    if (!selectedDeckId) {
-      setItems([]);
-      return;
-    }
-    const res = await fetchDeckCards(selectedDeckId);
-    setItems(res.results);
-  }, [selectedDeckId]);
 
   const onRenameSelectedDeck = () => {
     if (!selectedDeck) return;
@@ -166,47 +114,35 @@ export default function CardsPage() {
   };
 
   const onConfirmRenameSelectedDeck = async () => {
-    if (!selectedDeck) return;
-    if (deckActionLoading) return;
+    if (!selectedDeck || deckActionLoading) return;
     const nextName = renameValue.trim();
     if (!nextName) return;
 
-    setDeckActionLoading(true);
+    setActionError(null);
     try {
-      await patchDeck(selectedDeck.id, { name: nextName });
-      await reloadDecks();
-      setError(null);
+      await patchDeckMutation.mutateAsync({ deckId: selectedDeck.id, input: { name: nextName } });
       setRenameOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
-    } finally {
-      setDeckActionLoading(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
   const onDeleteSelectedDeck = () => {
-    if (!selectedDeck) return;
-    if (selectedDeck.is_default) return;
+    if (!selectedDeck || selectedDeck.is_default) return;
     setDeleteOpen(true);
   };
 
   const onConfirmDeleteSelectedDeck = async () => {
-    if (!selectedDeck) return;
-    if (selectedDeck.is_default) return;
-    if (deckActionLoading) return;
+    if (!selectedDeck || selectedDeck.is_default || deckActionLoading) return;
 
-    setDeckActionLoading(true);
+    setActionError(null);
     try {
-      await deleteDeck(selectedDeck.id);
-      const nextDecks = await reloadDecks();
-      const nextDefault = nextDecks.find((d) => d.is_default) ?? nextDecks[0] ?? null;
-      setSelectedDeckId(nextDefault ? nextDefault.id : null);
-      setError(null);
+      await deleteDeckMutation.mutateAsync(selectedDeck.id);
+      // La liste rechargée fera retomber la sélection sur le deck par défaut.
+      setSelectedDeckId(null);
       setDeleteOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
-    } finally {
-      setDeckActionLoading(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
@@ -220,28 +156,23 @@ export default function CardsPage() {
   };
 
   const onRemoveSelectedCards = () => {
-    if (!selectedDeckId) return;
-    if (!selectedCardIds.length) return;
+    if (!selectedDeckId || !selectedCardIds.length) return;
     setRemoveOpen(true);
   };
 
   const onConfirmRemoveSelectedCards = async () => {
-    if (!selectedDeckId) return;
-    if (!selectedCardIds.length) return;
-    if (deckActionLoading) return;
+    if (!selectedDeckId || !selectedCardIds.length || deckActionLoading) return;
 
-    setDeckActionLoading(true);
+    setActionError(null);
     try {
-      await Promise.all(selectedCardIds.map((id) => removeCardFromDeck(selectedDeckId, id)));
-      await reloadSelectedDeckCards();
-      await reloadDecks();
+      await removeCardsMutation.mutateAsync({
+        deckId: selectedDeckId,
+        cardIds: selectedCardIds,
+      });
       setSelectedCardIds([]);
-      setError(null);
       setRemoveOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
-    } finally {
-      setDeckActionLoading(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
@@ -254,9 +185,7 @@ export default function CardsPage() {
           Connecte-toi pour voir tes cartes sauvegardées.
         </div>
       ) : error ? (
-        <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-          Erreur lors du chargement.
-        </div>
+        <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">{error}</div>
       ) : (
         <div className="space-y-4">
           <div className="rounded-xl border bg-card p-4">
@@ -299,7 +228,7 @@ export default function CardsPage() {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => void onRenameSelectedDeck()}
+                onClick={() => onRenameSelectedDeck()}
                 disabled={!selectedDeck || deckActionLoading}
               >
                 Renommer
@@ -309,7 +238,7 @@ export default function CardsPage() {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => void onDeleteSelectedDeck()}
+                onClick={() => onDeleteSelectedDeck()}
                 disabled={!selectedDeck || selectedDeck.is_default || deckActionLoading}
               >
                 Supprimer
@@ -353,7 +282,7 @@ export default function CardsPage() {
               <Button
                 type="button"
                 size="sm"
-                onClick={() => void onRemoveSelectedCards()}
+                onClick={() => onRemoveSelectedCards()}
                 disabled={!selectMode || !selectedCardIds.length || deckActionLoading}
               >
                 Retirer ({selectedCardIds.length})

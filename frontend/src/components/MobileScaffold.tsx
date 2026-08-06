@@ -30,9 +30,11 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { authLogout, fetchMe, fetchTaxonomyTree } from "@/lib/api";
+import { authLogout } from "@/lib/api";
+import { resetSessionCache, useMe, useTaxonomyTree } from "@/lib/queries";
 import { ensureProgressSyncLoop, setProgressSyncEnabled } from "@/lib/progressSync";
-import type { TaxonomyNode, TaxonomyTreeResponse } from "@/lib/types";
+import type { TaxonomyNode } from "@/lib/types";
+import { useQueryClient } from "@tanstack/react-query";
 
 type TabItem = {
   href: string;
@@ -105,13 +107,14 @@ export function MobileScaffold({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [taxonomy, setTaxonomy] = React.useState<Taxonomy>("pharmacologie");
-  const [tree, setTree] = React.useState<TaxonomyTreeResponse | null>(null);
-  const [loadingTree, setLoadingTree] = React.useState(false);
+  const { data: tree, isPending: loadingTree } = useTaxonomyTree(taxonomy);
 
-  const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
-  const [currentUserIsStaff, setCurrentUserIsStaff] = React.useState(false);
+  const { data: me } = useMe();
+  const currentUserEmail = me?.email || null;
+  const currentUserIsStaff = Boolean(me?.is_staff);
 
   const navTabs = React.useMemo<TabItem[]>(
     () =>
@@ -120,41 +123,6 @@ export function MobileScaffold({
         : tabs,
     [currentUserIsStaff]
   );
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setLoadingTree(true);
-    fetchTaxonomyTree(taxonomy)
-      .then((t) => {
-        if (cancelled) return;
-        setTree(t);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoadingTree(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [taxonomy]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        setCurrentUserEmail(me.email || null);
-        setCurrentUserIsStaff(Boolean(me.is_staff));
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setCurrentUserEmail(null);
-        setCurrentUserIsStaff(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   React.useEffect(() => {
     ensureProgressSyncLoop();
@@ -342,7 +310,7 @@ export function MobileScaffold({
                               authLogout()
                                 .catch(() => {})
                                 .finally(() => {
-                                  setCurrentUserEmail(null);
+                                  void resetSessionCache(queryClient);
                                   router.push("/discover");
                                 });
                             }}

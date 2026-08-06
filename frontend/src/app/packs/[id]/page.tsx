@@ -8,16 +8,15 @@ import { MicroCard } from "@/components/MicroCard";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import {
-  bulkAddCardsToDeck,
-  copyOfficialPackToUserDeck,
-  fetchDecks,
-  fetchMe,
-  fetchMicroArticleReadStates,
-  fetchOfficialPackDetail,
-  startOfficialPack,
-} from "@/lib/api";
+  useBulkAddCardsToDeck,
+  useCopyOfficialPackToUserDeck,
+  useDecks,
+  useMe,
+  useOfficialPack,
+  useReadStates,
+  useStartOfficialPack,
+} from "@/lib/queries";
 import { getLessonProgress } from "@/lib/progressStore";
-import type { DeckSummary, OfficialPackDetail } from "@/lib/types";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
 const RETURN_TO_STORAGE_KEY = "pp_reader:returnTo";
@@ -67,108 +66,38 @@ export default function PackDetailPage() {
   const routeParams = useParams<{ id: string }>();
   const packId = Number(routeParams?.id);
 
-  const [pack, setPack] = React.useState<OfficialPackDetail | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [hasLoaded, setHasLoaded] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [starting, setStarting] = React.useState(false);
-  const [isLoggedIn, setIsLoggedIn] = React.useState(false);
-  const [readMap, setReadMap] = React.useState<Record<string, boolean>>({});
+  const { data: me } = useMe();
+  const isLoggedIn = Boolean(me);
 
-  const [userDecks, setUserDecks] = React.useState<DeckSummary[]>([]);
+  const { data: pack, isPending, error: packError } = useOfficialPack(packId);
+
+  const { data: userDecks = [] } = useDecks(isLoggedIn);
   const [selectedUserDeckId, setSelectedUserDeckId] = React.useState<number | null>(null);
-  const [copyLoading, setCopyLoading] = React.useState(false);
-  const [bulkAddLoading, setBulkAddLoading] = React.useState(false);
-
-  const reload = React.useCallback(async () => {
-    if (!Number.isFinite(packId)) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const p = await fetchOfficialPackDetail(packId);
-      setPack(p);
-    } catch (e: unknown) {
-      setError(toErrorMessage(e));
-      setPack(null);
-    } finally {
-      setLoading(false);
-      setHasLoaded(true);
-    }
-  }, [packId]);
 
   React.useEffect(() => {
-    let cancelled = false;
-    fetchMe()
-      .then(() => {
-        if (cancelled) return;
-        setIsLoggedIn(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setIsLoggedIn(false);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        void reload();
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reload]);
-
-  React.useEffect(() => {
-    if (!isLoggedIn) {
-      setUserDecks([]);
+    if (!userDecks.length) {
       setSelectedUserDeckId(null);
       return;
     }
-    let cancelled = false;
-    fetchDecks()
-      .then((rows) => {
-        if (cancelled) return;
-        setUserDecks(rows);
-        const def = rows.find((d) => d.is_default) ?? rows[0] ?? null;
-        setSelectedUserDeckId(def ? def.id : null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setUserDecks([]);
-        setSelectedUserDeckId(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn]);
+    setSelectedUserDeckId((prev) => {
+      if (prev != null && userDecks.some((d) => d.id === prev)) return prev;
+      const fallback = userDecks.find((d) => d.is_default) ?? userDecks[0];
+      return fallback ? fallback.id : null;
+    });
+  }, [userDecks]);
+
+  const startMutation = useStartOfficialPack();
+  const copyMutation = useCopyOfficialPackToUserDeck();
+  const bulkAddMutation = useBulkAddCardsToDeck();
+
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [starting, setStarting] = React.useState(false);
 
   const coverSrc = React.useMemo(() => normalizeImageUrl(pack?.cover_image_url), [pack?.cover_image_url]);
   const deckSlugs = React.useMemo(() => (pack?.cards ?? []).map((c) => c.slug), [pack?.cards]);
 
-  React.useEffect(() => {
-    if (!isLoggedIn) {
-      setReadMap({});
-      return;
-    }
-    if (!pack?.cards?.length) {
-      setReadMap({});
-      return;
-    }
-
-    let cancelled = false;
-    const slugs = pack.cards.map((c) => c.slug);
-    fetchMicroArticleReadStates(slugs)
-      .then((res) => {
-        if (cancelled) return;
-        setReadMap(res.items ?? {});
-      })
-      .catch(() => {
-        // ignore
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn, pack?.cards]);
+  const { data: readStates } = useReadStates(deckSlugs, isLoggedIn);
+  const readMap = readStates?.items ?? {};
 
   const localReadIds = React.useMemo(() => {
     const ids = new Set<number>();
@@ -196,17 +125,18 @@ export default function PackDetailPage() {
 
   const canContinue = Boolean(pack?.cards?.length) && resumeIndex > 0;
 
+  const error = actionError ?? (packError ? toErrorMessage(packError) : null);
+
   const startAt = async (startIndex: number) => {
-    if (!pack) return;
-    if (!pack.cards?.length) return;
+    if (!pack?.cards?.length) return;
 
     const safeIndex = Math.max(0, Math.min(pack.cards.length - 1, startIndex));
 
     setStarting(true);
-    setError(null);
+    setActionError(null);
     try {
       if (isLoggedIn) {
-        await startOfficialPack(pack.id);
+        await startMutation.mutateAsync(pack.id);
       }
 
       if (typeof window !== "undefined") {
@@ -219,45 +149,39 @@ export default function PackDetailPage() {
 
       router.push(`/micro/${encodeURIComponent(pack.cards[safeIndex].slug)}`);
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
+      setActionError(toErrorMessage(e));
     } finally {
       setStarting(false);
     }
   };
 
-  const onStart = async () => startAt(0);
-  const onContinue = async () => startAt(resumeIndex);
+  const onStart = () => void startAt(0);
+  const onContinue = () => void startAt(resumeIndex);
+
+  const copyLoading = copyMutation.isPending;
+  const bulkAddLoading = bulkAddMutation.isPending;
 
   const onCopyPackToMyDecks = async () => {
-    if (!pack) return;
-    if (!isLoggedIn) return;
-    if (copyLoading) return;
-    setCopyLoading(true);
-    setError(null);
+    if (!pack || !isLoggedIn || copyLoading) return;
+    setActionError(null);
     try {
-      const res = await copyOfficialPackToUserDeck(pack.id);
+      const res = await copyMutation.mutateAsync(pack.id);
       router.push(`/cards?deck=${encodeURIComponent(String(res.deck_id))}`);
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setCopyLoading(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
   const onAddAllToSelectedDeck = async () => {
-    if (!pack) return;
-    if (!isLoggedIn) return;
-    if (!selectedUserDeckId) return;
-    if (bulkAddLoading) return;
-    setBulkAddLoading(true);
-    setError(null);
+    if (!pack || !isLoggedIn || !selectedUserDeckId || bulkAddLoading) return;
+    setActionError(null);
     try {
-      const ids = (pack.cards ?? []).map((c) => c.id);
-      await bulkAddCardsToDeck(selectedUserDeckId, ids);
+      await bulkAddMutation.mutateAsync({
+        deckId: selectedUserDeckId,
+        cardIds: (pack.cards ?? []).map((c) => c.id),
+      });
     } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setBulkAddLoading(false);
+      setActionError(toErrorMessage(e));
     }
   };
 
@@ -274,7 +198,7 @@ export default function PackDetailPage() {
         <div className="rounded-md border bg-destructive/5 p-2 text-sm text-destructive">{error}</div>
       ) : null}
 
-      {!hasLoaded || loading ? (
+      {isPending ? (
         <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Chargement…</div>
       ) : !pack ? (
         <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Pack introuvable.</div>
@@ -308,16 +232,16 @@ export default function PackDetailPage() {
 
             <div className="flex flex-wrap gap-2">
               {canContinue ? (
-                <Button type="button" onClick={() => void onContinue()} disabled={starting || !pack.cards.length}>
+                <Button type="button" onClick={onContinue} disabled={starting || !pack.cards.length}>
                   {starting ? "Démarrage…" : "Continuer"}
                 </Button>
               ) : (
-                <Button type="button" onClick={() => void onStart()} disabled={starting || !pack.cards.length}>
+                <Button type="button" onClick={onStart} disabled={starting || !pack.cards.length}>
                   {starting ? "Démarrage…" : "Commencer"}
                 </Button>
               )}
               {canContinue ? (
-                <Button type="button" variant="outline" onClick={() => void onStart()} disabled={starting || !pack.cards.length}>
+                <Button type="button" variant="outline" onClick={onStart} disabled={starting || !pack.cards.length}>
                   Recommencer
                 </Button>
               ) : null}

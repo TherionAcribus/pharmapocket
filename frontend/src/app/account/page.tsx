@@ -6,16 +6,20 @@ import { useRouter } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useQueryClient } from "@tanstack/react-query";
+
 import {
   accountChangeEmail,
   accountChangePassword,
   authLogout,
-  deleteAccount,
   ensureCsrf,
-  fetchAccount,
-  patchAccount,
-  type AccountSummary,
 } from "@/lib/api";
+import {
+  resetSessionCache,
+  useAccount,
+  useDeleteAccount,
+  usePatchAccount,
+} from "@/lib/queries";
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -24,14 +28,17 @@ function toErrorMessage(e: unknown): string {
 
 export default function AccountPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
-  const [loading, setLoading] = React.useState(true);
-  const [account, setAccount] = React.useState<AccountSummary | null>(null);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const { data: account, isPending: loading, error: accountError } = useAccount();
+  const loadError = accountError ? toErrorMessage(accountError) : null;
+
+  const patchAccountMutation = usePatchAccount();
+  const deleteAccountMutation = useDeleteAccount();
 
   const [pseudo, setPseudo] = React.useState("");
-  const [pseudoSaving, setPseudoSaving] = React.useState(false);
   const [pseudoError, setPseudoError] = React.useState<string | null>(null);
+  const pseudoSaving = patchAccountMutation.isPending;
 
   const [newEmail, setNewEmail] = React.useState("");
   const [emailSaving, setEmailSaving] = React.useState(false);
@@ -46,46 +53,27 @@ export default function AccountPage() {
   const [passwordError, setPasswordError] = React.useState<string | null>(null);
 
   const [deletePassword, setDeletePassword] = React.useState("");
-  const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const deleting = deleteAccountMutation.isPending;
 
+  // Les champs éditables sont initialisés une fois, à l'arrivée des données :
+  // ensuite ils appartiennent à l'utilisateur qui est en train de taper.
+  const hydratedRef = React.useRef(false);
   React.useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
-    fetchAccount()
-      .then((a) => {
-        if (cancelled) return;
-        setAccount(a);
-        setPseudo(a.pseudo ?? "");
-        setNewEmail(a.email ?? "");
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setAccount(null);
-        setLoadError(toErrorMessage(e));
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!account || hydratedRef.current) return;
+    hydratedRef.current = true;
+    setPseudo(account.pseudo ?? "");
+    setNewEmail(account.email ?? "");
+  }, [account]);
 
   const savePseudo = async () => {
     if (!account || pseudoSaving) return;
-    setPseudoSaving(true);
     setPseudoError(null);
     try {
-      const res = await patchAccount({ pseudo });
-      setAccount(res);
+      const res = await patchAccountMutation.mutateAsync({ pseudo });
       setPseudo(res.pseudo ?? "");
     } catch (e: unknown) {
       setPseudoError(toErrorMessage(e));
-    } finally {
-      setPseudoSaving(false);
     }
   };
 
@@ -137,22 +125,21 @@ export default function AccountPage() {
 
   const confirmAndDeleteAccount = async () => {
     if (!account || deleting) return;
-    setDeleting(true);
     setDeleteError(null);
-    try {
-      const ok = window.confirm(
-        "Supprimer définitivement ton compte ? Cette action est irréversible."
-      );
-      if (!ok) return;
 
-      await deleteAccount({ password: deletePassword });
+    const ok = window.confirm(
+      "Supprimer définitivement ton compte ? Cette action est irréversible."
+    );
+    if (!ok) return;
+
+    try {
+      await deleteAccountMutation.mutateAsync({ password: deletePassword });
       await ensureCsrf();
       await authLogout().catch(() => {});
+      await resetSessionCache(queryClient);
       router.push("/discover");
     } catch (e: unknown) {
       setDeleteError(toErrorMessage(e));
-    } finally {
-      setDeleting(false);
     }
   };
 

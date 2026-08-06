@@ -4,7 +4,7 @@ import * as React from "react";
 import { Gavel, Leaf, Lightbulb, Pill, Scale, Shield, Stethoscope } from "lucide-react";
 
 import type { CategoryPayload, MicroArticleListItem } from "@/lib/types";
-import { useThumbOverrides } from "@/components/ThumbOverridesProvider";
+import { useThumbOverrides } from "@/lib/thumbOverrides";
 import type { PatternName } from "@/components/thumbPatterns";
 import { ThumbPatternOverlay } from "@/components/thumbPatterns";
 

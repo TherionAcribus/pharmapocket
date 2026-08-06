@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
-import { fetchLanding, fetchMe } from "@/lib/api";
-import type { LandingPayload } from "@/lib/types";
+import { useLanding, useMe } from "@/lib/queries";
 
 function landingTargetToPath(target: string | null | undefined): string {
   if (target === "discover") return "/discover";
@@ -19,41 +18,13 @@ function landingTargetToPath(target: string | null | undefined): string {
 
 export default function Home() {
   const router = useRouter();
-  const [data, setData] = React.useState<LandingPayload | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const { data: me } = useMe();
+  const { data, isPending: loading } = useLanding();
 
   React.useEffect(() => {
-    let cancelled = false;
-
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        if (me?.landing_redirect_enabled) {
-          router.replace(landingTargetToPath(me.landing_redirect_target));
-        }
-      })
-      .catch(() => {
-        // ignore (not logged in)
-      });
-
-    fetchLanding()
-      .then((payload) => {
-        if (cancelled) return;
-        setData(payload);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setData(null);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+    if (!me?.landing_redirect_enabled) return;
+    router.replace(landingTargetToPath(me.landing_redirect_target));
+  }, [me, router]);
 
   const showContent = !loading && data;
   const showFallback = !loading && !data;

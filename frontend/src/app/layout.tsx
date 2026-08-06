@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AccentColorProvider } from "@/components/AccentColorProvider";
-import { ThumbOverridesProvider } from "@/components/ThumbOverridesProvider";
+import { QueryProvider } from "@/lib/queryClient";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,9 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AccentColorProvider>
-          <ThumbOverridesProvider>{children}</ThumbOverridesProvider>
-        </AccentColorProvider>
+        <QueryProvider>
+          <AccentColorProvider>{children}</AccentColorProvider>
+        </QueryProvider>
       </body>
     </html>
   );

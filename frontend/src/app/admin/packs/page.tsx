@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createAdminPack, fetchAdminPacks, fetchMe } from "@/lib/api";
-import type { AdminPackSummary } from "@/lib/types";
+import { useAdminPacks, useCreateAdminPack } from "@/lib/queries";
+import { useStaffGuard } from "@/lib/staffGuard";
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -17,69 +17,29 @@ function toErrorMessage(e: unknown): string {
 
 export default function AdminPacksPage() {
   const router = useRouter();
+  const { checking, isStaff } = useStaffGuard();
 
-  const [checking, setChecking] = React.useState(true);
-  const [packs, setPacks] = React.useState<AdminPackSummary[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const { data: packs = [], isFetching: loading, error: packsError, refetch } = useAdminPacks(isStaff);
+  const createPackMutation = useCreateAdminPack();
 
   const [createName, setCreateName] = React.useState("");
-  const [creating, setCreating] = React.useState(false);
+  const [actionError, setActionError] = React.useState<string | null>(null);
 
-  const reload = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const rows = await fetchAdminPacks();
-      setPacks(rows);
-    } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setChecking(true);
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        if (!me.is_staff) {
-          router.replace("/discover");
-          return;
-        }
-        void reload();
-      })
-      .catch(() => {
-        if (cancelled) return;
-        router.replace("/account/login");
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setChecking(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reload, router]);
+  const creating = createPackMutation.isPending;
+  const error = actionError ?? (packsError ? toErrorMessage(packsError) : null);
 
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = createName.trim();
     if (!name) return;
 
-    setCreating(true);
-    setError(null);
+    setActionError(null);
     try {
-      const created = await createAdminPack({ name, status: "draft" });
+      const created = await createPackMutation.mutateAsync({ name, status: "draft" });
       setCreateName("");
       router.push(`/admin/packs/${created.id}`);
     } catch (err: unknown) {
-      setError(toErrorMessage(err));
-    } finally {
-      setCreating(false);
+      setActionError(toErrorMessage(err));
     }
   };
 
@@ -105,7 +65,7 @@ export default function AdminPacksPage() {
       <div className="rounded-xl border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold">Packs</div>
-          <Button type="button" variant="outline" onClick={() => void reload()} disabled={loading}>
+          <Button type="button" variant="outline" onClick={() => void refetch()} disabled={loading}>
             {loading ? "Actualisation…" : "Actualiser"}
           </Button>
         </div>

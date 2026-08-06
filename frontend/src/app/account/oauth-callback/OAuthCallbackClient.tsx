@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
-import { fetchMe } from "@/lib/api";
+import { useMe } from "@/lib/queries";
 
 function toNextPath(next: string | null): string {
   if (!next) return "";
@@ -27,36 +27,24 @@ export default function OAuthCallbackClient() {
 
   const next = toNextPath(sp.get("next"));
 
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const { data: me, isPending: loading, error: meError } = useMe();
 
   React.useEffect(() => {
-    let cancelled = false;
+    if (!me) return;
+    if (next) {
+      router.replace(next);
+      return;
+    }
+    const shouldRedirect = Boolean(me.landing_redirect_enabled);
+    router.replace(shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover");
+  }, [me, next, router]);
 
-    fetchMe()
-      .then((me) => {
-        if (cancelled) return;
-        if (next) {
-          router.replace(next);
-          return;
-        }
-        const shouldRedirect = Boolean(me.landing_redirect_enabled);
-        const target = shouldRedirect ? landingTargetToPath(me.landing_redirect_target) : "/discover";
-        router.replace(target);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [next, router]);
+  // `me === null` : le retour du fournisseur n'a pas ouvert de session.
+  const error = meError
+    ? meError.message
+    : !loading && !me
+      ? "La connexion n’a pas abouti."
+      : null;
 
   return (
     <MobileScaffold title="Connexion…">

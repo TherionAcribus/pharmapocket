@@ -11,7 +11,8 @@ import {
   normalizeHexColor,
   setStoredAccentColor,
 } from "@/lib/accentColor";
-import { fetchMe, fetchPreferences, patchPreferences, type LandingRedirectTarget } from "@/lib/api";
+import type { LandingRedirectTarget } from "@/lib/api";
+import { useMe, usePatchPreferences, usePreferences } from "@/lib/queries";
 import * as React from "react";
 
 const SLIDE_TRANSITION_STORAGE_KEY = "pp_reader_slide_transition";
@@ -38,16 +39,19 @@ function writeSlideTransitionPreferenceToStorage(next: boolean) {
 
 export default function PreferencesPage() {
   const [hex, setHex] = React.useState(() => getStoredAccentColor() ?? "");
-  const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+  const { data: me } = useMe();
+  const isLoggedIn = Boolean(me);
   const [slideTransitionEnabled, setSlideTransitionEnabled] = React.useState<boolean>(() =>
     readSlideTransitionPreferenceFromStorage()
   );
-  const [landingRedirectEnabled, setLandingRedirectEnabled] = React.useState(false);
-  const [landingRedirectTarget, setLandingRedirectTarget] = React.useState<LandingRedirectTarget>(
-    "start"
-  );
-  const [landingRedirectLoading, setLandingRedirectLoading] = React.useState(false);
-  const [landingRedirectSaving, setLandingRedirectSaving] = React.useState(false);
+
+  const { data: preferences, isPending: preferencesPending } = usePreferences(isLoggedIn);
+  const patchPreferencesMutation = usePatchPreferences();
+
+  const landingRedirectEnabled = Boolean(preferences?.landing_redirect_enabled);
+  const landingRedirectTarget: LandingRedirectTarget = preferences?.landing_redirect_target ?? "start";
+  const landingRedirectLoading = isLoggedIn && preferencesPending;
+  const landingRedirectSaving = patchPreferencesMutation.isPending;
 
   const onSetHex = (next: string) => {
     setHex(next);
@@ -64,45 +68,6 @@ export default function PreferencesPage() {
   };
 
   React.useEffect(() => {
-    let cancelled = false;
-    fetchMe()
-      .then(() => {
-        if (cancelled) return;
-        setIsLoggedIn(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setIsLoggedIn(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (!isLoggedIn) return;
-    let cancelled = false;
-    setLandingRedirectLoading(true);
-    fetchPreferences()
-      .then((p) => {
-        if (cancelled) return;
-        setLandingRedirectEnabled(Boolean(p.landing_redirect_enabled));
-        setLandingRedirectTarget(p.landing_redirect_target);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        // ignore: keep defaults
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLandingRedirectLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn]);
-
-  React.useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key !== SLIDE_TRANSITION_STORAGE_KEY) return;
       setSlideTransitionEnabled(readSlideTransitionPreferenceFromStorage());
@@ -116,21 +81,14 @@ export default function PreferencesPage() {
     writeSlideTransitionPreferenceToStorage(next);
   };
 
-  const saveLandingRedirect = async (input: Partial<{ enabled: boolean; target: LandingRedirectTarget }>) => {
-    if (!isLoggedIn) return;
-    if (landingRedirectSaving) return;
-    setLandingRedirectSaving(true);
-    try {
-      const res = await patchPreferences({
-        landing_redirect_enabled:
-          typeof input.enabled === "boolean" ? input.enabled : landingRedirectEnabled,
-        landing_redirect_target: input.target ?? landingRedirectTarget,
-      });
-      setLandingRedirectEnabled(Boolean(res.landing_redirect_enabled));
-      setLandingRedirectTarget(res.landing_redirect_target);
-    } finally {
-      setLandingRedirectSaving(false);
-    }
+  const saveLandingRedirect = (input: Partial<{ enabled: boolean; target: LandingRedirectTarget }>) => {
+    if (!isLoggedIn || landingRedirectSaving) return;
+    // La réponse de l'API réécrit le cache : pas d'état local à resynchroniser.
+    patchPreferencesMutation.mutate({
+      landing_redirect_enabled:
+        typeof input.enabled === "boolean" ? input.enabled : landingRedirectEnabled,
+      landing_redirect_target: input.target ?? landingRedirectTarget,
+    });
   };
 
   return (
@@ -214,20 +172,12 @@ export default function PreferencesPage() {
             <button
               type="button"
               className="mt-4 flex w-full items-center gap-3 rounded-lg border bg-background px-3 py-3 text-left"
-              onClick={() => {
-                const next = !landingRedirectEnabled;
-                setLandingRedirectEnabled(next);
-                void saveLandingRedirect({ enabled: next });
-              }}
+              onClick={() => saveLandingRedirect({ enabled: !landingRedirectEnabled })}
               aria-disabled={landingRedirectLoading || landingRedirectSaving}
             >
               <Checkbox
                 checked={landingRedirectEnabled}
-                onCheckedChange={(v) => {
-                  const next = Boolean(v);
-                  setLandingRedirectEnabled(next);
-                  void saveLandingRedirect({ enabled: next });
-                }}
+                onCheckedChange={(v) => saveLandingRedirect({ enabled: Boolean(v) })}
                 onClick={(e) => e.stopPropagation()}
               />
               <div className="min-w-0 flex-1">
@@ -253,10 +203,7 @@ export default function PreferencesPage() {
                   type="button"
                   variant={landingRedirectTarget === key ? "default" : "outline"}
                   disabled={!landingRedirectEnabled || landingRedirectLoading || landingRedirectSaving}
-                  onClick={() => {
-                    setLandingRedirectTarget(key);
-                    void saveLandingRedirect({ target: key });
-                  }}
+                  onClick={() => saveLandingRedirect({ target: key })}
                 >
                   {label}
                 </Button>

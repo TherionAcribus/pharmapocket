@@ -5,13 +5,7 @@ import Link from "next/link";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
-import { fetchOfficialPacks, fetchMe } from "@/lib/api";
-import type { OfficialPackSummary } from "@/lib/types";
-
-function toErrorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  return String(e);
-}
+import { useMe, useOfficialPacks } from "@/lib/queries";
 
 function normalizeImageUrl(url?: string | null): string | null {
   if (!url) return null;
@@ -22,46 +16,10 @@ function normalizeImageUrl(url?: string | null): string | null {
 }
 
 export default function PacksPage() {
-  const [packs, setPacks] = React.useState<OfficialPackSummary[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [hasLoaded, setHasLoaded] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = React.useState<boolean>(false);
+  const { data: me } = useMe();
+  const isLoggedIn = Boolean(me);
 
-  const reload = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const rows = await fetchOfficialPacks();
-      setPacks(rows);
-    } catch (e: unknown) {
-      setError(toErrorMessage(e));
-      setPacks([]);
-    } finally {
-      setLoading(false);
-      setHasLoaded(true);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    fetchMe()
-      .then(() => {
-        if (cancelled) return;
-        setIsLoggedIn(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setIsLoggedIn(false);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        void reload();
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reload]);
+  const { data: packs = [], isPending, isFetching, error, refetch } = useOfficialPacks();
 
   return (
     <MobileScaffold title="Packs" contentClassName="space-y-4">
@@ -69,16 +27,18 @@ export default function PacksPage() {
         <div className="text-xs text-muted-foreground">
           {isLoggedIn ? "Connecté" : "Mode invité"}
         </div>
-        <Button type="button" variant="outline" onClick={() => void reload()} disabled={loading}>
-          {loading ? "Actualisation…" : "Actualiser"}
+        <Button type="button" variant="outline" onClick={() => void refetch()} disabled={isFetching}>
+          {isFetching ? "Actualisation…" : "Actualiser"}
         </Button>
       </div>
 
       {error ? (
-        <div className="rounded-md border bg-destructive/5 p-2 text-sm text-destructive">{error}</div>
+        <div className="rounded-md border bg-destructive/5 p-2 text-sm text-destructive">
+          {error.message}
+        </div>
       ) : null}
 
-      {!hasLoaded || loading ? (
+      {isPending ? (
         <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Chargement…</div>
       ) : !packs.length ? (
         <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">

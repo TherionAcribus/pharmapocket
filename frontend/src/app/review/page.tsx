@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { fetchDecks, fetchMe, fetchSrsNext, postSrsReview } from "@/lib/api";
-import type { SrsScope } from "@/lib/api";
-import type { DeckSummary, SrsNext, SrsRating } from "@/lib/types";
+import { useDecks, useMe, useRateSrsCard, useSrsNext } from "@/lib/queries";
+import type { SrsNextQuery, SrsScope } from "@/lib/api";
+import type { SrsRating } from "@/lib/types";
 
 function RichText({ html, className }: { html?: string; className?: string }) {
   if (!html) return null;
@@ -18,123 +18,86 @@ function RichText({ html, className }: { html?: string; className?: string }) {
 }
 
 export default function ReviewPage() {
-  const [isLoggedIn, setIsLoggedIn] = React.useState<boolean>(false);
-  const [loadingUser, setLoadingUser] = React.useState(true);
+  const { data: me, isPending: loadingUser } = useMe();
+  const isLoggedIn = Boolean(me);
 
-  const [decks, setDecks] = React.useState<DeckSummary[]>([]);
-  const [loadingDecks, setLoadingDecks] = React.useState(false);
+  const { data: decks = [], isPending: loadingDecks } = useDecks(isLoggedIn);
 
   const [scope, setScope] = React.useState<SrsScope>("all_decks");
   const [selectedDeckId, setSelectedDeckId] = React.useState<number | null>(null);
   const [onlyDue, setOnlyDue] = React.useState(true);
 
-  const [revealed, setRevealed] = React.useState(false);
-  const [current, setCurrent] = React.useState<SrsNext | null>(null);
-  const [loadingCard, setLoadingCard] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [sessionCount, setSessionCount] = React.useState(0);
-
   React.useEffect(() => {
-    let cancelled = false;
-    setLoadingUser(true);
-    fetchMe()
-      .then(() => {
-        if (cancelled) return;
-        setIsLoggedIn(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setIsLoggedIn(false);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoadingUser(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (!isLoggedIn) return;
-    let cancelled = false;
-    setLoadingDecks(true);
-    fetchDecks()
-      .then((rows) => {
-        if (cancelled) return;
-        setDecks(rows);
-        const defaultDeck = rows.find((d) => d.is_default) ?? rows[0] ?? null;
-        setSelectedDeckId(defaultDeck ? defaultDeck.id : null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setDecks([]);
-        setSelectedDeckId(null);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoadingDecks(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn]);
-
-  const loadNext = React.useCallback(async () => {
-    if (!isLoggedIn) return;
-
-    if (scope === "deck" && !selectedDeckId) {
-      setError("Choisis un deck.");
+    if (!decks.length) {
+      setSelectedDeckId(null);
       return;
     }
+    setSelectedDeckId((prev) => {
+      if (prev != null && decks.some((d) => d.id === prev)) return prev;
+      const fallback = decks.find((d) => d.is_default) ?? decks[0];
+      return fallback ? fallback.id : null;
+    });
+  }, [decks]);
 
-    setError(null);
-    setLoadingCard(true);
-    setRevealed(false);
-    try {
-      const res = await fetchSrsNext({
-        scope,
-        deck_id: scope === "deck" ? selectedDeckId : undefined,
-        only_due: onlyDue,
-      });
-      setCurrent(res);
-    } catch (e) {
-      setCurrent(null);
-      setError(e instanceof Error ? e.message : "Erreur");
-    } finally {
-      setLoadingCard(false);
-    }
-  }, [isLoggedIn, onlyDue, scope, selectedDeckId]);
+  const [revealed, setRevealed] = React.useState(false);
+  const [sessionCount, setSessionCount] = React.useState(0);
+  const [started, setStarted] = React.useState(false);
+  const [scopeError, setScopeError] = React.useState<string | null>(null);
+
+  const srsQuery = React.useMemo<SrsNextQuery>(
+    () => ({
+      scope,
+      deck_id: scope === "deck" ? selectedDeckId : undefined,
+      only_due: onlyDue,
+    }),
+    [onlyDue, scope, selectedDeckId]
+  );
+
+  // La session ne démarre jamais toute seule : `started` n'est vrai qu'après un
+  // clic sur « Démarrer », et retombe dès qu'un filtre change.
+  const {
+    data: current,
+    isFetching: loadingCard,
+    error: queryError,
+    refetch,
+  } = useSrsNext(srsQuery, isLoggedIn && started);
+
+  const rateMutation = useRateSrsCard(srsQuery);
 
   React.useEffect(() => {
-    setCurrent(null);
+    setStarted(false);
     setRevealed(false);
     setSessionCount(0);
-    setError(null);
+    setScopeError(null);
   }, [scope, selectedDeckId, onlyDue]);
 
-  const onRate = async (rating: SrsRating) => {
-    if (!current?.card) return;
-    if (loadingCard) return;
+  const requestError = queryError ?? rateMutation.error;
+  const error = scopeError ?? requestError?.message ?? null;
 
-    setLoadingCard(true);
-    setError(null);
+  const loadNext = () => {
+    if (!isLoggedIn) return;
+    if (scope === "deck" && !selectedDeckId) {
+      setScopeError("Choisis un deck.");
+      return;
+    }
+    setScopeError(null);
+    setRevealed(false);
+    if (!started) setStarted(true);
+    else void refetch();
+  };
+
+  const onRate = async (rating: SrsRating) => {
+    if (!current?.card || loadingCard || rateMutation.isPending) return;
     try {
-      await postSrsReview({ card_id: current.card.id, rating });
+      await rateMutation.mutateAsync({ card_id: current.card.id, rating });
       setSessionCount((v) => v + 1);
-      const res = await fetchSrsNext({
-        scope,
-        deck_id: scope === "deck" ? selectedDeckId : undefined,
-        only_due: onlyDue,
-      });
-      setCurrent(res);
       setRevealed(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
-    } finally {
-      setLoadingCard(false);
+    } catch {
+      // `rateMutation.error` alimente déjà le bandeau d'erreur.
     }
   };
+
+  const busy = loadingCard || rateMutation.isPending;
 
   return (
     <MobileScaffold title="À revoir">
@@ -223,7 +186,7 @@ export default function ReviewPage() {
 
               <div className="flex-1" />
 
-              <Button type="button" size="sm" onClick={() => void loadNext()} disabled={loadingCard}>
+              <Button type="button" size="sm" onClick={loadNext} disabled={busy}>
                 Démarrer
               </Button>
             </div>
@@ -241,11 +204,13 @@ export default function ReviewPage() {
 
             <Separator className="my-4" />
 
-            {loadingCard ? (
+            {busy ? (
               <div className="text-sm text-muted-foreground">Chargement…</div>
             ) : !current?.card ? (
               <div className="text-sm text-muted-foreground">
-                {current ? "Aucune carte disponible pour ce filtre." : "Lance une session pour commencer."}
+                {started && current
+                  ? "Aucune carte disponible pour ce filtre."
+                  : "Lance une session pour commencer."}
               </div>
             ) : (
               <div className="space-y-4">
@@ -278,14 +243,14 @@ export default function ReviewPage() {
                       ) : null}
 
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" onClick={() => void onRate("know")} disabled={loadingCard}>
+                        <Button type="button" onClick={() => void onRate("know")} disabled={busy}>
                           Je sais
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() => void onRate("medium")}
-                          disabled={loadingCard}
+                          disabled={busy}
                         >
                           Moyen
                         </Button>
@@ -293,7 +258,7 @@ export default function ReviewPage() {
                           type="button"
                           variant="destructive"
                           onClick={() => void onRate("again")}
-                          disabled={loadingCard}
+                          disabled={busy}
                         >
                           À revoir
                         </Button>
@@ -303,7 +268,7 @@ export default function ReviewPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => void loadNext()} disabled={loadingCard}>
+                  <Button type="button" variant="outline" onClick={loadNext} disabled={busy}>
                     Passer
                   </Button>
                   <Button asChild type="button" variant="outline">

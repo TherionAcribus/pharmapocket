@@ -7,46 +7,22 @@ import { FilterSheet } from "@/components/FilterSheet";
 import { MicroCard } from "@/components/MicroCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchFeed, fetchMe, fetchMicroArticleReadStates } from "@/lib/api";
+import { useFeed, useMe, useReadStates, type FeedSource } from "@/lib/queries";
 import type { FeedQuery } from "@/lib/api";
-import type { MicroArticleListItem, PaginatedMicroArticleListItemList } from "@/lib/types";
-
-function toErrorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  return String(e);
-}
-
-function cursorFromUrl(nextUrl: string | null): string | null {
-  if (!nextUrl) return null;
-  try {
-    const url = new URL(nextUrl);
-    return url.searchParams.get("cursor");
-  } catch {
-    // Fallback if API returns relative URLs
-    try {
-      const url = new URL(nextUrl, "http://localhost");
-      return url.searchParams.get("cursor");
-    } catch {
-      return null;
-    }
-  }
-}
 
 export function FeedClient({
   basePath = "/discover",
   embedded = false,
   showSearch = true,
-  fetchPage = fetchFeed,
+  source = "content",
 }: {
   basePath?: string;
   embedded?: boolean;
   showSearch?: boolean;
-  fetchPage?: (query: FeedQuery) => Promise<PaginatedMicroArticleListItemList>;
+  source?: FeedSource;
 }) {
   const router = useRouter();
   const sp = useSearchParams();
-
-  const queryKey = sp.toString();
 
   const qParam = sp.get("q") ?? "";
   const [q, setQ] = useState(qParam);
@@ -55,7 +31,7 @@ export function FeedClient({
     setQ(qParam);
   }, [qParam]);
 
-  const feedQuery = useMemo(() => {
+  const feedQuery = useMemo<FeedQuery>(() => {
     const tags = sp.get("tags");
     const taxonomy = sp.get("taxonomy");
     const node = sp.get("node");
@@ -83,99 +59,23 @@ export function FeedClient({
     };
   }, [qParam, sp]);
 
-  const [items, setItems] = useState<MicroArticleListItem[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data,
+    error,
+    isPending,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useFeed(source, feedQuery);
 
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [readMap, setReadMap] = useState<Record<string, boolean>>({});
-
+  const items = useMemo(() => data?.pages.flatMap((page) => page.results) ?? [], [data]);
   const deckSlugs = useMemo(() => items.map((i) => i.slug), [items]);
 
+  const { data: me } = useMe();
+  const { data: readStates } = useReadStates(deckSlugs, Boolean(me));
+  const readMap = readStates?.items ?? {};
+
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchMe()
-      .then(() => {
-        if (cancelled) return;
-        setIsLoggedIn(true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setIsLoggedIn(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function loadFirstPage() {
-    setLoading(true);
-    setError(null);
-    try {
-      const page = await fetchPage({ ...feedQuery, cursor: null });
-      setItems(page.results);
-      setNextCursor(cursorFromUrl(page.next ?? null));
-    } catch (e: unknown) {
-      setError(toErrorMessage(e));
-      setItems([]);
-      setNextCursor(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadMore() {
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const page: PaginatedMicroArticleListItemList = await fetchPage({
-        ...feedQuery,
-        cursor: nextCursor,
-      });
-      setItems((prev) => [...prev, ...page.results]);
-      setNextCursor(cursorFromUrl(page.next ?? null));
-    } catch (e: unknown) {
-      setError(toErrorMessage(e));
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  useEffect(() => {
-    loadFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey]);
-
-  useEffect(() => {
-    if (!isLoggedIn) {
-      setReadMap({});
-      return;
-    }
-    if (!items.length) {
-      setReadMap({});
-      return;
-    }
-
-    let cancelled = false;
-    const slugs = items.map((i) => i.slug);
-    fetchMicroArticleReadStates(slugs)
-      .then((res) => {
-        if (cancelled) return;
-        setReadMap(res.items ?? {});
-      })
-      .catch(() => {
-        // ignore
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn, items]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -184,8 +84,8 @@ export function FeedClient({
     const io = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
-        if (first?.isIntersecting) {
-          void loadMore();
+        if (first?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
         }
       },
       { rootMargin: "600px" }
@@ -193,8 +93,7 @@ export function FeedClient({
 
     io.observe(el);
     return () => io.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nextCursor, loadingMore, queryKey]);
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const onSubmitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,15 +161,15 @@ export function FeedClient({
       >
         {error ? (
           <div className="rounded-lg border bg-destructive/5 p-3 text-sm text-destructive">
-            {error}
+            {error.message}
           </div>
         ) : null}
 
-        {loading ? (
+        {isPending ? (
           <div className="text-sm text-muted-foreground">Chargement…</div>
         ) : null}
 
-        {!loading && !items.length ? (
+        {!isPending && !items.length ? (
           <div className="text-sm text-muted-foreground">Aucun résultat.</div>
         ) : null}
 
@@ -288,10 +187,14 @@ export function FeedClient({
 
         <div ref={sentinelRef} />
 
-        {nextCursor ? (
+        {hasNextPage ? (
           <div className="flex justify-center">
-            <Button onClick={loadMore} disabled={loadingMore} variant="secondary">
-              {loadingMore ? "Chargement…" : "Charger plus"}
+            <Button
+              onClick={() => void fetchNextPage()}
+              disabled={isFetchingNextPage}
+              variant="secondary"
+            >
+              {isFetchingNextPage ? "Chargement…" : "Charger plus"}
             </Button>
           </div>
         ) : null}
