@@ -1992,17 +1992,31 @@ class AdminPackBulkAddView(APIView):
         )
         next_sort = int(max_sort) + 1 if max_sort is not None else 0
 
+        # Résolution en 2 requêtes (ids puis slugs) au lieu d'un lookup par token.
+        wanted_ids = {int(t) for t in tokens if isinstance(t, str) and t.isdigit()}
+        wanted_slugs = {slugify(t) for t in tokens if isinstance(t, str)}
+
+        pages_by_id = {}
+        if wanted_ids:
+            pages_by_id = MicroArticlePage.objects.in_bulk(wanted_ids)
+
+        pages_by_slug = {}
+        if wanted_slugs:
+            pages_by_slug = {
+                p.slug: p for p in MicroArticlePage.objects.filter(slug__in=wanted_slugs)
+            }
+
         added = 0
         already = 0
         not_found = 0
+        to_create = []
 
         for t in tokens:
             page = None
             if isinstance(t, str) and t.isdigit():
-                page = MicroArticlePage.objects.filter(id=int(t)).first()
+                page = pages_by_id.get(int(t))
             if page is None and isinstance(t, str):
-                slug = slugify(t)
-                page = MicroArticlePage.objects.filter(slug=slug).first()
+                page = pages_by_slug.get(slugify(t))
             if page is None:
                 not_found += 1
                 continue
@@ -2013,9 +2027,12 @@ class AdminPackBulkAddView(APIView):
             obj = DeckCard(deck=deck, microarticle=page)
             obj.sort_order = next_sort
             next_sort += 1
-            obj.save()
+            to_create.append(obj)
             existing_ids.add(page.id)
             added += 1
+
+        if to_create:
+            DeckCard.objects.bulk_create(to_create)
 
         return Response({"added": added, "already_present": already, "not_found": not_found})
 
@@ -2552,9 +2569,14 @@ class SubjectCardsReorderView(APIView):
             raise DRFValidationError({"order": "order must be a list of card IDs"})
 
         links = {link.id: link for link in subject.subject_cards.all()}
+        updated = []
         for idx, card_id in enumerate(order):
-            if card_id in links:
-                links[card_id].sort_order = idx
-                links[card_id].save(update_fields=["sort_order"])
+            link = links.get(card_id)
+            if link is not None and link.sort_order != idx:
+                link.sort_order = idx
+                updated.append(link)
 
-        return Response({"ok": True})
+        if updated:
+            SubjectCard.objects.bulk_update(updated, ["sort_order"])
+
+        return Response({"ok": True, "updated": len(updated)})

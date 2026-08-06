@@ -418,3 +418,168 @@ class SubjectListQueryCountTests(APITestCase):
         self.assertTrue(by_slug["sujet-1"]["has_recap"])
         self.assertEqual(by_slug["sans-recap"]["cards_count"], 1)
         self.assertFalse(by_slug["sans-recap"]["has_recap"])
+
+
+class BulkWriteQueryCountTests(APITestCase):
+    """Les écritures en lot (reorder, bulk-add) ne doivent pas faire 1 requête par carte."""
+
+    def setUp(self):
+        super().setUp()
+        root = Page.get_first_root_node()
+        if not Site.objects.exists():
+            Site.objects.create(hostname="localhost", root_page=root, is_default_site=True)
+
+        self.index = MicroArticleIndexPage(title="Micro bulk", slug="micro-bulk")
+        root.add_child(instance=self.index)
+        self.index.save_revision().publish()
+
+        self.user = get_user_model().objects.create_user(
+            username="bulk-staff",
+            email="bulk-staff@example.com",
+            password="pharmapocket-test-pwd",
+            is_staff=True,
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.page_count = 0
+
+    def _make_pages(self, count: int) -> list[MicroArticlePage]:
+        pages = []
+        for _ in range(count):
+            self.page_count += 1
+            n = self.page_count
+            page = MicroArticlePage(
+                title=f"Carte bulk {n}",
+                slug=f"carte-bulk-{n}",
+                answer_express=f"Réponse {n}.",
+            )
+            self.index.add_child(instance=page)
+            page.save_revision().publish()
+            pages.append(page)
+        return pages
+
+    def _post_query_count(self, url: str, payload: dict) -> int:
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.post(url, payload, format="json", secure=True)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        return len(ctx)
+
+    # --- Subject reorder -------------------------------------------------
+
+    def _subject_with_cards(self, slug: str, count: int) -> Subject:
+        subject = Subject.objects.create(name=slug, slug=slug)
+        for page in self._make_pages(count):
+            SubjectCard.objects.create(subject=subject, microarticle=page)
+        return subject
+
+    def _reorder_query_count(self, subject: Subject) -> int:
+        ids = list(
+            subject.subject_cards.order_by("sort_order", "id").values_list("id", flat=True)
+        )
+        # Ordre inversé : chaque carte change de position, donc chaque carte doit être écrite.
+        return self._post_query_count(
+            f"/api/v1/content/subjects/{subject.slug}/cards/reorder/",
+            {"order": list(reversed(ids))},
+        )
+
+    def test_subject_reorder_query_count_is_constant(self):
+        with_two = self._reorder_query_count(self._subject_with_cards("reorder-2", 2))
+        with_six = self._reorder_query_count(self._subject_with_cards("reorder-6", 6))
+        self.assertEqual(
+            with_two,
+            with_six,
+            f"reorder : {with_two} requêtes pour 2 cartes vs {with_six} pour 6 → écriture en boucle",
+        )
+
+    def test_subject_reorder_applies_the_requested_order(self):
+        subject = self._subject_with_cards("reorder-apply", 3)
+        ids = list(
+            subject.subject_cards.order_by("sort_order", "id").values_list("id", flat=True)
+        )
+        expected = [ids[2], ids[0], ids[1]]
+
+        resp = self.client.post(
+            f"/api/v1/content/subjects/{subject.slug}/cards/reorder/",
+            {"order": expected},
+            format="json",
+            secure=True,
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["updated"], 3)
+        self.assertEqual(
+            list(subject.subject_cards.order_by("sort_order", "id").values_list("id", flat=True)),
+            expected,
+        )
+
+    def test_subject_reorder_ignores_unknown_ids(self):
+        subject = self._subject_with_cards("reorder-unknown", 2)
+        ids = list(
+            subject.subject_cards.order_by("sort_order", "id").values_list("id", flat=True)
+        )
+
+        resp = self.client.post(
+            f"/api/v1/content/subjects/{subject.slug}/cards/reorder/",
+            {"order": [999999, ids[1], ids[0]]},
+            format="json",
+            secure=True,
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            list(subject.subject_cards.order_by("sort_order", "id").values_list("id", flat=True)),
+            [ids[1], ids[0]],
+        )
+
+    # --- Pack bulk-add ---------------------------------------------------
+
+    def _official_pack(self, name: str) -> Deck:
+        return Deck.objects.create(
+            type=Deck.DeckType.OFFICIAL,
+            name=name,
+            sort_order=0,
+        )
+
+    def _bulk_add_query_count(self, count: int) -> int:
+        deck = self._official_pack(f"pack-bulk-{count}")
+        pages = self._make_pages(count)
+        return self._post_query_count(
+            f"/api/v1/content/admin/packs/{deck.id}/bulk-add/",
+            {"microarticle_ids": [p.id for p in pages]},
+        )
+
+    def test_bulk_add_query_count_is_constant(self):
+        with_two = self._bulk_add_query_count(2)
+        with_six = self._bulk_add_query_count(6)
+        self.assertEqual(
+            with_two,
+            with_six,
+            f"bulk-add : {with_two} requêtes pour 2 cartes vs {with_six} pour 6 → écriture en boucle",
+        )
+
+    def test_bulk_add_resolves_ids_slugs_and_reports_counts(self):
+        deck = self._official_pack("pack-bulk-mixed")
+        by_id, by_slug, already = self._make_pages(3)
+        DeckCard.objects.create(deck=deck, microarticle=already, sort_order=0)
+
+        resp = self.client.post(
+            f"/api/v1/content/admin/packs/{deck.id}/bulk-add/",
+            {
+                "items": f"{by_id.id}\n{by_slug.slug}\n{already.slug}\ninconnu-xyz\n{by_id.id}",
+            },
+            format="json",
+            secure=True,
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["added"], 2)
+        # already.slug + le doublon de by_id.id
+        self.assertEqual(resp.data["already_present"], 2)
+        self.assertEqual(resp.data["not_found"], 1)
+
+        links = list(DeckCard.objects.filter(deck=deck).order_by("sort_order", "id"))
+        self.assertEqual(
+            [link.microarticle_id for link in links],
+            [already.id, by_id.id, by_slug.id],
+        )
+        self.assertEqual([link.sort_order for link in links], [0, 1, 2])
