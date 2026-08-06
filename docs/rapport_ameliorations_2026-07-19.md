@@ -105,6 +105,7 @@ L'état général est bon : settings de sécurité soignés (HSTS, cookies, sani
 ### 3.6 `BaseCategory.save()` détourne la création treebeard
 - **Problème** : (`backend/content/models.py:358-373`) le `save()` crée un root node et patch `self.pk/path/depth` à la main pour contourner l'admin Wagtail. Fragile (toute catégorie créée hors admin devient racine silencieusement).
 - **Solution** : à défaut d'une vraie UI d'arbre, documenter la limite dans le code et créer les hiérarchies via une management command ou l'admin Django. Option plus propre : formulaire snippet custom avec choix du parent qui appelle `add_child`.
+- **Statut (2026-08-06)** : ✅ le contournement a été supprimé. Le formulaire des quatre snippets de catégories expose maintenant un champ `Parent` : il appelle `add_root()` lorsque le champ est vide et `parent.add_child()` sinon, et permet aussi de déplacer un nœud existant sans autoriser un cycle. `BaseCategory.save()` ne patche plus jamais `pk/path/depth` ; une création programmatique incorrecte par `save()` / `objects.create()` échoue avec un message explicite et le commentaire du modèle documente l'obligation d'utiliser l'API treebeard. 5 tests ciblés couvrent ces contrats.
 
 ### 3.7 Settings : durcissements mineurs
 - `REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"] = AllowAny` : passer à `IsAuthenticated` par défaut et déclarer explicitement `AllowAny` sur les vues publiques (fail-closed au lieu de fail-open).

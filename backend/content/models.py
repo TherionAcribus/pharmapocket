@@ -25,6 +25,7 @@ from wagtail.snippets.widgets import AdminSnippetChooser
 from wagtail.admin.widgets import AdminPageChooser
 
 from .blocks import ImageWithCaptionBlock, LandingCardBlock, LandingStepBlock, Mechanism3StepsBlock, ReferenceBlock
+from .forms import CategoryNodeForm
 from .serializers import MicroArticleCardField
 
 
@@ -352,26 +353,27 @@ class BaseCategory(index.Indexed, MP_Node):
     class Meta:
         abstract = True
 
+    base_form_class = CategoryNodeForm
+
     panels = [
         FieldPanel("name"),
         FieldPanel("slug"),
+        FieldPanel("parent"),
     ]
 
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)
-        # MP_Node requires using add_root/add_child to populate path/depth.
-        # When creating a new snippet from the Wagtail admin there is no
-        # parent selection, so treat it as a root node.
-        if not self.pk and not getattr(self, "path", None):
-            node = type(self).add_root(name=self.name, slug=self.slug)
-            # sync generated fields back onto self so Wagtail logging sees a PK
-            self.pk = node.pk
-            self.path = node.path
-            self.depth = node.depth
-            self.numchild = node.numchild
-            self._state.adding = False
-            return node
+
+        # treebeard must allocate path/depth through add_root() or add_child().
+        # The Wagtail snippet form does this from its explicit parent field;
+        # programmatic creation must use the same treebeard APIs.
+        if self._state.adding and not self.path:
+            raise ValueError(
+                f"New {type(self).__name__} nodes must be created with "
+                "add_root() or parent.add_child()"
+            )
+
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
