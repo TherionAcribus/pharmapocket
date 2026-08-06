@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Couche TanStack Query au-dessus de `lib/api.ts`.
+ * Couche TanStack Query au-dessus des modules `lib/api/*`.
  *
  * Les pages ne font plus de `useState`/`useEffect` pour charger : elles
  * consomment ces hooks, qui mutualisent cache, dédoublonnage et invalidation.
- * `lib/api.ts` reste la seule couche qui connaît les URLs et le transport.
+ * `lib/api/*` reste la seule couche qui connaît les URLs et le transport.
  */
 
 import {
@@ -22,53 +22,54 @@ import {
   adminPackRemoveCard,
   adminPackReorder,
   adminUploadImage,
-  bulkAddCardsToDeck,
-  copyOfficialPackToUserDeck,
   createAdminPack,
   createAdminThumbOverride,
-  createDeck,
   deleteAdminPack,
   deleteAdminThumbOverride,
-  deleteDeck,
-  deleteAccount,
-  fetchAccount,
   fetchAdminPack,
   fetchAdminPacks,
   fetchAdminThumbOverrides,
+  patchAdminPack,
+  patchAdminThumbOverride,
+  type AdminThumbOverride,
+} from "@/lib/api/admin";
+import {
+  deleteAccount,
+  fetchAccount,
+  fetchMe,
+  fetchPreferences,
+  patchAccount,
+  patchPreferences,
+} from "@/lib/api/auth";
+import { isApiError } from "@/lib/api/client";
+import {
+  fetchLanding,
+  fetchMicroArticleReadStates,
+  fetchMicroArticleSavedStatus,
+  fetchThumbOverridesPublic,
+  saveMicroArticle,
+  setMicroArticleReadState,
+  unsaveMicroArticle,
+} from "@/lib/api/content";
+import {
+  bulkAddCardsToDeck,
+  copyOfficialPackToUserDeck,
+  createDeck,
+  deleteDeck,
   fetchCardDecks,
   fetchDeckCards,
   fetchDecks,
-  fetchDiscoverFeed,
-  fetchFeed,
-  fetchLanding,
-  fetchMe,
-  fetchMicroArticleReadStates,
-  fetchMicroArticleSavedStatus,
   fetchOfficialPackDetail,
   fetchOfficialPacks,
-  fetchPreferences,
-  fetchSrsNext,
-  fetchTags,
-  fetchTaxonomyTree,
-  fetchThumbOverridesPublic,
-  isApiError,
-  patchAccount,
-  patchAdminPack,
-  patchAdminThumbOverride,
   patchDeck,
-  patchPreferences,
-  postSrsReview,
   removeCardFromDeck,
-  saveMicroArticle,
-  setMicroArticleReadState,
   startOfficialPack,
-  unsaveMicroArticle,
   updateCardDecks,
   updateOfficialPackProgress,
-  type AdminThumbOverride,
-  type FeedQuery,
-  type SrsNextQuery,
-} from "@/lib/api";
+} from "@/lib/api/decks";
+import { fetchDiscoverFeed, fetchFeed, type FeedQuery } from "@/lib/api/feed";
+import { fetchSrsNext, postSrsReview, type SrsNextQuery } from "@/lib/api/srs";
+import { fetchTags, fetchTaxonomyTree, type TaxonomyName } from "@/lib/api/taxonomies";
 import type {
   AccountSummary,
   CurrentUser,
@@ -77,7 +78,7 @@ import type {
   UserPreferences,
 } from "@/lib/types";
 
-type Taxonomy = Parameters<typeof fetchTaxonomyTree>[0];
+type Taxonomy = TaxonomyName;
 export type FeedSource = "content" | "discover";
 
 // -----------------------------------------------------------------------------

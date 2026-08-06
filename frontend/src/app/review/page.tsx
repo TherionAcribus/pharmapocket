@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useDecks, useMe, useRateSrsCard, useSrsNext } from "@/lib/queries";
-import type { SrsNextQuery, SrsScope } from "@/lib/api";
+import type { SrsNextQuery, SrsScope } from "@/lib/api/srs";
 import type { SrsRating } from "@/lib/types";
 
 function RichText({ html, className }: { html?: string; className?: string }) {

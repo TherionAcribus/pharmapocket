@@ -11,7 +11,7 @@ import {
   normalizeHexColor,
   setStoredAccentColor,
 } from "@/lib/accentColor";
-import type { LandingRedirectTarget } from "@/lib/api";
+import type { LandingRedirectTarget } from "@/lib/api/auth";
 import { useMe, usePatchPreferences, usePreferences } from "@/lib/queries";
 import * as React from "react";
 

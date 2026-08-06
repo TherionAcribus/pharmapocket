@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
 import ReaderClient from "./ReaderClient";
-import { fetchMicroArticle, isApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api/client";
+import { fetchMicroArticle } from "@/lib/api/content";
 
 export default async function MicroArticlePage({
   params,

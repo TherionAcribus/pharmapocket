@@ -8,7 +8,7 @@ import { MicroCard } from "@/components/MicroCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useFeed, useMe, useReadStates, type FeedSource } from "@/lib/queries";
-import type { FeedQuery } from "@/lib/api";
+import type { FeedQuery } from "@/lib/api/feed";
 
 export function FeedClient({
   basePath = "/discover",

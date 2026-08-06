@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
-import { authLogout, authVerifyEmail, ensureCsrf } from "@/lib/api";
+import { authLogout, authVerifyEmail, ensureCsrf } from "@/lib/api/auth";
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;

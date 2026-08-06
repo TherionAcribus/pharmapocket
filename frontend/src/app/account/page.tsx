@@ -13,7 +13,7 @@ import {
   accountChangePassword,
   authLogout,
   ensureCsrf,
-} from "@/lib/api";
+} from "@/lib/api/auth";
 import {
   resetSessionCache,
   useAccount,

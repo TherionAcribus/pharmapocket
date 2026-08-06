@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authSignup, ensureCsrf } from "@/lib/api";
+import { authSignup, ensureCsrf } from "@/lib/api/auth";
 
 function getBackendBaseUrlClient(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;

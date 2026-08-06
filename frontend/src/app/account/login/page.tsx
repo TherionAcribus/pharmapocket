@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { authLogin, authResendVerifyEmail, ensureCsrf, fetchMe, isApiError } from "@/lib/api";
+import { authLogin, authResendVerifyEmail, ensureCsrf, fetchMe } from "@/lib/api/auth";
+import { isApiError } from "@/lib/api/client";
 import { queryKeys, resetSessionCache, useMe } from "@/lib/queries";
 
 function getBackendBaseUrlClient(): string {

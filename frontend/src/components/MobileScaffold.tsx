@@ -30,7 +30,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { authLogout } from "@/lib/api";
+import { authLogout } from "@/lib/api/auth";
 import { resetSessionCache, useMe, useTaxonomyTree } from "@/lib/queries";
 import { ensureProgressSyncLoop, setProgressSyncEnabled } from "@/lib/progressSync";
 import type { TaxonomyNode } from "@/lib/types";

@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authResetPassword, ensureCsrf } from "@/lib/api";
+import { authResetPassword, ensureCsrf } from "@/lib/api/auth";
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;

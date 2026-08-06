@@ -1,4 +1,4 @@
-import { fetchLessonProgress, importLessonProgress } from "@/lib/api";
+import { fetchLessonProgress, importLessonProgress } from "@/lib/api/srs";
 import {
   clearPendingIfUnchanged,
   exportProgressPayload,

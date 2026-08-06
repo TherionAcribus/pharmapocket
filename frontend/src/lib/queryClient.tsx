@@ -3,7 +3,7 @@
 import * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { isApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api/client";
 
 /**
  * Une erreur 4xx est définitive : réessayer ne change rien et retarde
