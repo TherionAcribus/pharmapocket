@@ -183,6 +183,22 @@ if WAGTAILIMAGES_MAX_UPLOAD_SIZE <= 0:
 
 WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "http://localhost:8000")
 
+# Full-text search (content.search). The database backend indexes into
+# wagtailsearch_indexentry (tsvector) and is kept up to date by Wagtail's signal
+# handlers; existing rows need a one-off `manage.py update_index`.
+# SEARCH_CONFIG is the Postgres text search configuration: "french" gives French
+# stemming and stop words. Both configs are env-driven so an accent-insensitive
+# configuration can be plugged in without a code change (see README, "Recherche").
+# Changing either value requires a reindex.
+WAGTAILSEARCH_BACKENDS = {
+    "default": {
+        "BACKEND": "wagtail.search.backends.database",
+        "SEARCH_CONFIG": os.environ.get("DJANGO_SEARCH_CONFIG", "french"),
+        # "simple" (no stemming) is what makes prefix matching usable for autocomplete.
+        "AUTOCOMPLETE_SEARCH_CONFIG": os.environ.get("DJANGO_SEARCH_AUTOCOMPLETE_CONFIG", "simple"),
+    }
+}
+
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@localhost")
 
 if DEBUG:

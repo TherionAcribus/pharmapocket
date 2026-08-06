@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 from io import BytesIO
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -583,3 +584,133 @@ class BulkWriteQueryCountTests(APITestCase):
             [already.id, by_id.id, by_slug.id],
         )
         self.assertEqual([link.sort_order for link in links], [0, 1, 2])
+
+
+class MicroArticleSearchTests(APITestCase):
+    """La recherche passe par l'index Wagtail, plus par des `icontains`.
+
+    L'indexation est déclenchée au `save()` d'une page mais différée au commit
+    (django-tasks, `ENQUEUE_ON_COMMIT`), qui n'a jamais lieu dans un `TestCase` :
+    d'où le `captureOnCommitCallbacks` autour de chaque écriture indexée.
+    """
+
+    FEED_URL = "/api/v1/content/microarticles/"
+    ADMIN_URL = "/api/v1/content/admin/microarticles/search/"
+
+    def setUp(self):
+        super().setUp()
+        root = Page.get_first_root_node()
+        if not Site.objects.exists():
+            Site.objects.create(hostname="localhost", root_page=root, is_default_site=True)
+
+        self.index = MicroArticleIndexPage(title="Micro search", slug="micro-search")
+        root.add_child(instance=self.index)
+        self.index.save_revision().publish()
+
+        self.metformine = self._add_page(
+            title="Metformine",
+            slug="metformine",
+            answer_express="<p>Antidiabétique oral de première intention.</p>",
+            key_points=[
+                {"type": "point", "value": "Ne provoque pas d'hypoglycémie seule"},
+            ],
+            see_more=[
+                {"type": "detail", "value": "<p>Risque rare d'acidose lactique.</p>"},
+            ],
+        )
+        self.insuline = self._add_page(
+            title="Insulines lentes",
+            slug="insulines-lentes",
+            answer_express="<p>Analogues à durée d'action prolongée.</p>",
+        )
+        self.staff = get_user_model().objects.create_user(
+            username="staff-search",
+            email="staff-search@example.com",
+            password="pharmapocket-test-pwd",
+            is_staff=True,
+        )
+
+    def _add_page(self, **kwargs) -> MicroArticlePage:
+        with self.captureOnCommitCallbacks(execute=True):
+            page = MicroArticlePage(**kwargs)
+            self.index.add_child(instance=page)
+            page.save_revision().publish()
+        return page
+
+    def _feed_slugs(self, query: str, **params) -> list[str]:
+        params["q"] = query
+        resp = self.client.get(self.FEED_URL, params, secure=True)
+        self.assertEqual(resp.status_code, 200)
+        return [item["slug"] for item in resp.data["results"]]
+
+    def _admin_slugs(self, query: str) -> list[str]:
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.get(self.ADMIN_URL, {"q": query}, secure=True)
+        self.assertEqual(resp.status_code, 200)
+        return [row["slug"] for row in resp.data]
+
+    def test_feed_search_matches_word_variants(self):
+        # `icontains` ne trouvait rien : la fiche s'intitule « Insulines lentes ».
+        self.assertEqual(self._feed_slugs("insuline"), ["insulines-lentes"])
+
+    def test_feed_search_ignores_accents(self):
+        self.assertEqual(self._feed_slugs("antidiabetique"), ["metformine"])
+        self.assertEqual(self._feed_slugs("hypoglycémie"), ["metformine"])
+
+    def test_feed_search_matches_stream_field_content(self):
+        # « acidose » n'existe que dans le StreamField `see_more`, invisible aux `icontains`.
+        self.assertEqual(self._feed_slugs("acidose"), ["metformine"])
+
+    def test_feed_search_falls_back_to_a_prefix_when_no_whole_word_matches(self):
+        # « insulin » n'est un mot d'aucune fiche : sans ce repli, la page serait vide.
+        self.assertEqual(self._feed_slugs("insulin"), ["insulines-lentes"])
+
+    def test_feed_search_excludes_non_matching_pages(self):
+        self.assertEqual(self._feed_slugs("metformine"), ["metformine"])
+        self.assertEqual(self._feed_slugs("mot-totalement-absent"), [])
+
+    def test_feed_search_still_combines_with_other_filters(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.metformine.tags.add("diabete")
+            self.metformine.save()
+
+        self.assertEqual(self._feed_slugs("metformine", tags="diabete"), ["metformine"])
+        self.assertEqual(self._feed_slugs("insuline", tags="diabete"), [])
+
+    def test_feed_search_ignores_unpublished_pages(self):
+        draft = self._add_page(title="Metformine brouillon", slug="metformine-brouillon")
+        with self.captureOnCommitCallbacks(execute=True):
+            draft.live = False
+            draft.save()
+
+        self.assertEqual(self._feed_slugs("metformine"), ["metformine"])
+
+    def test_feed_search_runs_a_single_index_query(self):
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get(self.FEED_URL, {"q": "insuline"}, secure=True)
+        self.assertEqual(resp.status_code, 200)
+
+        index_queries = [q for q in ctx.captured_queries if "indexentry" in q["sql"].lower()]
+        self.assertEqual(len(index_queries), 1, "la recherche doit tenir en une requête sur l'index")
+
+    def test_admin_search_matches_a_prefix_being_typed(self):
+        # Le sélecteur du back-office interroge l'API à chaque frappe.
+        self.assertEqual(self._admin_slugs("metfor"), ["metformine"])
+        self.assertEqual(self._admin_slugs("insulines le"), ["insulines-lentes"])
+
+    def test_admin_search_matches_a_slug_fragment(self):
+        self.assertEqual(self._admin_slugs("insulines-lentes"), ["insulines-lentes"])
+
+    def test_admin_search_ignores_accents(self):
+        self.assertEqual(self._admin_slugs("métfor"), ["metformine"])
+
+    def test_search_falls_back_to_icontains_when_the_backend_fails(self):
+        with (
+            mock.patch(
+                "modelsearch.queryset.get_search_backend",
+                side_effect=RuntimeError("backend down"),
+            ),
+            self.assertLogs("content.search", level="ERROR"),
+        ):
+            self.assertEqual(self._feed_slugs("Metformine"), ["metformine"])
+            self.assertEqual(self._admin_slugs("insulines-lentes"), ["insulines-lentes"])

@@ -117,6 +117,46 @@ Trois points à vérifier au déploiement :
   chaque worker gunicorn multiplie de fait la limite par le nombre de workers.
   Le backend Redis est fourni par Django mais nécessite le client : `pip install redis`.
 
+### Recherche
+
+Le paramètre `q` de `GET /api/v1/content/microarticles/` et de
+`GET /api/v1/content/admin/microarticles/search/` interroge le **backend de recherche
+Wagtail** (full-text Postgres, table `wagtailsearch_indexentry` avec index GIN), et non
+des `LIKE`. Concrètement : « insuline » remonte « Insulines lentes », le texte des
+StreamField (`key_points`, `see_more`) est cherchable, et les accents sont ignorés.
+
+| | Feed public | Sélecteur back-office |
+| --- | --- | --- |
+| Méthode | `search()` (mots entiers, radicaux français) | `autocomplete()` (dernier mot = préfixe) |
+| Champs | titre, réponses, takeaway, StreamField | titre, slug |
+| Déclencheur côté front | validation du formulaire | frappe en cours |
+
+Le feed retente en préfixe quand aucun mot entier ne correspond : « amoxi » remonte
+« Amoxicilline » au lieu d'une page vide.
+
+Les accents ne sont pas gérés par Postgres (l'extension `unaccent` n'est pas requise) mais
+par une copie translittérée en ASCII des champs indexés, côté modèle
+(`MicroArticlePage.search_normalized`) ; `content.search` translittère la requête de la
+même façon.
+
+**À l'exploitation :**
+
+- L'index est mis à jour à l'enregistrement d'une page (signaux Wagtail). Après un import
+  massif, une restauration de base, ou toute modification des `search_fields` du modèle
+  ou des variables ci-dessous, il faut le reconstruire :
+
+  ```bash
+  python backend/manage.py update_index
+  ```
+
+- `DJANGO_SEARCH_CONFIG` (défaut `french`) est la configuration de recherche Postgres
+  utilisée à l'indexation **et** à l'interrogation : elle fournit les radicaux et les mots
+  vides. `DJANGO_SEARCH_AUTOCOMPLETE_CONFIG` (défaut `simple`) reste sans radicaux, sinon
+  la recherche par préfixe ne fonctionne plus.
+- Si le backend de recherche tombe, les vues se rabattent sur un filtre `icontains` et
+  l'incident est journalisé (`content.search`) : la recherche se dégrade au lieu de
+  renvoyer zéro résultat.
+
 ### Upload d'images
 
 `POST /api/v1/content/admin/images/upload/` *(staff)* crée une image Wagtail à partir d'un

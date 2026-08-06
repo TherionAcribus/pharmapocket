@@ -40,6 +40,7 @@ from .models import (
     UserDeckProgress,
 )
 from .pagination import MicroArticleCursorPagination
+from .search import filter_microarticles
 from .serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
 
 logger = logging.getLogger(__name__)
@@ -627,9 +628,10 @@ class MicroArticleListView(ListAPIView):
             .order_by("-first_published_at", "-id")
         )
 
-        q = self.request.query_params.get("q")
-        if q:
-            qs = qs.filter(Q(title__icontains=q) | Q(answer_express__icontains=q))
+        # Recherche lancée à la validation du formulaire (pas de frappe en cours) :
+        # `search()` plein mot, pas `autocomplete()`. Le tri reste antéchronologique,
+        # imposé par la pagination curseur.
+        qs = filter_microarticles(qs, self.request.query_params.get("q"))
 
         tags = self.request.query_params.get("tags")
         if tags:
@@ -1821,8 +1823,14 @@ class AdminMicroArticleSearchView(APIView):
             return Response([])
 
         qs = MicroArticlePage.objects.live().public().all()
-        if s:
-            qs = qs.filter(Q(title__icontains=s) | Q(answer_express__icontains=s) | Q(slug__icontains=s))
+        # Sélecteur de fiches du back-office : la requête arrive au fil de la frappe,
+        # d'où `autocomplete()` (dernier terme traité comme préfixe, sur title + slug).
+        qs = filter_microarticles(
+            qs,
+            s,
+            autocomplete=True,
+            fallback_fields=("title", "answer_express", "slug"),
+        )
 
         def _apply_taxonomy_filter(qs_in, *, model, rel: str, node_ids: list[int], scope: str):
             if not node_ids:

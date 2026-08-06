@@ -1,3 +1,4 @@
+from anyascii import anyascii
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
@@ -755,10 +756,51 @@ class MicroArticlePage(Page):
         ),
     ]
 
+    # Page.search_fields indexe déjà `title` (boost 2) en recherche et en autocomplétion.
+    # RichTextField et StreamField exposent get_searchable_content(), donc Wagtail indexe
+    # leur texte sans le balisage. Toute modification de cette liste impose un
+    # `manage.py update_index`.
     search_fields = Page.search_fields + [
-        index.SearchField("title"),
-        index.SearchField("answer_express"),
+        index.SearchField("answer_express", boost=1.5),
+        index.SearchField("answer_detail"),
+        index.SearchField("takeaway"),
+        index.SearchField("key_points"),
+        index.SearchField("see_more"),
+        # Copies translittérées des champs ci-dessus, pour ignorer les accents.
+        index.SearchField("search_normalized"),
+        # Le sélecteur du back-office accepte un fragment de slug.
+        index.AutocompleteField("slug"),
+        index.AutocompleteField("autocomplete_normalized"),
     ]
+
+    def _normalized_index_text(self, field_class, exclude: str) -> str:
+        """Translittère en ASCII le texte des champs indexés de `field_class`.
+
+        Postgres ne sait pas ignorer les accents sans l'extension `unaccent` ; on
+        indexe donc une copie translittérée en plus du texte d'origine, et
+        `content.search` translittère la requête de la même façon. Les champs sont
+        relus depuis `search_fields` pour qu'un champ ajouté plus haut soit couvert
+        d'office.
+        """
+        texts: list[str] = []
+        for field in type(self).search_fields:
+            if not isinstance(field, field_class) or field.field_name == exclude:
+                continue
+            # Un RichTextField nul indexerait la chaîne « None » (force_str côté Wagtail).
+            if not getattr(self, field.field_name, None):
+                continue
+            value = field.get_value(self)
+            if isinstance(value, str):
+                texts.append(value)
+            elif isinstance(value, (list, tuple)):
+                texts.extend(str(item) for item in value)
+        return anyascii(" ".join(texts))
+
+    def search_normalized(self) -> str:
+        return self._normalized_index_text(index.SearchField, exclude="search_normalized")
+
+    def autocomplete_normalized(self) -> str:
+        return self._normalized_index_text(index.AutocompleteField, exclude="autocomplete_normalized")
 
     def api_key_points(self) -> list[str]:
         return [block.value for block in self.key_points]
