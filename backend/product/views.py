@@ -34,6 +34,7 @@ def _product_card(page: MicroArticlePage, *, include_questions: bool = False) ->
     data["categories_pharmacologie"] = data.pop("categories_pharmacologie_payload")
     return data
 
+
 def _taxonomy_model(taxonomy: str):
     if taxonomy == "theme":
         return CategoryTheme, "categories_theme"

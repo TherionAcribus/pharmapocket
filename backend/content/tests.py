@@ -96,6 +96,21 @@ class PublicApiSmokeTests(APITestCase):
         for field_name, value in expected.items():
             self.assertEqual(content_response.data[field_name], value)
 
+        product_response = self.client.get("/api/v1/micro/metformine/", secure=True)
+        self.assertEqual(product_response.status_code, 200)
+        for field_name in (
+            "id",
+            "slug",
+            "title",
+            "answer_express",
+            "takeaway",
+            "key_points",
+            "cover_image_url",
+            "cover_image_credit",
+            "published_at",
+        ):
+            self.assertEqual(product_response.data[field_name], expected[field_name])
+
         wagtail_response = self.client.get(f"/api/v2/pages/{page.id}/", secure=True)
         self.assertEqual(wagtail_response.status_code, 200)
         self.assertEqual(wagtail_response.data["answer_express"], expected["answer_express"])
