@@ -694,7 +694,7 @@ class MicroArticleDetailView(RetrieveAPIView):
     lookup_field = "slug"
 
     def get_queryset(self):
-        print("[MicroArticleDetailView] slug=%s" % self.kwargs["slug"])
+        logger.debug("[MicroArticleDetailView] slug=%s", self.kwargs["slug"])
         return (
             MicroArticlePage.objects.live()
             .public()
@@ -713,15 +713,13 @@ class MicroArticleDetailView(RetrieveAPIView):
     def retrieve(self, request, *args, **kwargs):
         page: MicroArticlePage = self.get_object()
 
-        print(
-            "[MicroArticleDetailView] slug=%s answer_detail_len=%s sources_len=%s see_more_len=%s links_len=%s"
-            % (
-                page.slug,
-                len((page.answer_detail or "").strip()),
-                len(page.sources or []),
-                len(page.see_more or []),
-                len(page.links or []),
-            )
+        logger.debug(
+            "[MicroArticleDetailView] slug=%s answer_detail_len=%s sources_len=%s see_more_len=%s links_len=%s",
+            page.slug,
+            len((page.answer_detail or "").strip()),
+            len(page.sources or []),
+            len(page.see_more or []),
+            len(page.links or []),
         )
 
         see_more_blocks = (
