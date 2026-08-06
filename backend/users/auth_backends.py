@@ -10,12 +10,19 @@ class PseudoAuthenticationBackend(BaseBackend):
         user_model = get_user_model()
         user = user_model.objects.filter(pseudo__iexact=str(username).strip()).first()
         if user is None:
+            # Exécute quand même le hachage du mot de passe pour que le temps de
+            # réponse soit le même qu'avec un pseudo existant (cf. ModelBackend),
+            # afin d'éviter l'énumération d'utilisateurs par mesure de timing.
+            user_model().set_password(password)
+            return None
+
+        # Le mot de passe est vérifié avant le statut du compte, sinon un compte
+        # inactif répondrait plus vite qu'un compte actif.
+        password_valid = user.check_password(password)
+        if not password_valid:
             return None
 
         if not getattr(user, "is_active", True):
-            return None
-
-        if not user.check_password(password):
             return None
 
         return user

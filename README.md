@@ -22,20 +22,30 @@ Depuis la racine du repo :
 pip install -r requirements.txt
 ```
 
-### 2) Lancer les migrations
+### 2) Configurer l'environnement
+
+Copier `.env.example` vers `.env` et renseigner les variables. `DATABASE_URL` est
+**obligatoire** : l'application refuse de démarrer sans elle (voir
+[Base de données](#base-de-données)).
+
+```bash
+cp .env.example .env
+```
+
+### 3) Lancer les migrations
 
 ```bash
 python backend/manage.py makemigrations
 python backend/manage.py migrate
 ```
 
-### 3) Créer un superuser
+### 4) Créer un superuser
 
 ```bash
 python backend/manage.py createsuperuser
 ```
 
-### 4) Lancer le serveur
+### 5) Lancer le serveur
 
 ```bash
 python backend/manage.py runserver
@@ -169,12 +179,20 @@ Garde-fous appliqués :
 - `links` : max 5
 - `see_more` : max 3 blocs
 
-## Postgres (option)
+## Base de données
 
-Par défaut la base est SQLite (dev).
-Pour Postgres : définir `DATABASE_URL`.
-Exemple :
+Il n'y a **pas de base par défaut** : `DATABASE_URL` doit être définie, sinon le
+démarrage échoue avec `RuntimeError: DATABASE_URL environment variable is required`.
+Postgres est utilisé en dev comme en production (Clever Cloud).
+
+Exemple (`.env`) :
 
 ```bash
-set DATABASE_URL=postgres://user:password@localhost:5432/pharmapocket
+DATABASE_URL=postgres://user:password@127.0.0.1:5432/pharmapocket
 ```
+
+## Données
+
+Les jeux de flashcards d'exemple sont dans [docs/data/](docs/data/) (`question,réponse`,
+sans en-tête) — ce sont des données de référence, pas des fixtures chargées
+automatiquement.
