@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useImportCards } from "@/lib/queries";
 import { useStaffGuard } from "@/lib/staffGuard";
 import type { AdminCardImportReport, AdminCardImportResult } from "@/lib/types";
+import { useLocalDraft } from "@/lib/useLocalDraft";
 
+import { AddToPack } from "./AddToPack";
 import { CardPreview } from "./CardPreview";
 import { PromptBuilder } from "./PromptBuilder";
 import { UnknownCategories } from "./UnknownCategories";
@@ -23,8 +26,42 @@ const PLACEHOLDER = `[
   }
 ]`;
 
+const JSON_DRAFT_KEY = "pharmapocket:admin-import:json";
+
 function toErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** Base du backend, qui sert aussi bien l'API que l'admin Wagtail. */
+function backendUrl(path: string): string {
+  const base = (
+    process.env.NEXT_PUBLIC_MEDIA_BASE ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    ""
+  ).replace(/\/$/, "");
+  return `${base}${path}`;
+}
+
+/**
+ * Met les erreurs et avertissements en forme pour être recollés dans la
+ * conversation avec le LLM : c'est le retour de boucle le plus fréquent.
+ */
+function formatFeedback(report: AdminCardImportReport): string {
+  const blocks = report.results
+    .filter((r) => r.errors.length || r.warnings.length)
+    .map((r) => {
+      const lines = [`Carte ${r.index + 1}${r.title ? ` — « ${r.title} »` : ""}`];
+      for (const error of r.errors) lines.push(`- ERREUR : ${error}`);
+      for (const warning of r.warnings) lines.push(`- Avertissement : ${warning}`);
+      return lines.join("\n");
+    });
+
+  return [
+    "Corrige le JSON précédent en tenant compte de ce que l'import a signalé,",
+    "puis renvoie le tableau JSON complet et corrigé.",
+    "",
+    ...blocks,
+  ].join("\n");
 }
 
 /**
@@ -57,14 +94,38 @@ function ResultCard({ result }: { result: AdminCardImportResult }) {
       </div>
 
       {result.ok ? (
-        <div className="mt-1 text-xs text-muted-foreground">
-          {result.action === "updated" ? "mise à jour" : "créée"} · {result.card_type} ·{" "}
-          {result.status === "published" ? "publiée" : "brouillon"}
-          {result.slug ? ` · ${result.slug}` : ""}
-          {result.subject
-            ? ` · sujet « ${result.subject} »${result.created_subject ? " (nouveau)" : ""}`
-            : ""}
-        </div>
+        <>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {result.action === "updated" ? "mise à jour" : "créée"} · {result.card_type} ·{" "}
+            {result.status === "published" ? "publiée" : "brouillon"}
+            {result.slug ? ` · ${result.slug}` : ""}
+            {result.subject
+              ? ` · sujet « ${result.subject} »${result.created_subject ? " (nouveau)" : ""}`
+              : ""}
+          </div>
+
+          {result.id ? (
+            <div className="mt-2 flex flex-wrap gap-3 text-xs">
+              <a
+                href={backendUrl(`/cms/pages/${result.id}/edit/`)}
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-4"
+              >
+                Éditer dans Wagtail
+              </a>
+              {result.slug && result.status === "published" ? (
+                <Link
+                  href={`/micro/${result.slug}`}
+                  target="_blank"
+                  className="underline underline-offset-4"
+                >
+                  Voir la fiche
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {result.ok &&
@@ -105,7 +166,7 @@ export default function AdminImportPage() {
   const { checking, isStaff } = useStaffGuard();
   const importMutation = useImportCards();
 
-  const [raw, setRaw] = React.useState("");
+  const [raw, setRaw, clearRaw] = useLocalDraft(JSON_DRAFT_KEY, "");
   const [publish, setPublish] = React.useState(false);
   const [update, setUpdate] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
@@ -113,8 +174,25 @@ export default function AdminImportPage() {
   const [report, setReport] = React.useState<AdminCardImportReport | null>(null);
   const [categoriesCreated, setCategoriesCreated] = React.useState(false);
 
+  const [feedbackCopied, setFeedbackCopied] = React.useState(false);
+
   const busy = importMutation.isPending;
   const json = React.useMemo(() => extractJson(raw), [raw]);
+
+  const hasFeedback = Boolean(
+    report?.results.some((r) => r.errors.length || r.warnings.length)
+  );
+  const importedSlugs =
+    report?.ok && !report.dry_run
+      ? report.results.map((r) => r.slug).filter((s): s is string => Boolean(s))
+      : [];
+
+  const copyFeedback = async () => {
+    if (!report) return;
+    await navigator.clipboard.writeText(formatFeedback(report));
+    setFeedbackCopied(true);
+    window.setTimeout(() => setFeedbackCopied(false), 1500);
+  };
 
   const run = async (dryRun: boolean) => {
     setError(null);
@@ -215,6 +293,18 @@ export default function AdminImportPage() {
           <Button type="button" onClick={() => void run(false)} disabled={busy || !raw.trim()}>
             {busy ? "Import…" : "Importer"}
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              clearRaw();
+              setReport(null);
+              setError(null);
+            }}
+            disabled={busy || !raw.trim()}
+          >
+            Vider
+          </Button>
         </div>
 
         {error ? (
@@ -254,6 +344,17 @@ export default function AdminImportPage() {
 
           {report.detail ? <div className="text-sm text-destructive">{report.detail}</div> : null}
 
+          {hasFeedback ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void copyFeedback()}
+            >
+              {feedbackCopied ? "Copié !" : "Copier les erreurs pour le LLM"}
+            </Button>
+          ) : null}
+
           <div className="grid gap-2">
             {report.results.map((result) => (
               <ResultCard key={result.index} result={result} />
@@ -268,6 +369,8 @@ export default function AdminImportPage() {
           ) : null}
         </div>
       ) : null}
+
+      <AddToPack slugs={importedSlugs} enabled={isStaff} />
     </MobileScaffold>
   );
 }

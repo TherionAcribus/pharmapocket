@@ -248,11 +248,13 @@ fiche au LLM, de la faire corriger et de la réinjecter sans repasser par Wagtai
 ## 3) Boucle de travail
 
 1. `/admin/import` → remplir information + source (**contenu collé**) → *Copier le prompt*.
+   Le formulaire est conservé dans le navigateur : un rechargement ne le perd pas.
 2. Coller dans le LLM, récupérer la réponse.
-3. Coller la réponse → *Vérifier (sans écrire)*.
+3. Coller la réponse → *Aperçu* pour juger la rédaction → *Vérifier (sans écrire)*.
 4. Créer les catégories proposées si elles tiennent la route, corriger le JSON
-   sinon — les messages d'erreur sont rédigés pour être **recollés tels quels**
-   dans la conversation avec le modèle.
-5. *Importer* en brouillon, relire dans Wagtail (`/cms/`), ajouter une image,
-   publier.
-6. Rattacher les fiches à un pack depuis **Admin → Packs** via leurs slugs.
+   sinon. Le bouton **Copier les erreurs pour le LLM** met erreurs et
+   avertissements en forme, prêts à recoller dans la conversation.
+5. *Importer* (brouillon par défaut). Chaque ligne du rapport porte un lien
+   **Éditer dans Wagtail**, et **Voir la fiche** si elle est publiée.
+6. Rattacher les fiches à un pack depuis le panneau **Ajouter ces fiches à un
+   pack**, en bas du rapport.

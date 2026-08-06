@@ -6,16 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTags, useTaxonomyTree } from "@/lib/queries";
 import { buildCardPrompt, type PromptSource } from "@/lib/promptTemplate";
+import { useLocalDraft } from "@/lib/useLocalDraft";
 
 const FIELD_CLASS =
   "border-input focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 w-full rounded-md border bg-transparent p-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50";
 
-const EMPTY_SOURCE: PromptSource = {
-  name: "",
-  publisher: "",
-  url: "",
-  publicationDate: "",
-  content: "",
+const DRAFT_KEY = "pharmapocket:admin-import:prompt";
+
+const EMPTY_DRAFT: { information: string; cardCount: string; source: PromptSource } = {
+  information: "",
+  cardCount: "",
+  source: { name: "", publisher: "", url: "", publicationDate: "", content: "" },
 };
 
 /**
@@ -30,14 +31,15 @@ export function PromptBuilder({ enabled }: { enabled: boolean }) {
   const pharmacologie = useTaxonomyTree("pharmacologie", enabled);
   const tags = useTags();
 
-  const [information, setInformation] = React.useState("");
-  const [cardCount, setCardCount] = React.useState("");
-  const [source, setSource] = React.useState<PromptSource>(EMPTY_SOURCE);
+  const [draft, setDraft, clearDraft] = useLocalDraft(DRAFT_KEY, EMPTY_DRAFT);
+  const { information, cardCount, source } = draft;
   const [copied, setCopied] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
 
+  const setInformation = (value: string) => setDraft((d) => ({ ...d, information: value }));
+  const setCardCount = (value: string) => setDraft((d) => ({ ...d, cardCount: value }));
   const setSourceField = (field: keyof PromptSource) => (value: string) =>
-    setSource((prev) => ({ ...prev, [field]: value }));
+    setDraft((d) => ({ ...d, source: { ...d.source, [field]: value } }));
 
   const loading =
     theme.isPending ||
@@ -185,6 +187,10 @@ export function PromptBuilder({ enabled }: { enabled: boolean }) {
         <Button type="button" variant="outline" onClick={() => setShowPreview((v) => !v)}>
           {showPreview ? "Masquer" : "Aperçu"}
         </Button>
+        <Button type="button" variant="ghost" onClick={clearDraft}>
+          Vider
+        </Button>
+        <span className="text-xs text-muted-foreground">Brouillon conservé sur ce navigateur.</span>
       </div>
 
       {showPreview ? (
