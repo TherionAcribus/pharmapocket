@@ -24,6 +24,7 @@ from ..models import (
     Subject,
     SubjectCard,
 )
+from ..serializers import image_payload
 
 
 def _require_staff(request):
@@ -66,129 +67,6 @@ def _get_or_create_default_deck(user) -> Deck:
         is_default=True,
         sort_order=0,
     )
-
-
-def _microarticle_list_item(p: MicroArticlePage) -> dict:
-    return {
-        "id": p.id,
-        "slug": p.slug,
-        "title": p.title,
-        "answer_express": sanitize_rich_text(p.answer_express),
-        "takeaway": sanitize_rich_text(p.takeaway),
-        "key_points": _key_points(p),
-        "cover_image_url": _cover_url(p),
-        "cover_image_credit": _cover_credit(p),
-        "cover_image": _cover_payload(p),
-        # .all() (et non .values_list) pour profiter du prefetch_related("...__tags")
-        # posé par les vues qui appellent cette fonction en boucle.
-        "tags": [t.name for t in p.tags.all()],
-        "published_at": p.first_published_at,
-    }
-
-
-def _cover_url(page: MicroArticlePage) -> str | None:
-    if not page.cover_image_id:
-        return None
-    try:
-        return page.cover_image.file.url
-    except Exception:
-        return None
-
-
-def _cover_credit(page: MicroArticlePage) -> str | None:
-    if not page.cover_image_id:
-        return None
-    try:
-        text = getattr(page.cover_image, "credit_text", None)
-        if callable(text):
-            value = text()
-        else:
-            value = str(text) if text else ""
-        return value or None
-    except Exception:
-        return None
-
-
-def _cover_payload(page: MicroArticlePage) -> dict | None:
-    if not page.cover_image_id:
-        return None
-    try:
-        return _image_payload(page.cover_image)
-    except Exception:
-        return None
-
-
-def _image_payload(image) -> dict:
-    try:
-        url = image.file.url
-    except Exception:
-        url = None
-
-    license_name = None
-    license_url = None
-    try:
-        if getattr(image, "license_id", None):
-            license_obj = getattr(image, "license", None)
-            license_name = getattr(license_obj, "name", None) or None
-            license_url = getattr(license_obj, "url", None) or None
-    except Exception:
-        license_name = None
-        license_url = None
-
-    credit_text = None
-    try:
-        ct = getattr(image, "credit_text", None)
-        if callable(ct):
-            credit_text = ct() or None
-        elif ct:
-            credit_text = str(ct)
-    except Exception:
-        credit_text = None
-
-    return {
-        "id": image.id,
-        "title": image.title,
-        "url": url,
-        "credit_text": credit_text,
-        "credit_source_url": getattr(image, "credit_source_url", "") or "",
-        "credit_license": license_name or getattr(image, "credit_license", "") or "",
-        "credit_license_url": license_url or getattr(image, "credit_license_url", "") or "",
-        "credit_author": getattr(image, "credit_author", "") or "",
-        "credit_source": getattr(image, "credit_source", "") or "",
-    }
-
-
-def _key_points(page: MicroArticlePage) -> list[str]:
-    return [block.value for block in page.key_points]
-
-
-def _tag_payload(page: MicroArticlePage) -> list[dict]:
-    return [{"id": t.id, "name": t.name, "slug": t.slug} for t in page.tags.all()]
-
-
-def _cat_payload(qs) -> list[dict]:
-    return [{"id": c.id, "name": c.name, "slug": c.slug} for c in qs.all()]
-
-
-def _questions_payload(page: MicroArticlePage) -> list[dict]:
-    rows = (
-        page.microarticle_questions.select_related("question")
-        .all()
-        .order_by("sort_order")
-    )
-    return [
-        {
-            "id": r.question_id,
-            "type": r.question.type,
-            "prompt": r.question.prompt,
-            "choices": r.question.choices,
-            "correct_answers": r.question.correct_answers,
-            "explanation": r.question.explanation,
-            "difficulty": r.question.difficulty,
-            "references": r.question.references,
-        }
-        for r in rows
-    ]
 
 
 def _subject_payload(subject: Subject | None) -> dict | None:
@@ -299,7 +177,7 @@ def _sanitize_stream_value(value):
 
     ImageModel = get_image_model()
     if isinstance(value, ImageModel):
-        return _image_payload(value)
+        return image_payload(value)
 
     if isinstance(value, Source):
         return {

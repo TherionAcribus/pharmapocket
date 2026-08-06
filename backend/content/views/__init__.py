@@ -32,17 +32,9 @@ from .feed import (
 # volontairement absents de `__all__` (importer depuis `.helpers` désormais).
 from .helpers import (  # noqa: F401
     _apply_tree_filter,
-    _cat_payload,
-    _cover_credit,
-    _cover_payload,
-    _cover_url,
     _get_or_create_default_deck,
     _get_subject_for_card,
-    _image_payload,
-    _key_points,
-    _microarticle_list_item,
     _parse_int,
-    _questions_payload,
     _reference_payload,
     _require_staff,
     _sanitize_stream_value,
@@ -51,7 +43,6 @@ from .helpers import (  # noqa: F401
     _subject_detail_cards,
     _subject_payload,
     _subject_recap_card,
-    _tag_payload,
     _taxonomy_model,
 )
 from .packs_admin import (

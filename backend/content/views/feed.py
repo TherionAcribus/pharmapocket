@@ -22,30 +22,26 @@ from ..models import (
 )
 from ..pagination import MicroArticleCursorPagination
 from ..search import filter_microarticles
-from ..serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
+from ..serializers import (
+    MicroArticleCardSerializer,
+    MicroArticleDetailSerializer,
+    MicroArticleListSerializer,
+)
 from ..serializers.inputs import (
     MicroArticleReadStateSerializer,
     SavedMicroArticleCreateSerializer,
 )
 from .helpers import (
     _apply_tree_filter,
-    _cat_payload,
-    _cover_credit,
-    _cover_payload,
-    _cover_url,
     _get_or_create_default_deck,
     _get_subject_for_card,
-    _key_points,
-    _microarticle_list_item,
     _parse_int,
-    _questions_payload,
     _reference_payload,
     _sanitize_stream_value,
     _stream_items,
     _subject_detail_cards,
     _subject_payload,
     _subject_recap_card,
-    _tag_payload,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,24 +168,17 @@ class MicroArticleListView(ListAPIView):
 
     def list(self, request, *args, **kwargs):
         page = self.paginate_queryset(self.get_queryset())
+        list_fields = (
+            *MicroArticleCardSerializer.default_fields,
+            "tags_payload",
+            "categories_theme_payload",
+            "categories_maladies_payload",
+            "categories_medicament_payload",
+            "categories_pharmacologie_payload",
+        )
         data = [
             {
-                "id": p.id,
-                "slug": p.slug,
-                "title": p.title,
-                "answer_express": sanitize_rich_text(p.answer_express),
-                "takeaway": sanitize_rich_text(p.takeaway),
-                "key_points": _key_points(p),
-                "cover_image_url": _cover_url(p),
-                "cover_image_credit": _cover_credit(p),
-                "cover_image": _cover_payload(p),
-                "tags": [t.name for t in p.tags.all()],
-                "tags_payload": _tag_payload(p),
-                "categories_theme_payload": _cat_payload(p.categories_theme),
-                "categories_maladies_payload": _cat_payload(p.categories_maladies),
-                "categories_medicament_payload": _cat_payload(p.categories_medicament),
-                "categories_pharmacologie_payload": _cat_payload(p.categories_pharmacologie),
-                "published_at": p.first_published_at,
+                **MicroArticleCardSerializer(p, fields=list_fields).data,
                 "card_type": p.card_type,
             }
             for p in page
@@ -264,36 +253,35 @@ class MicroArticleDetailView(RetrieveAPIView):
         detail_cards = _subject_detail_cards(subject) if subject else []
         recap_card = _subject_recap_card(subject) if subject else None
 
+        card_payload = MicroArticleCardSerializer(
+            page,
+            fields=(
+                *MicroArticleCardSerializer.default_fields,
+                "tags_payload",
+                "categories_theme_payload",
+                "categories_maladies_payload",
+                "categories_medicament_payload",
+                "categories_pharmacologie_payload",
+                "questions",
+                "recap_points",
+                "parent_recap_cards",
+            ),
+        ).data
         data = {
-            "id": page.id,
-            "slug": page.slug,
-            "title": page.title,
-            "answer_express": sanitize_rich_text(page.answer_express),
-            "takeaway": sanitize_rich_text(page.takeaway),
-            "key_points": _key_points(page),
-            "cover_image_url": _cover_url(page),
-            "cover_image_credit": _cover_credit(page),
-            "cover_image": _cover_payload(page),
+            **card_payload,
             "links": links_blocks,
             "see_more": see_more_blocks,
-            "tags": list(page.tags.values_list("name", flat=True)),
-            "categories_theme": list(page.categories_theme.values_list("name", flat=True)),
-            "categories_maladies": list(page.categories_maladies.values_list("name", flat=True)),
-            "categories_medicament": list(page.categories_medicament.values_list("name", flat=True)),
-            "categories_pharmacologie": list(page.categories_pharmacologie.values_list("name", flat=True)),
-            "tags_payload": _tag_payload(page),
-            "categories_theme_payload": _cat_payload(page.categories_theme),
-            "categories_maladies_payload": _cat_payload(page.categories_maladies),
-            "categories_medicament_payload": _cat_payload(page.categories_medicament),
-            "categories_pharmacologie_payload": _cat_payload(page.categories_pharmacologie),
-            "questions": _questions_payload(page),
-            "published_at": page.first_published_at,
+            "categories_theme": [item["name"] for item in card_payload["categories_theme_payload"]],
+            "categories_maladies": [item["name"] for item in card_payload["categories_maladies_payload"]],
+            "categories_medicament": [item["name"] for item in card_payload["categories_medicament_payload"]],
+            "categories_pharmacologie": [
+                item["name"] for item in card_payload["categories_pharmacologie_payload"]
+            ],
             "card_type": page.card_type,
             "subject": subject_data,
             "detail_cards": detail_cards,
             "recap_card": recap_card,
-            "recap_points": page.api_recap_points() if page.card_type == "recap" else [],
-            "parent_recap_cards": page.get_parent_recap_cards(),
+            "recap_points": card_payload["recap_points"] if page.card_type == "recap" else [],
         }
 
         if request.user.is_authenticated:
@@ -329,7 +317,7 @@ class SavedMicroArticleListView(APIView):
             .order_by("-added_at")
         )
 
-        items = [_microarticle_list_item(r.microarticle) for r in rows]
+        items = [MicroArticleCardSerializer(r.microarticle).data for r in rows]
         return Response(items)
 
     def post(self, request):

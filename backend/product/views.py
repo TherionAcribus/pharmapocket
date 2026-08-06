@@ -6,69 +6,33 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from content.html import sanitize_rich_text
 from content.models import CategoryMedicament, CategoryMaladies, CategoryPharmacologie, CategoryTheme, MicroArticlePage
+from content.serializers import MicroArticleCardSerializer
 from learning.models import LessonProgress
 
 from .pagination import FeedCursorPagination
 from .serializers import FeedItemSerializer, MicroDetailSerializer
 
 
-def _cover_url(page: MicroArticlePage) -> str | None:
-    if not page.cover_image_id:
-        return None
-    try:
-        return page.cover_image.file.url
-    except Exception:
-        return None
+_PRODUCT_CARD_FIELDS = (
+    *MicroArticleCardSerializer.default_fields,
+    "tags_payload",
+    "categories_theme_payload",
+    "categories_maladies_payload",
+    "categories_medicament_payload",
+    "categories_pharmacologie_payload",
+)
 
 
-def _cover_credit(page: MicroArticlePage) -> str | None:
-    if not page.cover_image_id:
-        return None
-    try:
-        text = getattr(page.cover_image, "credit_text", None)
-        if callable(text):
-            value = text()
-        else:
-            value = str(text) if text else ""
-        return value or None
-    except Exception:
-        return None
-
-
-def _key_points(page: MicroArticlePage) -> list[str]:
-    return [block.value for block in page.key_points]
-
-
-def _tag_payload(page: MicroArticlePage) -> list[dict]:
-    return [{"id": t.id, "name": t.name, "slug": t.slug} for t in page.tags.all()]
-
-
-def _cat_payload(qs) -> list[dict]:
-    return [{"id": c.id, "name": c.name, "slug": c.slug} for c in qs.all()]
-
-
-def _questions_payload(page: MicroArticlePage) -> list[dict]:
-    rows = (
-        page.microarticle_questions.select_related("question")
-        .all()
-        .order_by("sort_order")
-    )
-    return [
-        {
-            "id": r.question_id,
-            "type": r.question.type,
-            "prompt": r.question.prompt,
-            "choices": r.question.choices,
-            "correct_answers": r.question.correct_answers,
-            "explanation": r.question.explanation,
-            "difficulty": r.question.difficulty,
-            "references": r.question.references,
-        }
-
-        for r in rows
-    ]
+def _product_card(page: MicroArticlePage, *, include_questions: bool = False) -> dict:
+    fields = (*_PRODUCT_CARD_FIELDS, "questions") if include_questions else _PRODUCT_CARD_FIELDS
+    data = dict(MicroArticleCardSerializer(page, fields=fields).data)
+    data["tags"] = data.pop("tags_payload")
+    data["categories_theme"] = data.pop("categories_theme_payload")
+    data["categories_maladies"] = data.pop("categories_maladies_payload")
+    data["categories_medicament"] = data.pop("categories_medicament_payload")
+    data["categories_pharmacologie"] = data.pop("categories_pharmacologie_payload")
+    return data
 
 def _taxonomy_model(taxonomy: str):
     if taxonomy == "theme":
@@ -236,26 +200,11 @@ class FeedView(ListAPIView):
         ids = [p.id for p in page]
         progress = _progress_map(request.user, ids)
 
-        data = [
-            {
-                "id": p.id,
-                "slug": p.slug,
-                "title": p.title,
-                "answer_express": sanitize_rich_text(p.answer_express),
-                "takeaway": sanitize_rich_text(p.takeaway),
-                "key_points": _key_points(p),
-                "cover_image_url": _cover_url(p),
-                "cover_image_credit": _cover_credit(p),
-                "tags": _tag_payload(p),
-                "categories_theme": _cat_payload(p.categories_theme),
-                "categories_maladies": _cat_payload(p.categories_maladies),
-                "categories_medicament": _cat_payload(p.categories_medicament),
-                "categories_pharmacologie": _cat_payload(p.categories_pharmacologie),
-                "published_at": p.first_published_at,
-                "progress": progress.get(p.id),
-            }
-            for p in page
-        ]
+        data = []
+        for item_page in page:
+            item = _product_card(item_page)
+            item["progress"] = progress.get(item_page.id)
+            data.append(item)
 
         serializer = self.get_serializer(data, many=True)
         return self.get_paginated_response(serializer.data)
@@ -285,23 +234,9 @@ class MicroBySlugView(RetrieveAPIView):
         progress = _progress_map(request.user, [page.id]).get(page.id)
 
         data = {
-            "id": page.id,
-            "slug": page.slug,
-            "title": page.title,
-            "answer_express": sanitize_rich_text(page.answer_express),
-            "takeaway": sanitize_rich_text(page.takeaway),
-            "key_points": _key_points(page),
-            "cover_image_url": _cover_url(page),
-            "cover_image_credit": _cover_credit(page),
+            **_product_card(page, include_questions=True),
             "links": [b.value for b in page.links] if page.links else [],
             "see_more": [{"type": b.block_type, "value": b.value} for b in page.see_more] if page.see_more else [],
-            "tags": _tag_payload(page),
-            "categories_theme": _cat_payload(page.categories_theme),
-            "categories_maladies": _cat_payload(page.categories_maladies),
-            "categories_medicament": _cat_payload(page.categories_medicament),
-            "categories_pharmacologie": _cat_payload(page.categories_pharmacologie),
-            "questions": _questions_payload(page),
-            "published_at": page.first_published_at,
             "progress": progress,
         }
         serializer = self.get_serializer(data)

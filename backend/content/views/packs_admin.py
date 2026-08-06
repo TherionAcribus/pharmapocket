@@ -22,6 +22,7 @@ from ..models import (
     MicroArticlePage,
 )
 from ..search import filter_microarticles
+from ..serializers import MicroArticleCardSerializer, image_payload
 from ..serializers.inputs import (
     AdminImageUploadSerializer,
     AdminPackBulkAddSerializer,
@@ -29,7 +30,7 @@ from ..serializers.inputs import (
     AdminPackPatchSerializer,
     AdminPackReorderSerializer,
 )
-from .helpers import _image_payload, _microarticle_list_item, _require_staff
+from .helpers import _require_staff
 
 
 def _admin_pack_qs():
@@ -37,7 +38,7 @@ def _admin_pack_qs():
 
 
 def _admin_pack_payload(deck: Deck) -> dict:
-    cover_payload = _image_payload(deck.cover_image) if getattr(deck, "cover_image_id", None) else None
+    cover_payload = image_payload(deck.cover_image) if getattr(deck, "cover_image_id", None) else None
     return {
         "id": deck.id,
         "name": deck.name,
@@ -122,7 +123,7 @@ class AdminPackDetailView(APIView):
         )
         cards = []
         for r in cards_qs:
-            item = _microarticle_list_item(r.microarticle)
+            item = dict(MicroArticleCardSerializer(r.microarticle).data)
             item["deck_card_id"] = r.id
             item["sort_order"] = r.sort_order
             item["position"] = r.sort_order
@@ -349,7 +350,7 @@ class AdminImageUploadView(APIView):
             image.collection = collection
         image.save()
 
-        return Response(_image_payload(image), status=201)
+        return Response(image_payload(image), status=201)
 
 
 class AdminPackBulkAddView(APIView):

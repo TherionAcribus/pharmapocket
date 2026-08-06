@@ -30,6 +30,7 @@ from .models import (
     SubjectCard,
     UserDeckProgress,
 )
+from .serializers import MicroArticleCardSerializer
 
 
 class PublicApiSmokeTests(APITestCase):
@@ -39,6 +40,9 @@ class PublicApiSmokeTests(APITestCase):
 
         if not Site.objects.exists():
             Site.objects.create(hostname="localhost", root_page=root, is_default_site=True)
+        else:
+            # L'API Wagtail v2 ne publie que les pages sous la racine du site.
+            root = Site.objects.get(is_default_site=True).root_page
 
         index = MicroArticleIndexPage(title="Micro", slug="micro")
         root.add_child(instance=index)
@@ -79,6 +83,29 @@ class PublicApiSmokeTests(APITestCase):
         self.assertEqual(resp.data["slug"], "metformine")
         self.assertIn("questions", resp.data)
         self.assertIn("published_at", resp.data)
+
+    def test_card_payload_is_shared_by_content_and_wagtail_v2(self):
+        page = MicroArticlePage.objects.get(slug="metformine")
+        expected = MicroArticleCardSerializer(page).data
+
+        content_response = self.client.get(
+            "/api/v1/content/microarticles/metformine/",
+            secure=True,
+        )
+        self.assertEqual(content_response.status_code, 200)
+        for field_name, value in expected.items():
+            self.assertEqual(content_response.data[field_name], value)
+
+        wagtail_response = self.client.get(f"/api/v2/pages/{page.id}/", secure=True)
+        self.assertEqual(wagtail_response.status_code, 200)
+        self.assertEqual(wagtail_response.data["answer_express"], expected["answer_express"])
+        self.assertEqual(wagtail_response.data["takeaway"], expected["takeaway"])
+        self.assertEqual(wagtail_response.data["api_key_points"], expected["key_points"])
+        self.assertEqual(wagtail_response.data["api_cover"], None)
+        self.assertEqual(
+            wagtail_response.data["api_tags"],
+            MicroArticleCardSerializer(page, fields=("tags_payload",)).data["tags_payload"],
+        )
 
     def test_taxonomy_tree_smoke(self):
         resp = self.client.get("/api/v1/taxonomies/pharmacologie/tree/", secure=True)

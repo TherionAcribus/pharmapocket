@@ -6,9 +6,18 @@ que `from ..serializers import MicroArticleListSerializer` continue de marcher ;
 les serializers d'entrée s'importent depuis `.serializers.inputs`.
 """
 
-from .outputs import MicroArticleDetailSerializer, MicroArticleListSerializer
+from .outputs import (
+    MicroArticleCardField,
+    MicroArticleCardSerializer,
+    MicroArticleDetailSerializer,
+    MicroArticleListSerializer,
+    image_payload,
+)
 
 __all__ = [
+    "MicroArticleCardField",
+    "MicroArticleCardSerializer",
     "MicroArticleDetailSerializer",
     "MicroArticleListSerializer",
+    "image_payload",
 ]

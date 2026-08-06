@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import Deck, DeckCard, MicroArticlePage, UserDeckProgress
+from ..serializers import MicroArticleCardSerializer, image_payload
 from ..serializers.inputs import (
     CardDecksUpdateSerializer,
     DeckCardAddSerializer,
@@ -20,8 +21,6 @@ from ..serializers.inputs import (
 )
 from .helpers import (
     _get_or_create_default_deck,
-    _image_payload,
-    _microarticle_list_item,
 )
 
 _UNSET_POSITION = object()
@@ -150,7 +149,7 @@ class DeckListCreateView(APIView):
                     cards_count,
                     last_card_position=last_positions_by_deck_id.get(d.id),
                 )
-                cover_payload = _image_payload(d.cover_image) if getattr(d, "cover_image_id", None) else None
+                cover_payload = image_payload(d.cover_image) if getattr(d, "cover_image_id", None) else None
                 items.append(
                     {
                         "id": d.id,
@@ -250,14 +249,14 @@ class DeckDetailView(APIView):
 
         cards = []
         for r in cards_qs:
-            item = _microarticle_list_item(r.microarticle)
+            item = dict(MicroArticleCardSerializer(r.microarticle).data)
             item["position"] = r.sort_order
             item["sort_order"] = r.sort_order
             item["is_optional"] = bool(r.is_optional)
             item["notes"] = r.notes
             cards.append(item)
 
-        deck_cover_payload = _image_payload(deck.cover_image) if getattr(deck, "cover_image_id", None) else None
+        deck_cover_payload = image_payload(deck.cover_image) if getattr(deck, "cover_image_id", None) else None
 
         payload = {
             "id": deck.id,
@@ -373,7 +372,7 @@ class DeckCardsView(APIView):
 
         items: list[dict] = []
         for r in qs:
-            item = _microarticle_list_item(r.microarticle)
+            item = dict(MicroArticleCardSerializer(r.microarticle).data)
             item["decks_count"] = int(deck_counts_by_card_id.get(r.microarticle_id, 1))
             item["position"] = r.sort_order
             item["sort_order"] = r.sort_order

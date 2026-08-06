@@ -10,8 +10,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from content.html import sanitize_rich_text
 from content.models import Deck, DeckCard, MicroArticlePage
+from content.serializers import MicroArticleCardSerializer
 
 from .models import CardSRSState, LessonProgress
 from .serializers import (
@@ -221,46 +221,6 @@ def _parse_bool(value: str | None, *, default: bool) -> bool:
     return default
 
 
-def _cover_url(page: MicroArticlePage) -> str | None:
-    if not page.cover_image_id:
-        return None
-    try:
-        return page.cover_image.file.url
-    except Exception:
-        return None
-
-
-def _cover_credit(page: MicroArticlePage) -> str | None:
-    if not page.cover_image_id:
-        return None
-    try:
-        text = getattr(page.cover_image, "credit_text", None)
-        if callable(text):
-            value = text()
-        else:
-            value = str(text) if text else ""
-        return value or None
-    except Exception:
-        return None
-
-
-def _key_points(page: MicroArticlePage) -> list[str]:
-    return [block.value for block in page.key_points]
-
-
-def _card_payload(page: MicroArticlePage) -> dict:
-    return {
-        "id": page.id,
-        "slug": page.slug,
-        "title": page.title,
-        "answer_express": sanitize_rich_text(page.answer_express),
-        "takeaway": sanitize_rich_text(page.takeaway),
-        "key_points": _key_points(page),
-        "cover_image_url": _cover_url(page),
-        "cover_image_credit": _cover_credit(page),
-    }
-
-
 class SRSNextView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -318,7 +278,7 @@ class SRSNextView(APIView):
 
         if due_state is not None:
             payload = {
-                "card": _card_payload(due_state.microarticle),
+                "card": MicroArticleCardSerializer(due_state.microarticle).data,
                 "srs": {
                     "level": due_state.srs_level,
                     "due_at": due_state.due_at,
@@ -337,7 +297,7 @@ class SRSNextView(APIView):
         )
         if unseen is not None:
             payload = {
-                "card": _card_payload(unseen),
+                "card": MicroArticleCardSerializer(unseen).data,
                 "srs": {
                     "level": 1,
                     "due_at": now,
@@ -367,7 +327,7 @@ class SRSNextView(APIView):
             return Response(serializer.data)
 
         payload = {
-            "card": _card_payload(next_state.microarticle),
+            "card": MicroArticleCardSerializer(next_state.microarticle).data,
             "srs": {
                 "level": next_state.srs_level,
                 "due_at": next_state.due_at,
@@ -419,7 +379,7 @@ class SRSReviewView(APIView):
             state.save()
 
         payload = {
-            "card": _card_payload(page),
+            "card": MicroArticleCardSerializer(page).data,
             "srs": {
                 "level": state.srs_level,
                 "due_at": state.due_at,

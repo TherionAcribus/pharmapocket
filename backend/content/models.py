@@ -25,6 +25,7 @@ from wagtail.snippets.widgets import AdminSnippetChooser
 from wagtail.admin.widgets import AdminPageChooser
 
 from .blocks import ImageWithCaptionBlock, LandingCardBlock, LandingStepBlock, Mechanism3StepsBlock, ReferenceBlock
+from .serializers import MicroArticleCardField
 
 
 class PathologyThumbOverride(models.Model):
@@ -802,131 +803,33 @@ class MicroArticlePage(Page):
     def autocomplete_normalized(self) -> str:
         return self._normalized_index_text(index.AutocompleteField, exclude="autocomplete_normalized")
 
-    def api_key_points(self) -> list[str]:
-        return [block.value for block in self.key_points]
-
-    def api_sources(self) -> list[dict]:
-        return self.sources.stream_data if self.sources else []
-
-    def api_cover(self) -> dict | None:
-        if not self.cover_image_id:
-            return None
-        try:
-            return {
-                "id": self.cover_image_id,
-                "title": self.cover_image.title,
-                "url": self.cover_image.file.url,
-            }
-        except Exception:
-            return {"id": self.cover_image_id, "title": self.cover_image.title, "url": None}
-
-    def api_links(self) -> list[dict]:
-        return self.links.stream_data if self.links else []
-
-    def api_see_more(self) -> list[dict]:
-        return self.see_more.stream_data if self.see_more else []
-
-    def api_tags(self) -> list[dict]:
-        return [{"id": t.id, "name": t.name, "slug": t.slug} for t in self.tags.all()]
-
-    def api_categories_theme(self) -> list[dict]:
-        return [
-            {"id": c.id, "name": c.name, "slug": c.slug}
-            for c in self.categories_theme.all()
-        ]
-
-    def api_categories_maladies(self) -> list[dict]:
-        return [{"id": c.id, "name": c.name, "slug": c.slug} for c in self.categories_maladies.all()]
-
-    def api_categories_medicament(self) -> list[dict]:
-        return [{"id": c.id, "name": c.name, "slug": c.slug} for c in self.categories_medicament.all()]
-
-    def api_categories_pharmacologie(self) -> list[dict]:
-        return [
-            {"id": c.id, "name": c.name, "slug": c.slug}
-            for c in self.categories_pharmacologie.all()
-        ]
-
-    def api_questions(self) -> list[dict]:
-        rows = (
-            self.microarticle_questions.select_related("question")
-            .all()
-            .order_by("sort_order")
-        )
-        return [
-            {
-                "id": r.question_id,
-                "type": r.question.type,
-                "prompt": r.question.prompt,
-                "choices": r.question.choices,
-                "correct_answers": r.question.correct_answers,
-                "explanation": r.question.explanation,
-                "difficulty": r.question.difficulty,
-                "references": r.question.references,
-            }
-            for r in rows
-        ]
-
-    def api_recap_points(self) -> list[dict]:
-        """Retourne les points récap avec leur fiche détail associée."""
-        rows = (
-            self.recap_points.select_related("detail_card")
-            .all()
-            .order_by("sort_order")
-        )
-        return [
-            {
-                "id": r.id,
-                "text": r.text,
-                "sort_order": r.sort_order,
-                "detail_card": {
-                    "id": r.detail_card.id,
-                    "slug": r.detail_card.slug,
-                    "title": r.detail_card.title,
-                } if r.detail_card else None,
-            }
-            for r in rows
-        ]
-
-    def get_parent_recap_cards(self) -> list:
-        """Retourne les fiches récap qui référencent cette carte comme détail."""
-        from .models import RecapPoint
-        return [
-            {
-                "id": rp.recap_card.id,
-                "slug": rp.recap_card.slug,
-                "title": rp.recap_card.title,
-            }
-            for rp in RecapPoint.objects.filter(detail_card=self).select_related("recap_card")
-        ]
-
     api_fields = [
         APIField("title"),
-        APIField("answer_express"),
-        APIField("takeaway"),
-        APIField("api_key_points", serializer=serializers.ListField(child=serializers.CharField())),
-        APIField("api_sources", serializer=serializers.ListField(child=serializers.DictField())),
-        APIField("api_cover", serializer=serializers.DictField(allow_null=True)),
-        APIField("api_links", serializer=serializers.ListField(child=serializers.DictField())),
-        APIField("api_see_more", serializer=serializers.ListField(child=serializers.DictField())),
-        APIField("api_tags", serializer=serializers.ListField(child=serializers.DictField())),
+        APIField("answer_express", serializer=MicroArticleCardField("answer_express")),
+        APIField("takeaway", serializer=MicroArticleCardField("takeaway")),
+        APIField("api_key_points", serializer=MicroArticleCardField("key_points")),
+        APIField("api_sources", serializer=MicroArticleCardField("sources")),
+        APIField("api_cover", serializer=MicroArticleCardField("cover")),
+        APIField("api_links", serializer=MicroArticleCardField("links")),
+        APIField("api_see_more", serializer=MicroArticleCardField("see_more")),
+        APIField("api_tags", serializer=MicroArticleCardField("tags_payload")),
         APIField(
             "api_categories_theme",
-            serializer=serializers.ListField(child=serializers.DictField()),
+            serializer=MicroArticleCardField("categories_theme_payload"),
         ),
         APIField(
             "api_categories_maladies",
-            serializer=serializers.ListField(child=serializers.DictField()),
+            serializer=MicroArticleCardField("categories_maladies_payload"),
         ),
         APIField(
             "api_categories_medicament",
-            serializer=serializers.ListField(child=serializers.DictField()),
+            serializer=MicroArticleCardField("categories_medicament_payload"),
         ),
         APIField(
             "api_categories_pharmacologie",
-            serializer=serializers.ListField(child=serializers.DictField()),
+            serializer=MicroArticleCardField("categories_pharmacologie_payload"),
         ),
-        APIField("api_questions", serializer=serializers.ListField(child=serializers.DictField())),
+        APIField("api_questions", serializer=MicroArticleCardField("questions")),
     ]
 
     parent_page_types = ["content.MicroArticleIndexPage"]

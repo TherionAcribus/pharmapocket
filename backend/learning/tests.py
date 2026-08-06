@@ -8,6 +8,7 @@ from rest_framework.test import APITestCase
 from wagtail.models import Page, Site
 
 from content.models import Deck, DeckCard, MicroArticleIndexPage, MicroArticlePage
+from content.serializers import MicroArticleCardSerializer
 
 
 class SrsApiTests(APITestCase):
@@ -53,6 +54,7 @@ class SrsApiTests(APITestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIsNotNone(resp.data.get("card"))
         self.assertEqual(resp.data["card"]["id"], self.card.id)
+        self.assertEqual(resp.data["card"], MicroArticleCardSerializer(self.card).data)
         self.assertEqual(resp.data["srs"]["level"], 1)
 
     def test_srs_review_updates_state(self):
