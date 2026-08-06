@@ -131,6 +131,16 @@ class PublicApiSmokeTests(APITestCase):
         self.assertIn("tags_payload", first)
         self.assertIn("published_at", first)
 
+    def test_product_feed_remains_public(self):
+        resp = self.client.get("/api/v1/feed/", secure=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("results", resp.data)
+
+    def test_wagtail_asset_lists_remain_public(self):
+        for path in ("/api/v2/images/", "/api/v2/documents/"):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path, secure=True).status_code, 200)
+
     def test_content_detail_smoke(self):
         resp = self.client.get("/api/v1/content/microarticles/metformine/", secure=True)
         self.assertEqual(resp.status_code, 200)

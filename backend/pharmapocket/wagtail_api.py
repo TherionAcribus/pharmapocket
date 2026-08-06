@@ -1,4 +1,5 @@
 from wagtail.api.v2.router import WagtailAPIRouter
+from rest_framework.permissions import AllowAny
 
 # Wagtail 6.x sépare les viewsets images/documents dans leurs modules dédiés
 try:
@@ -10,16 +11,30 @@ except ImportError:  # fallback compat
     ImagesAPIViewSet = None
     DocumentsAPIViewSet = None
 
+
+class PublicPagesAPIViewSet(PagesAPIViewSet):
+    permission_classes = [AllowAny]
+
+
 api_router = WagtailAPIRouter("wagtailapi")
-api_router.register_endpoint("pages", PagesAPIViewSet)
+api_router.register_endpoint("pages", PublicPagesAPIViewSet)
 if ImagesAPIViewSet:
-    api_router.register_endpoint("images", ImagesAPIViewSet)
+    class PublicImagesAPIViewSet(ImagesAPIViewSet):
+        permission_classes = [AllowAny]
+
+    api_router.register_endpoint("images", PublicImagesAPIViewSet)
 if DocumentsAPIViewSet:
-    api_router.register_endpoint("documents", DocumentsAPIViewSet)
+    class PublicDocumentsAPIViewSet(DocumentsAPIViewSet):
+        permission_classes = [AllowAny]
+
+    api_router.register_endpoint("documents", PublicDocumentsAPIViewSet)
 
 try:
     from wagtail.api.v2.views import SnippetsAPIViewSet
 
-    api_router.register_endpoint("snippets", SnippetsAPIViewSet)
+    class PublicSnippetsAPIViewSet(SnippetsAPIViewSet):
+        permission_classes = [AllowAny]
+
+    api_router.register_endpoint("snippets", PublicSnippetsAPIViewSet)
 except Exception:
     pass

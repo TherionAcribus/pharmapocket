@@ -22,6 +22,14 @@ def _env_bool(name: str, *, default: bool) -> bool:
     raise ImproperlyConfigured(f"{name} must be a boolean value")
 
 
+def _log_level(name: str, *, default: str) -> str:
+    value = os.environ.get(name, default).strip().upper()
+    allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if value not in allowed:
+        raise ImproperlyConfigured(f"{name} must be one of: {', '.join(sorted(allowed))}")
+    return value
+
+
 def _throttle_rate(name: str, *, default: str) -> str | None:
     """Read a DRF throttle rate such as ``60/min``. Empty or ``off`` disables it."""
     value = os.environ.get(name, default).strip()
@@ -61,6 +69,45 @@ if not SECRET_KEY:
     raise ImproperlyConfigured("DJANGO_SECRET_KEY environment variable is required")
 
 DEBUG = _env_bool("DJANGO_DEBUG", default=False)
+BEHIND_PROXY = _env_bool("DJANGO_BEHIND_PROXY", default=False)
+
+LOG_LEVEL = _log_level("DJANGO_LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "structured": {
+            "format": "time={asctime} level={levelname} logger={name} message={message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "structured",
+            "level": LOG_LEVEL,
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    # Django installs its own non-propagating loggers before applying this
+    # configuration. Override them explicitly so the env-driven level and the
+    # same console format apply to framework and request logs as well.
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
 
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
@@ -240,7 +287,9 @@ else:
 # Number of reverse proxies in front of the app whose X-Forwarded-For entries we
 # trust. Anything below that count in the header is client-supplied and must not
 # be used to identify a caller. See pharmapocket.throttling.get_client_ip.
-TRUSTED_PROXY_COUNT = int(os.environ.get("DJANGO_TRUSTED_PROXY_COUNT", "0" if DEBUG else "1"))
+TRUSTED_PROXY_COUNT = int(
+    os.environ.get("DJANGO_TRUSTED_PROXY_COUNT", "1" if BEHIND_PROXY else "0")
+)
 if TRUSTED_PROXY_COUNT < 0:
     raise ImproperlyConfigured("DJANGO_TRUSTED_PROXY_COUNT must be zero or positive")
 
@@ -253,7 +302,7 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",
+        "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_THROTTLE_CLASSES": [
         "pharmapocket.throttling.AnonThrottle",
@@ -338,8 +387,10 @@ CSRF_TRUSTED_ORIGINS = [
     if o.strip()
 ]
 
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-USE_X_FORWARDED_HOST = True
+# Forwarded scheme and host headers are trustworthy only when every request
+# reaches Django through a controlled reverse proxy that overwrites them.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if BEHIND_PROXY else None
+USE_X_FORWARDED_HOST = BEHIND_PROXY
 
 # HTTPS is the secure default outside local development. The API is designed to
 # be consumed from a separate frontend origin, so production cookies use

@@ -111,6 +111,7 @@ L'état général est bon : settings de sécurité soignés (HSTS, cookies, sani
 - `REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"] = AllowAny` : passer à `IsAuthenticated` par défaut et déclarer explicitement `AllowAny` sur les vues publiques (fail-closed au lieu de fail-open).
 - `SECURE_PROXY_SSL_HEADER` + `USE_X_FORWARDED_HOST` sont actifs même en dev/hors proxy : les conditionner à une env var (`DJANGO_BEHIND_PROXY=1`) pour éviter le spoofing d'hôte si le backend est un jour exposé sans proxy.
 - Ajouter `LOGGING` structuré (au moins console + niveau par env) — actuellement aucun logging configuré.
+- **Statut (2026-08-06)** : ✅ DRF est désormais fail-closed avec `IsAuthenticated` par défaut ; les endpoints publics métier et les viewsets Wagtail déclarent `AllowAny` explicitement. Les en-têtes `X-Forwarded-Proto` / `X-Forwarded-Host` ne sont honorés que lorsque `DJANGO_BEHIND_PROXY=1` (désactivé par défaut). Les logs Django, serveur et applicatifs sortent sur la console dans un format commun, au niveau `DJANGO_LOG_LEVEL` (`DEBUG` en dev, `INFO` hors debug par défaut).
 
 ---
 

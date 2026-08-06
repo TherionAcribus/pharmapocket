@@ -109,6 +109,7 @@ class LandingView(APIView):
 
 
 class MicroArticleListView(ListAPIView):
+    permission_classes = [AllowAny]
     serializer_class = MicroArticleListSerializer
     pagination_class = MicroArticleCursorPagination
 
@@ -188,6 +189,7 @@ class MicroArticleListView(ListAPIView):
 
 
 class MicroArticleDetailView(RetrieveAPIView):
+    permission_classes = [AllowAny]
     serializer_class = MicroArticleDetailSerializer
     lookup_field = "slug"
 

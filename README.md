@@ -105,8 +105,11 @@ Les endpoints allauth headless (`/auth/…`) ne passent pas par DRF : ils sont c
 par `ACCOUNT_RATE_LIMITS` (login `10/m/ip`, 5 échecs par compte et par 5 min, signup
 `10/m/ip`, reset password `10/m/ip` + `3/m` par adresse). Un dépassement renvoie `429`.
 
-Trois points à vérifier au déploiement :
+Quatre points à vérifier au déploiement :
 
+- **`DJANGO_BEHIND_PROXY=1`** doit être activé uniquement si Django est toujours
+  derrière un reverse proxy contrôlé qui remplace `X-Forwarded-Proto` et
+  `X-Forwarded-Host`. Sans cela, la valeur doit rester `0` (défaut sécurisé).
 - **`DJANGO_TRUSTED_PROXY_COUNT`** doit correspondre au nombre réel de reverse proxies.
   Les compteurs identifient le client par la N-ième entrée de `X-Forwarded-For` **en
   partant de la fin** ; une valeur trop basse laisse un client forger son identité,
@@ -116,6 +119,10 @@ Trois points à vérifier au déploiement :
 - **`DJANGO_CACHE_URL`** (Redis) rend les quotas globaux. Sans lui, le cache local à
   chaque worker gunicorn multiplie de fait la limite par le nombre de workers.
   Le backend Redis est fourni par Django mais nécessite le client : `pip install redis`.
+
+Les journaux Django et applicatifs sont écrits sur la console avec un format commun
+(`date`, niveau, logger, message). `DJANGO_LOG_LEVEL` fixe le seuil global ; son défaut
+est `DEBUG` lorsque `DJANGO_DEBUG=1`, sinon `INFO`.
 
 ### Recherche
 

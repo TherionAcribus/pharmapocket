@@ -94,6 +94,7 @@ def _progress_map(user, lesson_ids: list[int]) -> dict[int, dict]:
 
 
 class FeedView(ListAPIView):
+    permission_classes = [AllowAny]
     pagination_class = FeedCursorPagination
     serializer_class = FeedItemSerializer
 
@@ -212,6 +213,7 @@ class FeedView(ListAPIView):
 
 
 class MicroBySlugView(RetrieveAPIView):
+    permission_classes = [AllowAny]
     serializer_class = MicroDetailSerializer
     lookup_field = "slug"
 

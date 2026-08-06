@@ -5,10 +5,72 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.test import APIRequestFactory
 from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.views import APIView
 
 from pharmapocket.throttling import get_client_ip, is_exempt
+
+
+class _ViewWithoutExplicitPermissions(APIView):
+    def get(self, request):
+        return Response({"ok": True})
+
+
+class SettingsHardeningTests(SimpleTestCase):
+    def test_drf_defaults_to_authenticated(self):
+        self.assertEqual(
+            settings.REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"],
+            ["rest_framework.permissions.IsAuthenticated"],
+        )
+        response = _ViewWithoutExplicitPermissions.as_view()(APIRequestFactory().get("/"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_public_views_declare_allow_any(self):
+        from content.views.feed import MicroArticleDetailView, MicroArticleListView
+        from pharmapocket import wagtail_api
+        from product.views import FeedView, MicroByIdView, MicroBySlugView
+
+        public_views = [
+            FeedView,
+            MicroBySlugView,
+            MicroByIdView,
+            MicroArticleListView,
+            MicroArticleDetailView,
+            wagtail_api.PublicPagesAPIViewSet,
+        ]
+        for optional_view_name in (
+            "PublicImagesAPIViewSet",
+            "PublicDocumentsAPIViewSet",
+            "PublicSnippetsAPIViewSet",
+        ):
+            optional_view = getattr(wagtail_api, optional_view_name, None)
+            if optional_view is not None:
+                public_views.append(optional_view)
+
+        for view in public_views:
+            with self.subTest(view=view.__name__):
+                self.assertEqual(view.permission_classes, [AllowAny])
+
+    def test_forwarded_headers_follow_proxy_switch(self):
+        self.assertEqual(settings.USE_X_FORWARDED_HOST, settings.BEHIND_PROXY)
+        expected_ssl_header = (
+            ("HTTP_X_FORWARDED_PROTO", "https") if settings.BEHIND_PROXY else None
+        )
+        self.assertEqual(settings.SECURE_PROXY_SSL_HEADER, expected_ssl_header)
+
+    def test_logging_uses_console_and_environment_level(self):
+        logging_config = settings.LOGGING
+        self.assertEqual(logging_config["handlers"]["console"]["level"], settings.LOG_LEVEL)
+        self.assertEqual(
+            logging_config["root"],
+            {"handlers": ["console"], "level": settings.LOG_LEVEL},
+        )
+        self.assertEqual(logging_config["loggers"]["django"]["handlers"], ["console"])
+        self.assertEqual(logging_config["loggers"]["django.server"]["handlers"], ["console"])
 
 
 def throttle_rates(**rates: str):
