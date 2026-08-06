@@ -881,6 +881,61 @@ class SavedMicroArticleDetailView(APIView):
         return Response(status=204)
 
 
+_UNSET_POSITION = object()
+
+
+def _last_card_position(deck_id: int, card_id: int | None) -> int | None:
+    """sort_order de `card_id` dans le deck, ou None si absente."""
+    if not card_id:
+        return None
+    pos = (
+        DeckCard.objects.filter(deck_id=deck_id, microarticle_id=card_id)
+        .values_list("sort_order", flat=True)
+        .first()
+    )
+    return int(pos) if pos is not None else None
+
+
+def build_progress_payload(
+    progress: UserDeckProgress | None,
+    deck_id: int,
+    cards_count: int,
+    *,
+    last_card_position=_UNSET_POSITION,
+) -> dict | None:
+    """Payload de progression d'un deck officiel, identique sur tous les écrans.
+
+    `cards_seen_count` est rattrapé depuis `last_card_id` quand il vaut 0 (progression
+    enregistrée avant l'introduction du compteur). Les appels en lot passent
+    `last_card_position` déjà résolu pour éviter une requête par deck.
+    """
+    if progress is None:
+        return None
+
+    done = int(getattr(progress, "cards_done_count", 0) or 0)
+    seen = int(getattr(progress, "cards_seen_count", 0) or 0)
+    if seen == 0 and getattr(progress, "last_card_id", None):
+        pos = (
+            _last_card_position(deck_id, progress.last_card_id)
+            if last_card_position is _UNSET_POSITION
+            else last_card_position
+        )
+        if pos is not None:
+            seen = max(seen, int(pos) + 1)
+
+    effective = max(done, seen)
+    progress_pct = int(round((effective / cards_count) * 100)) if cards_count else 0
+    return {
+        "started_at": progress.started_at,
+        "last_seen_at": progress.last_seen_at,
+        "cards_seen_count": seen,
+        "cards_done_count": done,
+        "progress_pct": progress_pct,
+        "mode_last": progress.mode_last,
+        "last_card_id": progress.last_card_id,
+    }
+
+
 class DeckListSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
@@ -946,14 +1001,12 @@ class DeckListCreateView(APIView):
             for d in qs:
                 p = progress_by_deck_id.get(d.id)
                 cards_count = int(getattr(d, "cards_count", 0) or 0)
-                done = int(getattr(p, "cards_done_count", 0) or 0) if p else 0
-                seen = int(getattr(p, "cards_seen_count", 0) or 0) if p else 0
-                if p and seen == 0 and getattr(p, "last_card_id", None):
-                    pos = last_positions_by_deck_id.get(d.id)
-                    if pos is not None:
-                        seen = max(seen, pos + 1)
-                effective = max(done, seen)
-                progress_pct = int(round((effective / cards_count) * 100)) if cards_count else 0
+                progress_payload = build_progress_payload(
+                    p,
+                    d.id,
+                    cards_count,
+                    last_card_position=last_positions_by_deck_id.get(d.id),
+                )
                 cover_payload = _image_payload(d.cover_image) if getattr(d, "cover_image_id", None) else None
                 items.append(
                     {
@@ -968,19 +1021,7 @@ class DeckListCreateView(APIView):
                         "status": d.status,
                         "type": d.type,
                         "cards_count": cards_count,
-                        "progress": (
-                            {
-                                "started_at": p.started_at,
-                                "last_seen_at": p.last_seen_at,
-                                "cards_seen_count": seen,
-                                "cards_done_count": done,
-                                "progress_pct": progress_pct,
-                                "mode_last": p.mode_last,
-                                "last_card_id": p.last_card_id,
-                            }
-                            if p
-                            else None
-                        ),
+                        "progress": progress_payload,
                     }
                 )
             return Response(items)
@@ -1097,30 +1138,7 @@ class DeckDetailView(APIView):
 
         if request.user.is_authenticated and deck.type == Deck.DeckType.OFFICIAL:
             progress = UserDeckProgress.objects.filter(user=request.user, deck=deck).first()
-            if progress is not None:
-                cards_count = len(cards)
-                done = int(getattr(progress, "cards_done_count", 0) or 0)
-                seen = int(getattr(progress, "cards_seen_count", 0) or 0)
-                if seen == 0 and getattr(progress, "last_card_id", None):
-                    pos = DeckCard.objects.filter(
-                        deck_id=deck.id,
-                        microarticle_id=progress.last_card_id,
-                    ).values_list("sort_order", flat=True).first()
-                    if pos is not None:
-                        seen = max(seen, int(pos) + 1)
-                effective = max(done, seen)
-                progress_pct = int(round((effective / cards_count) * 100)) if cards_count else 0
-                payload["progress"] = {
-                    "started_at": progress.started_at,
-                    "last_seen_at": progress.last_seen_at,
-                    "cards_seen_count": seen,
-                    "cards_done_count": done,
-                    "progress_pct": progress_pct,
-                    "mode_last": progress.mode_last,
-                    "last_card_id": progress.last_card_id,
-                }
-            else:
-                payload["progress"] = None
+            payload["progress"] = build_progress_payload(progress, deck.id, len(cards))
 
         return Response(payload)
 
@@ -1406,19 +1424,8 @@ class OfficialDeckStartView(APIView):
             deck_id=deck.id,
             microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
         ).count()
-        effective = max(int(obj.cards_done_count or 0), int(obj.cards_seen_count or 0))
-        progress_pct = int(round((effective / cards_count) * 100)) if cards_count else 0
         return Response(
-            {
-                "deck_id": deck.id,
-                "started_at": obj.started_at,
-                "last_seen_at": obj.last_seen_at,
-                "cards_seen_count": obj.cards_seen_count,
-                "cards_done_count": obj.cards_done_count,
-                "progress_pct": progress_pct,
-                "mode_last": obj.mode_last,
-                "last_card_id": obj.last_card_id,
-            }
+            {"deck_id": deck.id, **build_progress_payload(obj, deck.id, cards_count)}
         )
 
 
@@ -1501,20 +1508,9 @@ class OfficialDeckProgressView(APIView):
             deck_id=deck.id,
             microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
         ).count()
-        effective = max(int(obj.cards_done_count or 0), int(obj.cards_seen_count or 0))
-        progress_pct = int(round((effective / cards_count) * 100)) if cards_count else 0
 
         return Response(
-            {
-                "deck_id": deck.id,
-                "started_at": obj.started_at,
-                "last_seen_at": obj.last_seen_at,
-                "cards_seen_count": obj.cards_seen_count,
-                "cards_done_count": obj.cards_done_count,
-                "progress_pct": progress_pct,
-                "mode_last": obj.mode_last,
-                "last_card_id": obj.last_card_id,
-            }
+            {"deck_id": deck.id, **build_progress_payload(obj, deck.id, cards_count)}
         )
 
 

@@ -28,6 +28,7 @@ from .models import (
     MicroArticlePage,
     Subject,
     SubjectCard,
+    UserDeckProgress,
 )
 
 
@@ -584,6 +585,162 @@ class BulkWriteQueryCountTests(APITestCase):
             [already.id, by_id.id, by_slug.id],
         )
         self.assertEqual([link.sort_order for link in links], [0, 1, 2])
+
+
+class OfficialDeckProgressPayloadTests(APITestCase):
+    """Les 4 endpoints qui exposent la progression partagent `build_progress_payload`."""
+
+    PROGRESS_FIELDS = (
+        "started_at",
+        "last_seen_at",
+        "cards_seen_count",
+        "cards_done_count",
+        "progress_pct",
+        "mode_last",
+        "last_card_id",
+    )
+
+    def setUp(self):
+        super().setUp()
+        root = Page.get_first_root_node()
+        if not Site.objects.exists():
+            Site.objects.create(hostname="localhost", root_page=root, is_default_site=True)
+
+        self.index = MicroArticleIndexPage(title="Micro progress", slug="micro-progress")
+        root.add_child(instance=self.index)
+        self.index.save_revision().publish()
+
+        self.user = get_user_model().objects.create_user(
+            username="deck-progress",
+            email="deck-progress@example.com",
+            password="pharmapocket-test-pwd",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.deck = Deck.objects.create(
+            type=Deck.DeckType.OFFICIAL,
+            status=Deck.Status.PUBLISHED,
+            name="Pack progression",
+            sort_order=0,
+        )
+        self.cards = []
+        for n in range(4):
+            page = MicroArticlePage(
+                title=f"Progress {n}",
+                slug=f"progress-{n}",
+                answer_express=f"Réponse {n}.",
+            )
+            self.index.add_child(instance=page)
+            page.save_revision().publish()
+            DeckCard.objects.create(deck=self.deck, microarticle=page, sort_order=n)
+            self.cards.append(page)
+
+    def _payloads(self) -> dict[str, dict]:
+        listing = self.client.get("/api/v1/content/decks/?type=official", secure=True)
+        self.assertEqual(listing.status_code, 200)
+        listed = next(item for item in listing.data if item["id"] == self.deck.id)
+
+        detail = self.client.get(f"/api/v1/content/decks/{self.deck.id}/", secure=True)
+        self.assertEqual(detail.status_code, 200)
+
+        start = self.client.post(f"/api/v1/content/decks/{self.deck.id}/start/", secure=True)
+        self.assertEqual(start.status_code, 200)
+
+        progress = self.client.post(
+            f"/api/v1/content/decks/{self.deck.id}/progress/",
+            {},
+            format="json",
+            secure=True,
+        )
+        self.assertEqual(progress.status_code, 200)
+
+        return {
+            "list": listed["progress"],
+            "detail": detail.data["progress"],
+            "start": start.data,
+            "progress": progress.data,
+        }
+
+    def _assert_all_agree(self, expected: dict):
+        for name, payload in self._payloads().items():
+            for field, value in expected.items():
+                self.assertEqual(payload[field], value, f"{name}.{field}")
+
+    def test_progress_is_none_before_any_start(self):
+        listing = self.client.get("/api/v1/content/decks/?type=official", secure=True)
+        listed = next(item for item in listing.data if item["id"] == self.deck.id)
+        self.assertIsNone(listed["progress"])
+
+        detail = self.client.get(f"/api/v1/content/decks/{self.deck.id}/", secure=True)
+        self.assertIsNone(detail.data["progress"])
+
+    def test_counts_and_pct_are_identical_on_every_endpoint(self):
+        self.client.post(f"/api/v1/content/decks/{self.deck.id}/start/", secure=True)
+        self.client.post(
+            f"/api/v1/content/decks/{self.deck.id}/progress/",
+            {"cards_seen_count": 3, "cards_done_count": 1},
+            format="json",
+            secure=True,
+        )
+
+        # effective = max(done, seen) = 3 sur 4 cartes.
+        self._assert_all_agree({"cards_seen_count": 3, "cards_done_count": 1, "progress_pct": 75})
+
+        payloads = self._payloads()
+        for name, payload in payloads.items():
+            self.assertEqual(
+                sorted(f for f in payload if f != "deck_id"),
+                sorted(self.PROGRESS_FIELDS),
+                f"{name} : champs de progression divergents",
+            )
+
+    def test_seen_count_is_backfilled_from_last_card_id_everywhere(self):
+        # Progression enregistrée sans compteur : seul last_card_id est connu.
+        self.client.post(f"/api/v1/content/decks/{self.deck.id}/start/", secure=True)
+        UserDeckProgress.objects.filter(user=self.user, deck=self.deck).update(
+            cards_seen_count=0,
+            cards_done_count=0,
+            last_card=self.cards[2],
+        )
+
+        # 3e carte (sort_order=2) → 3 cartes vues sur 4.
+        self._assert_all_agree({"cards_seen_count": 3, "progress_pct": 75})
+
+    def test_deck_list_progress_query_count_is_constant(self):
+        self.client.post(f"/api/v1/content/decks/{self.deck.id}/start/", secure=True)
+        UserDeckProgress.objects.filter(user=self.user, deck=self.deck).update(
+            cards_seen_count=0,
+            last_card=self.cards[2],
+        )
+        url = "/api/v1/content/decks/?type=official"
+
+        def count() -> int:
+            with CaptureQueriesContext(connection) as ctx:
+                resp = self.client.get(url, secure=True)
+            self.assertEqual(resp.status_code, 200)
+            return len(ctx)
+
+        with_one = count()
+
+        other = Deck.objects.create(
+            type=Deck.DeckType.OFFICIAL,
+            status=Deck.Status.PUBLISHED,
+            name="Pack progression 2",
+            sort_order=1,
+        )
+        DeckCard.objects.create(deck=other, microarticle=self.cards[0], sort_order=0)
+        UserDeckProgress.objects.create(
+            user=self.user,
+            deck=other,
+            cards_seen_count=0,
+            last_card=self.cards[0],
+        )
+
+        self.assertEqual(
+            with_one,
+            count(),
+            "le rattrapage de cards_seen_count doit rester groupé (pas de requête par deck)",
+        )
 
 
 class MicroArticleSearchTests(APITestCase):
