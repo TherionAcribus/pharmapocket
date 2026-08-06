@@ -235,6 +235,62 @@ Contraintes bloquantes : \`see_more\` <= 3 blocs, \`sources\` >= 1 et <= 5, \`li
 \`key_points\` <= 5, \`categories_theme\` >= 1, un QCM a **exactement 4 propositions**.
 N'ajoute aucun champ hors de cette liste.
 
+# Exemple d'une fiche réussie
+
+Voici le niveau de rédaction attendu — observe la phrase express construite et
+mise en gras, chaque point clé développé dans \`answer_detail\`, et \`see_more\`
+réservé à ce qui est réellement structuré :
+
+[
+  {
+    "title": "Quel délai entre le test de grossesse et la délivrance d'isotrétinoïne ?",
+    "card_type": "detail",
+    "answer_express": "<p>La délivrance doit intervenir dans les <b>7 jours</b> suivant la prescription, elle-même conditionnée à un test de grossesse négatif.</p>",
+    "key_points": [
+      "Délai de 7 jours non prolongeable",
+      "Test à refaire si le délai est dépassé"
+    ],
+    "answer_detail": "<p>Le délai de <b>7 jours</b> court à compter de la date de prescription : au-delà, l'ordonnance ne peut plus être exécutée pour ce médicament, même si le reste de l'ordonnance demeure valable.</p><p>Si le délai est dépassé, la patiente doit refaire un test de grossesse et obtenir une nouvelle prescription : le test initial n'est plus considéré comme contemporain de la délivrance.</p>",
+    "takeaway": "<p>Au-delà de <b>7 jours</b>, la patiente repasse par la case prescription.</p>",
+    "see_more": [
+      {
+        "type": "monitoring",
+        "value": {
+          "what": "Date de prescription portée sur l'ordonnance",
+          "why": "C'est elle qui fait courir le délai de 7 jours, pas la date du test"
+        }
+      }
+    ],
+    "categories_theme": ["dispensation"],
+    "categories_medicament": ["retinoides"],
+    "tags": ["isotretinoine", "grossesse"],
+    "sources": [
+      {
+        "source": {
+          "name": "Isotrétinoïne orale : conditions de prescription et de délivrance",
+          "kind": "institutional",
+          "publisher": "ANSM",
+          "url": "https://ansm.sante.fr/exemple",
+          "publication_date": "2024-01-15"
+        }
+      }
+    ],
+    "questions": [
+      {
+        "type": "qcm",
+        "prompt": "Quel est le délai maximal entre prescription et délivrance d'isotrétinoïne chez une femme en âge de procréer ?",
+        "answers": ["7 jours", "24 heures", "1 mois", "3 mois"],
+        "explanation": "Au-delà de 7 jours, la prescription n'est plus valable pour ce médicament.",
+        "difficulty": 2
+      }
+    ],
+    "subject": { "name": "Délivrance isotrétinoïne", "label": "Délai de délivrance" }
+  }
+]
+
+Cet exemple est une illustration de forme : n'en reprends **aucun contenu** si ta
+source parle d'autre chose.
+
 # Auto-vérification avant de répondre
 
 - [ ] Chaque affirmation est-elle littéralement soutenue par la source fournie ?

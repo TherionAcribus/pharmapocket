@@ -39,6 +39,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Échoue si une source citée n'existe pas déjà en base.",
         )
+        parser.add_argument(
+            "--update",
+            action="store_true",
+            help="Réécrit la fiche existante au même slug au lieu de refuser le lot.",
+        )
 
     def handle(self, *args, **options):
         path = options["path"]
@@ -54,6 +59,7 @@ class Command(BaseCommand):
             publish=options["publish"],
             dry_run=options["dry_run"],
             create_sources=not options["no_create_sources"],
+            on_existing="update" if options["update"] else "error",
         )
 
         if report.get("detail"):
@@ -63,7 +69,10 @@ class Command(BaseCommand):
             label = f"[{result['index']}] {result.get('title') or result.get('slug') or '—'}"
             if result["ok"]:
                 self.stdout.write(
-                    self.style.SUCCESS(f"{label} → id={result['id']} slug={result['slug']} ({result['status']})")
+                    self.style.SUCCESS(
+                        f"{label} → {result['action']} id={result['id']} "
+                        f"slug={result['slug']} ({result['status']})"
+                    )
                 )
             else:
                 self.stdout.write(self.style.ERROR(label))
@@ -79,4 +88,8 @@ class Command(BaseCommand):
         if report["dry_run"]:
             self.stdout.write(self.style.WARNING("Dry-run : transaction annulée, rien n'a été écrit."))
         else:
-            self.stdout.write(self.style.SUCCESS(f"{report['imported']} fiche(s) importée(s)."))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"{report['imported']} fiche(s) importée(s), dont {report['updated']} mise(s) à jour."
+                )
+            )

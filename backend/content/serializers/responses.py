@@ -229,6 +229,7 @@ class AdminCardImportResultSerializer(serializers.Serializer):
     title = serializers.CharField(required=False)
     card_type = serializers.CharField(required=False)
     status = serializers.CharField(required=False)
+    action = serializers.ChoiceField(choices=["created", "updated"], required=False)
     subject = serializers.CharField(allow_null=True, required=False)
     created_sources = serializers.ListField(child=serializers.CharField(), required=False)
     created_questions = serializers.IntegerField(required=False)
@@ -244,6 +245,7 @@ class AdminCardImportReportSerializer(serializers.Serializer):
     dry_run = serializers.BooleanField()
     published = serializers.BooleanField(required=False)
     imported = serializers.IntegerField(required=False)
+    updated = serializers.IntegerField(required=False)
     detail = serializers.CharField(required=False)
     # Dédoublonnées sur tout le lot : c'est la liste que le back-office propose
     # de créer en un geste avant de relancer l'import.

@@ -7,10 +7,11 @@ La page fait les deux moitiés du travail.
    de la source et — surtout — **le contenu de la source collé**. Les quatre
    taxonomies sont injectées automatiquement depuis la base. Bouton *Copier le
    prompt* → à coller dans le LLM.
-2. **Importer le JSON** : on colle la réponse, on *Vérifie* (dry-run), on crée.
-   Si le modèle a proposé des catégories nouvelles, elles apparaissent dans un
-   panneau **Catégories à créer** où l'on ajuste nom, slug et parent avant de les
-   créer, puis on relance.
+2. **Importer le JSON** : on colle la réponse, on regarde l'**Aperçu** (le rendu
+   réel de la carte, HTML nettoyé comme à l'enregistrement, avec les compteurs de
+   caractères), on *Vérifie* (dry-run), on crée. Si le modèle a proposé des
+   catégories nouvelles, elles apparaissent dans un panneau **Catégories à
+   créer** où l'on ajuste nom, slug et parent avant de les créer, puis on relance.
 
 Le texte du prompt vit dans
 [`frontend/src/lib/promptTemplate.ts`](../frontend/src/lib/promptTemplate.ts) —
@@ -111,7 +112,7 @@ Un type inconnu est refusé, avec la liste des types acceptés dans le message.
 
 | Élément | Règle |
 |---|---|
-| `slug` | dérivé du titre si absent ; refusé s'il existe déjà |
+| `slug` | dérivé du titre si absent ; refusé s'il existe déjà, sauf en mode mise à jour |
 | Sources | retrouvées par `url` puis par `name` (+ `publisher`) ; **créées** si inconnues |
 | Catégories | retrouvées par slug, par nom (accents/casse ignorés) ou par chemin `parent/enfant` ; **jamais créées en silence** — elles remontent dans `unknown_categories` |
 | Tags | créés à la volée |
@@ -119,6 +120,21 @@ Un type inconnu est refusé, avec la liste des types acceptés dans le message.
 | `subject` | retrouvé par slug, **créé** s'il n'existe pas ; la fiche est ajoutée en fin de liste |
 | Questions | une question de même énoncé et de même type est réutilisée |
 | Rich text | nettoyé (seules les balises autorisées survivent) |
+
+### Réimporter une fiche corrigée
+
+Case **« Mettre à jour la fiche existante au même slug »** (ou `--update` en
+ligne de commande, `on_existing: "update"` par l'API). Permet de renvoyer une
+fiche au LLM, de la faire corriger et de la réinjecter sans repasser par Wagtail.
+
+- Le JSON **fait autorité sur tous les champs éditoriaux** : un champ absent est
+  effacé, `key_points`, `tags`, questions et `recap_points` sont remplacés.
+- Seule exception : `cover_image_id`. Une illustration ajoutée à la main dans
+  Wagtail survit à un réimport qui n'en parle pas.
+- Sur une fiche **déjà publiée**, la mise à jour part en **révision brouillon** :
+  le contenu en ligne ne bouge pas tant que « Publier » n'est pas coché. Cocher
+  « Publier » remplace la version en ligne.
+- Le rapport indique, par fiche, `créée` ou `mise à jour`.
 
 ### Ce qui reste manuel
 

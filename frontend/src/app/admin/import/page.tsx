@@ -9,6 +9,7 @@ import { useImportCards } from "@/lib/queries";
 import { useStaffGuard } from "@/lib/staffGuard";
 import type { AdminCardImportReport, AdminCardImportResult } from "@/lib/types";
 
+import { CardPreview } from "./CardPreview";
 import { PromptBuilder } from "./PromptBuilder";
 import { UnknownCategories } from "./UnknownCategories";
 
@@ -57,8 +58,8 @@ function ResultCard({ result }: { result: AdminCardImportResult }) {
 
       {result.ok ? (
         <div className="mt-1 text-xs text-muted-foreground">
-          {result.card_type} · {result.status === "published" ? "publiée" : "brouillon"}
-          {result.id ? ` · id ${result.id}` : ""}
+          {result.action === "updated" ? "mise à jour" : "créée"} · {result.card_type} ·{" "}
+          {result.status === "published" ? "publiée" : "brouillon"}
           {result.slug ? ` · ${result.slug}` : ""}
           {result.subject ? ` · sujet « ${result.subject} »` : ""}
         </div>
@@ -98,11 +99,14 @@ export default function AdminImportPage() {
 
   const [raw, setRaw] = React.useState("");
   const [publish, setPublish] = React.useState(false);
+  const [update, setUpdate] = React.useState(false);
+  const [showPreview, setShowPreview] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [report, setReport] = React.useState<AdminCardImportReport | null>(null);
   const [categoriesCreated, setCategoriesCreated] = React.useState(false);
 
   const busy = importMutation.isPending;
+  const json = React.useMemo(() => extractJson(raw), [raw]);
 
   const run = async (dryRun: boolean) => {
     setError(null);
@@ -111,7 +115,7 @@ export default function AdminImportPage() {
 
     let cards: unknown;
     try {
-      cards = JSON.parse(extractJson(raw));
+      cards = JSON.parse(json);
     } catch (e: unknown) {
       // Le JSON collé est la première source d'erreur : on la distingue des
       // erreurs éditoriales, qui viennent du serveur.
@@ -120,7 +124,14 @@ export default function AdminImportPage() {
     }
 
     try {
-      setReport(await importMutation.mutateAsync({ cards, publish, dry_run: dryRun }));
+      setReport(
+        await importMutation.mutateAsync({
+          cards,
+          publish,
+          dry_run: dryRun,
+          on_existing: update ? "update" : "error",
+        })
+      );
     } catch (e: unknown) {
       setError(toErrorMessage(e));
     }
@@ -159,7 +170,32 @@ export default function AdminImportPage() {
           Publier directement (sinon les fiches sont créées en brouillon)
         </label>
 
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            checked={update}
+            onCheckedChange={(v) => setUpdate(v === true)}
+            disabled={busy}
+            className="mt-0.5"
+          />
+          <span>
+            Mettre à jour la fiche existante au même slug
+            <span className="block text-xs text-muted-foreground">
+              Le JSON réécrit tous les champs éditoriaux. Sur une fiche déjà publiée, la
+              modification part en révision brouillon tant que « Publier » n&apos;est pas
+              coché.
+            </span>
+          </span>
+        </label>
+
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowPreview((v) => !v)}
+            disabled={!raw.trim()}
+          >
+            {showPreview ? "Masquer l'aperçu" : "Aperçu"}
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -179,6 +215,8 @@ export default function AdminImportPage() {
           </div>
         ) : null}
       </div>
+
+      {showPreview ? <CardPreview raw={json} /> : null}
 
       {report?.unknown_categories.length ? (
         <UnknownCategories
@@ -200,7 +238,9 @@ export default function AdminImportPage() {
             {report.ok
               ? report.dry_run
                 ? "JSON valide — rien n'a été écrit"
-                : `${report.imported ?? 0} fiche(s) importée(s)`
+                : `${report.imported ?? 0} fiche(s) importée(s)${
+                    report.updated ? `, dont ${report.updated} mise(s) à jour` : ""
+                  }`
               : "Import refusé — rien n'a été écrit"}
           </div>
 

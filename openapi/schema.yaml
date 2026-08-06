@@ -1753,6 +1753,14 @@ components:
       - has_usable_password
       - pseudo
       - username
+    ActionEnum:
+      enum:
+      - created
+      - updated
+      type: string
+      description: |-
+        * `created` - created
+        * `updated` - updated
     AdminCardImport:
       type: object
       description: |-
@@ -1773,6 +1781,15 @@ components:
         create_sources:
           type: boolean
           default: true
+        on_existing:
+          allOf:
+          - $ref: '#/components/schemas/OnExistingEnum'
+          default: error
+          description: |-
+            `update` réécrit la fiche portant le même slug.
+
+            * `error` - error
+            * `update` - update
       required:
       - cards
     AdminCardImportReport:
@@ -1785,6 +1802,8 @@ components:
         published:
           type: boolean
         imported:
+          type: integer
+        updated:
           type: integer
         detail:
           type: string
@@ -1819,6 +1838,8 @@ components:
           type: string
         status:
           type: string
+        action:
+          $ref: '#/components/schemas/ActionEnum'
         subject:
           type: string
           nullable: true
@@ -3127,6 +3148,14 @@ components:
           type: boolean
       required:
       - ok
+    OnExistingEnum:
+      enum:
+      - error
+      - update
+      type: string
+      description: |-
+        * `error` - error
+        * `update` - update
     PaginatedFeedItemList:
       type: object
       required:

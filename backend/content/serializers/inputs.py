@@ -475,6 +475,12 @@ class AdminCardImportSerializer(serializers.Serializer):
     publish = serializers.BooleanField(required=False, default=False)
     dry_run = serializers.BooleanField(required=False, default=False)
     create_sources = serializers.BooleanField(required=False, default=True)
+    on_existing = serializers.ChoiceField(
+        choices=["error", "update"],
+        required=False,
+        default="error",
+        help_text="`update` réécrit la fiche portant le même slug.",
+    )
 
     def validate_cards(self, value):
         if isinstance(value, dict):

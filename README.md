@@ -298,6 +298,7 @@ d'entrée pour le même import :
   python manage.py import_cards fiches.json --dry-run   # valide sans écrire
   python manage.py import_cards fiches.json             # crée en brouillon
   python manage.py import_cards fiches.json --publish   # crée et publie
+  python manage.py import_cards fiches.json --update    # réécrit les slugs existants
   ```
 
 - l'API : `POST /api/v1/content/admin/microarticles/import/`.

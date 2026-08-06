@@ -35,6 +35,7 @@ class AdminCardImportView(APIView):
             publish=data["publish"],
             dry_run=data["dry_run"],
             create_sources=data["create_sources"],
+            on_existing=data["on_existing"],
             owner=request.user,
         )
         return Response(report, status=200 if report["ok"] else 400)

@@ -854,6 +854,12 @@ export interface components {
             has_usable_password: boolean;
         };
         /**
+         * @description * `created` - created
+         *     * `updated` - updated
+         * @enum {string}
+         */
+        ActionEnum: "created" | "updated";
+        /**
          * @description POST /admin/microarticles/import/
          *
          *     Seule l'enveloppe est validée ici : la forme d'une carte est trop imbriquée
@@ -869,12 +875,21 @@ export interface components {
             dry_run: boolean;
             /** @default true */
             create_sources: boolean;
+            /**
+             * @description `update` réécrit la fiche portant le même slug.
+             *
+             *     * `error` - error
+             *     * `update` - update
+             * @default error
+             */
+            on_existing: components["schemas"]["OnExistingEnum"];
         };
         AdminCardImportReport: {
             ok: boolean;
             dry_run: boolean;
             published?: boolean;
             imported?: number;
+            updated?: number;
             detail?: string;
             unknown_categories: components["schemas"]["UnknownCategory"][];
             results: components["schemas"]["AdminCardImportResult"][];
@@ -888,6 +903,7 @@ export interface components {
             title?: string;
             card_type?: string;
             status?: string;
+            action?: components["schemas"]["ActionEnum"];
             subject?: string | null;
             created_sources?: string[];
             created_questions?: number;
@@ -1362,6 +1378,12 @@ export interface components {
         OkResponse: {
             ok: boolean;
         };
+        /**
+         * @description * `error` - error
+         *     * `update` - update
+         * @enum {string}
+         */
+        OnExistingEnum: "error" | "update";
         PaginatedFeedItemList: {
             /**
              * Format: uri
@@ -1691,6 +1713,7 @@ export interface components {
     pathItems: never;
 }
 export type AccountSummary = components['schemas']['AccountSummary'];
+export type ActionEnum = components['schemas']['ActionEnum'];
 export type AdminCardImport = components['schemas']['AdminCardImport'];
 export type AdminCardImportReport = components['schemas']['AdminCardImportReport'];
 export type AdminCardImportResult = components['schemas']['AdminCardImportResult'];
@@ -1743,6 +1766,7 @@ export type OfficialPackDetail = components['schemas']['OfficialPackDetail'];
 export type OfficialPackProgress = components['schemas']['OfficialPackProgress'];
 export type OfficialPackSummary = components['schemas']['OfficialPackSummary'];
 export type OkResponse = components['schemas']['OkResponse'];
+export type OnExistingEnum = components['schemas']['OnExistingEnum'];
 export type PaginatedFeedItemList = components['schemas']['PaginatedFeedItemList'];
 export type PaginatedMicroArticleListItemList = components['schemas']['PaginatedMicroArticleListItemList'];
 export type ParentRecapCard = components['schemas']['ParentRecapCard'];

@@ -168,6 +168,7 @@ export async function adminImportCards(input: {
   publish?: boolean;
   dry_run?: boolean;
   create_sources?: boolean;
+  on_existing?: "error" | "update";
 }): Promise<AdminCardImportReport> {
   try {
     return await apiJson<AdminCardImportReport>(

@@ -584,6 +584,7 @@ def _import_one(
     *,
     publish: bool,
     create_sources: bool,
+    on_existing: str,
     owner=None,
 ) -> dict:
     ctx = _Ctx()
@@ -602,14 +603,18 @@ def _import_one(
         ctx.error("title : dépasse 255 caractères.")
 
     slug = slugify(_clean_str(payload.get("slug")) or title)
+    existing: MicroArticlePage | None = None
     if not slug:
         ctx.error("slug : impossible à dériver du titre.")
+    elif slug in batch:
+        ctx.error(f"slug : « {slug} » est en double dans ce lot.")
     else:
-        clash = MicroArticlePage.objects.filter(slug=slug).first()
-        if clash is not None:
-            ctx.error(f"slug : « {slug} » est déjà pris par la fiche #{clash.id} « {clash.title} ».")
-        elif slug in batch:
-            ctx.error(f"slug : « {slug} » est en double dans ce lot.")
+        existing = MicroArticlePage.objects.filter(slug=slug).first()
+        if existing is not None and on_existing != "update":
+            ctx.error(
+                f"slug : « {slug} » est déjà pris par la fiche #{existing.id} « {existing.title} ». "
+                "Activer la mise à jour pour réécrire cette fiche."
+            )
 
     card_type = _clean_str(payload.get("card_type")) or CardType.STANDARD
     if card_type not in {c.value for c in CardType}:
@@ -666,7 +671,7 @@ def _import_one(
         recap_points_raw = []
 
     parent = MicroArticleIndexPage.objects.first()
-    if parent is None:
+    if parent is None and existing is None:
         ctx.error("Aucune page d'index de micro-articles n'existe : créez-la d'abord dans Wagtail.")
 
     questions = _build_questions(payload.get("questions"), ctx, create_sources=create_sources) if not ctx.errors else []
@@ -682,32 +687,37 @@ def _import_one(
             "unknown_categories": ctx.unknown_categories,
         }
 
-    page = MicroArticlePage(
-        title=title,
-        slug=slug,
-        card_type=card_type,
-        answer_express=answer_express,
-        answer_detail=answer_detail,
-        takeaway=takeaway,
-        key_points=key_points,
-        sources=sources,
-        links=links,
-        see_more=see_more,
-        cover_image=cover_image,
-        owner=owner,
-        live=False,
-    )
+    # En mise à jour, le JSON fait autorité : tout champ éditorial est réécrit,
+    # y compris pour l'effacer. Seule l'illustration est préservée quand le JSON
+    # n'en parle pas — elle est toujours ajoutée à la main après coup.
+    updating = existing is not None
+    page = existing if updating else MicroArticlePage(owner=owner, live=False)
+
+    page.title = title
+    page.slug = slug
+    page.card_type = card_type
+    page.answer_express = answer_express
+    page.answer_detail = answer_detail
+    page.takeaway = takeaway
+    page.key_points = key_points
+    page.sources = sources
+    page.links = links
+    page.see_more = see_more
+    if cover_image is not None or not updating:
+        page.cover_image = cover_image
 
     # Modelcluster accepte relations M2M et enfants avant le premier save :
-    # `add_child` les persiste ensuite en une fois.
+    # `add_child` (ou `save`) les persiste ensuite en une fois.
     for field_name, nodes in categories.items():
-        if nodes:
-            getattr(page, field_name).set(nodes)
+        getattr(page, field_name).set(nodes)
+    page.tags.clear()
     if tags:
         page.tags.add(*tags)
-    for question in questions:
-        page.microarticle_questions.add(MicroArticleQuestion(question=question))
+    page.microarticle_questions.set(
+        [MicroArticleQuestion(question=question) for question in questions]
+    )
 
+    recap_points: list[RecapPoint] = []
     for i, item in enumerate(recap_points_raw):
         if isinstance(item, str):
             item = {"text": item}
@@ -722,22 +732,26 @@ def _import_one(
         detail_card = _resolve_card(detail_slug, batch) if detail_slug else None
         if detail_slug and detail_card is None:
             ctx.warn(f"recap_points[{i}] : fiche détail « {detail_slug} » introuvable, point créé sans lien.")
-        page.recap_points.add(RecapPoint(text=text[:200], detail_card=detail_card))
+        recap_points.append(RecapPoint(text=text[:200], detail_card=detail_card))
+    page.recap_points.set(recap_points)
 
-    parent.add_child(instance=page)
+    resolved = []
+    for ref in _str_list(payload.get("related_articles"), "related_articles", ctx):
+        other = _resolve_card(ref, batch)
+        if other is None or other.slug == slug:
+            ctx.warn(f"related_articles : « {ref} » introuvable, ignoré.")
+            continue
+        resolved.append(other)
+    # `set([])` est significatif en mise à jour : il retire les liens obsolètes.
+    page.related_articles.set(resolved)
 
-    related = _str_list(payload.get("related_articles"), "related_articles", ctx)
-    if related:
-        resolved = []
-        for ref in related:
-            other = _resolve_card(ref, batch)
-            if other is None or other.pk == page.pk:
-                ctx.warn(f"related_articles : « {ref} » introuvable, ignoré.")
-                continue
-            resolved.append(other)
-        if resolved:
-            page.related_articles.set(resolved)
-            page.save()
+    if not updating:
+        parent.add_child(instance=page)
+    elif not page.live:
+        page.save()
+    # Fiche déjà publiée : `save()` écrirait directement la version en ligne. La
+    # mise à jour ne part donc qu'en révision, et n'atteint le public que si
+    # `publish` est demandé — ou depuis Wagtail après relecture.
 
     subject_payload = payload.get("subject")
     subject_name = None
@@ -753,13 +767,20 @@ def _import_one(
             if subject is None:
                 ctx.warn("subject : ignoré (ni `slug` connu, ni `name`).")
             else:
-                last = SubjectCard.objects.filter(subject=subject).order_by("-sort_order").first()
-                SubjectCard.objects.create(
-                    subject=subject,
-                    microarticle=page,
-                    label=_clean_str(subject_payload.get("label"))[:120],
-                    sort_order=(last.sort_order + 1) if last else 0,
-                )
+                label = _clean_str(subject_payload.get("label"))[:120]
+                link = SubjectCard.objects.filter(subject=subject, microarticle=page).first()
+                if link is None:
+                    last = SubjectCard.objects.filter(subject=subject).order_by("-sort_order").first()
+                    SubjectCard.objects.create(
+                        subject=subject,
+                        microarticle=page,
+                        label=label,
+                        sort_order=(last.sort_order + 1) if last else 0,
+                    )
+                elif link.label != label:
+                    # Réimport : le libellé peut changer, pas la position.
+                    link.label = label
+                    link.save(update_fields=["label"])
                 subject_name = subject.name
         else:
             ctx.warn("subject : ignoré (objet ou chaîne attendus).")
@@ -781,6 +802,7 @@ def _import_one(
         "title": page.title,
         "card_type": page.card_type,
         "status": "published" if publish else "draft",
+        "action": "updated" if updating else "created",
         "subject": subject_name,
         "created_sources": ctx.created_sources,
         "created_questions": ctx.created_questions,
@@ -798,6 +820,7 @@ def import_cards(
     publish: bool = False,
     dry_run: bool = False,
     create_sources: bool = True,
+    on_existing: str = "error",
     owner=None,
 ) -> dict:
     """Importe un lot de fiches ; tout ou rien.
@@ -805,6 +828,9 @@ def import_cards(
     `dry_run` exécute réellement l'import (résolution des sources, catégories et
     fiches liées comprise) puis annule la transaction : c'est la seule
     validation qui couvre les mêmes cas que l'import réel.
+
+    `on_existing="update"` réécrit la fiche portant le même slug au lieu de la
+    refuser : le JSON fait alors autorité sur tous les champs éditoriaux.
     """
     if isinstance(cards, dict):
         cards = cards.get("cards", [cards])
@@ -840,6 +866,7 @@ def import_cards(
                         batch,
                         publish=publish,
                         create_sources=create_sources,
+                        on_existing=on_existing,
                         owner=owner,
                     )
                     if not result["ok"]:
@@ -865,6 +892,7 @@ def import_cards(
         "dry_run": dry_run,
         "published": publish and ok and not dry_run,
         "imported": sum(1 for r in results if r["ok"]) if ok and not dry_run else 0,
+        "updated": sum(1 for r in results if r.get("action") == "updated") if ok and not dry_run else 0,
         "unknown_categories": _aggregate_unknown_categories(results),
         "results": results,
     }

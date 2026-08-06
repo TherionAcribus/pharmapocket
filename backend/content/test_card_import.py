@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
+from wagtail.images import get_image_model
 from wagtail.models import Page, Site
 
 from .importers import import_cards
@@ -233,6 +234,94 @@ class CardImportTests(APITestCase):
         self.assertFalse(report["ok"])
         self.assertIn("slug", report["results"][0]["errors"][0])
         self.assertEqual(MicroArticlePage.objects.count(), 1)
+
+    # -- Mise à jour --------------------------------------------------------
+
+    def test_update_rewrites_the_card_in_place(self):
+        import_cards([_card(key_points=["Ancien point"], tags=["iec"])])
+        page_id = MicroArticlePage.objects.get(slug="quand-controler-la-kaliemie-sous-iec").id
+
+        report = import_cards(
+            [
+                _card(
+                    answer_express="<p>Contrôle à <b>J7</b>.</p>",
+                    key_points=["Nouveau point"],
+                    tags=["biologie"],
+                )
+            ],
+            on_existing="update",
+        )
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["results"][0]["action"], "updated")
+        self.assertEqual(report["updated"], 1)
+        self.assertEqual(MicroArticlePage.objects.count(), 1)
+
+        page = MicroArticlePage.objects.get(id=page_id)
+        self.assertIn("J7", page.answer_express)
+        self.assertEqual([b.value for b in page.key_points], ["Nouveau point"])
+        self.assertEqual([t.name for t in page.tags.all()], ["biologie"])
+
+    def test_update_of_a_published_card_stays_in_a_draft_revision(self):
+        import_cards([_card()], publish=True)
+        page = MicroArticlePage.objects.get(slug="quand-controler-la-kaliemie-sous-iec")
+
+        report = import_cards(
+            [_card(answer_express="<p>Texte corrigé.</p>")],
+            on_existing="update",
+        )
+
+        self.assertTrue(report["ok"], report)
+        page.refresh_from_db()
+        # Le contenu en ligne ne doit pas bouger tant qu'on n'a pas publié.
+        self.assertNotIn("corrigé", page.answer_express)
+        self.assertTrue(page.has_unpublished_changes)
+        self.assertIn("corrigé", page.get_latest_revision_as_object().answer_express)
+
+    def test_update_with_publish_replaces_the_live_content(self):
+        import_cards([_card()], publish=True)
+
+        report = import_cards(
+            [_card(answer_express="<p>Texte corrigé.</p>")],
+            publish=True,
+            on_existing="update",
+        )
+
+        self.assertTrue(report["ok"], report)
+        page = MicroArticlePage.objects.get(slug="quand-controler-la-kaliemie-sous-iec")
+        self.assertIn("corrigé", page.answer_express)
+        self.assertTrue(page.live)
+
+    def test_update_keeps_the_cover_image_the_json_never_mentions(self):
+        import_cards([_card()])
+        page = MicroArticlePage.objects.get(slug="quand-controler-la-kaliemie-sous-iec")
+        # `width`/`height` fournis : Django n'ouvre alors pas le fichier, inutile
+        # d'écrire un vrai PNG pour ce test.
+        image = get_image_model().objects.create(
+            title="Schéma", file="original_images/schema.png", width=1, height=1
+        )
+        page.cover_image = image
+        page.save()
+
+        report = import_cards([_card()], on_existing="update")
+
+        self.assertTrue(report["ok"], report)
+        page.refresh_from_db()
+        self.assertEqual(page.cover_image_id, image.id)
+
+    def test_update_does_not_duplicate_the_subject_link(self):
+        card = _card(subject={"name": "Rein et IEC", "label": "Kaliémie"})
+        import_cards([card])
+
+        report = import_cards(
+            [_card(subject={"name": "Rein et IEC", "label": "Contrôle biologique"})],
+            on_existing="update",
+        )
+
+        self.assertTrue(report["ok"], report)
+        subject = Subject.objects.get(slug="rein-et-iec")
+        self.assertEqual(subject.subject_cards.count(), 1)
+        self.assertEqual(subject.subject_cards.first().label, "Contrôle biologique")
 
     def test_editorial_limits_are_enforced(self):
         report = import_cards([
