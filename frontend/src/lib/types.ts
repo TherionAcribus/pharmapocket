@@ -905,6 +905,7 @@ export interface components {
             status?: string;
             action?: components["schemas"]["ActionEnum"];
             subject?: string | null;
+            created_subject?: boolean;
             created_sources?: string[];
             created_tags?: string[];
             created_questions?: number;

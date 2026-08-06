@@ -58,6 +58,17 @@ rapport liste, carte par carte, ce qu'il faut corriger. Les fiches sont créées
   `--- REMARQUES ---`, hors JSON. La page d'import extrait le tableau JSON même
   quand ces remarques suivent, ou quand la réponse est encadrée par des ```.
 
+**Vocabulaires : trois régimes selon la nature de l'ensemble**
+
+- **Catégories** — ensemble fermé : une valeur inconnue **bloque** l'import et
+  passe par l'écran de validation.
+- **Tags** — ensemble semi-ouvert : une variante de casse ou d'accent est
+  **rattachée** au tag existant ; un tag réellement nouveau est créé et listé.
+- **Sources et sujets** — ensembles ouverts : on ne peut pas refuser un titre
+  inconnu, chaque nouvel article est légitimement une nouvelle source. Ils sont
+  donc **créés**, mais un titre très proche d'un existant (un mot omis, une
+  ponctuation différente) déclenche un avertissement dans le rapport.
+
 **Catégories et tags**
 
 - Les catégories existantes sont injectées dans le prompt (slug + nom, arbre
@@ -119,11 +130,11 @@ Un type inconnu est refusé, avec la liste des types acceptés dans le message.
 | Élément | Règle |
 |---|---|
 | `slug` | dérivé du titre si absent ; refusé s'il existe déjà, sauf en mode mise à jour |
-| Sources | retrouvées par `url` puis par `name` (+ `publisher`) ; **créées** si inconnues |
+| Sources | retrouvées par `url` (barre finale ignorée) puis par `name` (accents/casse ignorés, `publisher` privilégié) ; **créées** si inconnues, avec avertissement si un titre très proche existe déjà |
 | Catégories | retrouvées par slug, par nom (accents/casse ignorés) ou par chemin `parent/enfant` ; **jamais créées en silence** — elles remontent dans `unknown_categories` |
 | Tags | rattachés au tag existant quand ils n'en diffèrent que par la casse ou les accents (avec avertissement) ; créés sinon, et listés dans le rapport |
 | `detail_card_slug`, `related_articles` | cherchés d'abord dans le lot en cours, puis en base |
-| `subject` | retrouvé par slug, **créé** s'il n'existe pas ; la fiche est ajoutée en fin de liste |
+| `subject` | retrouvé par slug puis par nom (accents/casse ignorés), **créé** sinon avec avertissement si un sujet très proche existe ; la fiche est ajoutée en fin de liste |
 | Questions | une question de même énoncé et de même type est réutilisée |
 | Rich text | nettoyé (seules les balises autorisées survivent) |
 

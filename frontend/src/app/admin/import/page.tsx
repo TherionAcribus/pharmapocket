@@ -61,7 +61,9 @@ function ResultCard({ result }: { result: AdminCardImportResult }) {
           {result.action === "updated" ? "mise à jour" : "créée"} · {result.card_type} ·{" "}
           {result.status === "published" ? "publiée" : "brouillon"}
           {result.slug ? ` · ${result.slug}` : ""}
-          {result.subject ? ` · sujet « ${result.subject} »` : ""}
+          {result.subject
+            ? ` · sujet « ${result.subject} »${result.created_subject ? " (nouveau)" : ""}`
+            : ""}
         </div>
       ) : null}
 

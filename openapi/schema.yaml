@@ -1843,6 +1843,8 @@ components:
         subject:
           type: string
           nullable: true
+        created_subject:
+          type: boolean
         created_sources:
           type: array
           items:

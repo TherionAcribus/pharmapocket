@@ -132,6 +132,97 @@ class CardImportTests(APITestCase):
         self.assertEqual(Source.objects.filter(url="https://ansm.example/iec").count(), 1)
         self.assertEqual(report["results"][0]["created_sources"], [])
 
+    def test_source_matching_ignores_case_accents_and_trailing_slash(self):
+        source = Source.objects.create(
+            name="Bon usage des IEC",
+            url="https://ansm.example/iec/",
+            publisher="ANSM",
+        )
+
+        report = import_cards([
+            _card(
+                sources=[
+                    {
+                        "source": {
+                            "name": "bon usage des iéc",
+                            "url": "https://ansm.example/iec",
+                            "publisher": "ansm",
+                        }
+                    }
+                ]
+            )
+        ])
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(Source.objects.count(), 1)
+        page = MicroArticlePage.objects.get(id=report["results"][0]["id"])
+        self.assertEqual(page.sources[0].value["source"], source)
+
+    def test_punctuation_variant_of_a_source_name_is_the_same_source(self):
+        source = Source.objects.create(name="HAS — Vaccination contre le zona", publisher="HAS")
+
+        report = import_cards([
+            _card(sources=[{"source": {"name": "HAS - Vaccination contre le zona", "publisher": "HAS"}}])
+        ])
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(Source.objects.count(), 1)
+        page = MicroArticlePage.objects.get(id=report["results"][0]["id"])
+        self.assertEqual(page.sources[0].value["source"], source)
+
+    def test_near_duplicate_source_is_created_but_flagged(self):
+        # Cas typique : le modèle recopie le titre en omettant un mot.
+        Source.objects.create(
+            name="Isotrétinoïne orale : conditions de prescription et de délivrance",
+            publisher="ANSM",
+        )
+
+        report = import_cards([
+            _card(
+                sources=[
+                    {
+                        "source": {
+                            "name": "Isotrétinoïne orale : conditions de prescription et délivrance",
+                            "publisher": "ANSM",
+                        }
+                    }
+                ]
+            )
+        ])
+
+        self.assertTrue(report["ok"], report)
+        # Un ensemble ouvert : on crée, mais on prévient plutôt que de fusionner.
+        self.assertEqual(Source.objects.count(), 2)
+        self.assertIn("très proche de", " ".join(report["results"][0]["warnings"]))
+
+    def test_unrelated_source_of_the_same_publisher_is_not_flagged(self):
+        Source.objects.create(name="Bon usage des IEC", publisher="ANSM")
+
+        report = import_cards([
+            _card(sources=[{"source": {"name": "Contraception et isotrétinoïne", "publisher": "ANSM"}}])
+        ])
+
+        self.assertTrue(report["ok"], report)
+        self.assertNotIn("très proche de", " ".join(report["results"][0]["warnings"]))
+
+    def test_subject_is_matched_by_name_and_near_duplicates_are_flagged(self):
+        import_cards([_card(subject={"name": "Délivrance isotrétinoïne"})])
+
+        matched = import_cards([
+            _card(title="Fiche B", subject={"name": "delivrance isotretinoine"})
+        ])
+        self.assertTrue(matched["ok"], matched)
+        self.assertEqual(Subject.objects.count(), 1)
+        self.assertFalse(matched["results"][0]["created_subject"])
+
+        flagged = import_cards([
+            _card(title="Fiche C", subject={"name": "Délivrance de l'isotrétinoïne"})
+        ])
+        self.assertTrue(flagged["ok"], flagged)
+        self.assertEqual(Subject.objects.count(), 2)
+        self.assertTrue(flagged["results"][0]["created_subject"])
+        self.assertIn("très proche de", " ".join(flagged["results"][0]["warnings"]))
+
     def test_new_tags_are_reported(self):
         report = import_cards([_card(tags=["iec", "biologie"])])
 

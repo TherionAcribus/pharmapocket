@@ -13,14 +13,17 @@ Wagtail, pas à l'enregistrement.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
+from difflib import SequenceMatcher
 from html import unescape
 from typing import Any
 
 import bleach
 from anyascii import anyascii
 from django.db import transaction
+from django.db.models import Q
 from django.utils.text import slugify
 
 from .html import sanitize_rich_text
@@ -87,6 +90,11 @@ MAX_KEY_POINT_LEN = 90
 MAX_SEE_MORE_BLOCKS = 3
 MAX_SOURCES = 5
 MAX_LINKS = 5
+# Au-delà, deux libellés sont considérés comme le même document ou le même sujet
+# écrit différemment : assez haut pour ne pas rapprocher deux sources voisines
+# d'un même éditeur, assez bas pour attraper la ponctuation et les articles.
+NEAR_DUPLICATE_RATIO = 0.85
+
 ANSWER_EXPRESS_SOFT_LIMIT = 350
 ANSWER_DETAIL_SOFT_LIMIT = 2000
 TAKEAWAY_SOFT_LIMIT = 200
@@ -133,6 +141,27 @@ def _clean_str(value: Any) -> str:
 def _normalize(value: str) -> str:
     """Clé de comparaison insensible à la casse et aux accents."""
     return anyascii(value or "").strip().lower()
+
+
+def _closest_name(name: str, candidates: Iterable[str]) -> str | None:
+    """Nom le plus proche parmi `candidates`, au-dessus du seuil de similarité.
+
+    Sert à signaler les quasi-doublons : sources et sujets sont des ensembles
+    ouverts, on ne peut pas refuser un nom inconnu, mais « HAS — Vaccination
+    zona » créé à côté de « HAS – Vaccination contre le zona » dégrade la base
+    aussi sûrement qu'un tag dupliqué.
+    """
+    target = _normalize(name)
+    if not target:
+        return None
+
+    best: str | None = None
+    best_ratio = 0.0
+    for candidate in candidates:
+        ratio = SequenceMatcher(None, target, _normalize(candidate)).ratio()
+        if ratio > best_ratio:
+            best, best_ratio = candidate, ratio
+    return best if best_ratio >= NEAR_DUPLICATE_RATIO else None
 
 
 def _parse_date(value: Any, label: str, ctx: _Ctx) -> date | None:
@@ -257,13 +286,23 @@ def _resolve_source(raw: Any, label: str, ctx: _Ctx, *, create_sources: bool) ->
 
     existing = None
     if url:
-        existing = Source.objects.filter(url__iexact=url).first()
+        # Une barre finale ne fait pas deux documents.
+        bare = url.rstrip("/")
+        existing = Source.objects.filter(Q(url__iexact=bare) | Q(url__iexact=f"{bare}/")).first()
+
+    known: list[Source] = []
     if existing is None and name:
-        candidates = Source.objects.filter(name__iexact=name)
+        known = list(Source.objects.all())
         if publisher:
-            candidates = candidates.filter(publisher__iexact=publisher)
-        existing = candidates.first()
+            same_publisher = [s for s in known if _normalize(s.publisher) == _normalize(publisher)]
+            pool = same_publisher or known
+        else:
+            pool = known
+        existing = next((s for s in pool if _normalize(s.name) == _normalize(name)), None)
+
     if existing is not None:
+        if name and existing.name != name:
+            ctx.warn(f"{label} : rattaché à la source existante « {existing.name} » (#{existing.id}).")
         return existing
 
     if not create_sources:
@@ -272,6 +311,13 @@ def _resolve_source(raw: Any, label: str, ctx: _Ctx, *, create_sources: bool) ->
     if not name:
         ctx.error(f"{label} : `name` est obligatoire pour créer une nouvelle source.")
         return None
+
+    near = _closest_name(name, [s.name for s in known])
+    if near is not None:
+        ctx.warn(
+            f"{label} : nouvelle source « {name} », très proche de « {near} » déjà "
+            "en base — vérifier qu'il ne s'agit pas du même document."
+        )
 
     source = Source.objects.create(
         name=name[:200],
@@ -781,6 +827,7 @@ def _import_one(
 
     subject_payload = payload.get("subject")
     subject_name = None
+    created_subject = False
     if subject_payload:
         if isinstance(subject_payload, str):
             subject_payload = {"name": subject_payload}
@@ -789,7 +836,19 @@ def _import_one(
             subject_slug = slugify(_clean_str(subject_payload.get("slug")) or name)
             subject = Subject.objects.filter(slug=subject_slug).first() if subject_slug else None
             if subject is None and name:
-                subject = Subject.objects.create(name=name[:120], slug=subject_slug)
+                known_subjects = list(Subject.objects.all())
+                subject = next(
+                    (s for s in known_subjects if _normalize(s.name) == _normalize(name)), None
+                )
+                if subject is None:
+                    near = _closest_name(name, [s.name for s in known_subjects])
+                    if near is not None:
+                        ctx.warn(
+                            f"subject : nouveau sujet « {name} », très proche de « {near} » "
+                            "déjà en base — vérifier qu'il ne s'agit pas du même sujet."
+                        )
+                    subject = Subject.objects.create(name=name[:120], slug=subject_slug)
+                    created_subject = True
             if subject is None:
                 ctx.warn("subject : ignoré (ni `slug` connu, ni `name`).")
             else:
@@ -830,6 +889,7 @@ def _import_one(
         "status": "published" if publish else "draft",
         "action": "updated" if updating else "created",
         "subject": subject_name,
+        "created_subject": created_subject,
         "created_sources": ctx.created_sources,
         "created_tags": ctx.created_tags,
         "created_questions": ctx.created_questions,
