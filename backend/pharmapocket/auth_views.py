@@ -6,6 +6,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from pharmapocket.throttling import SensitiveBurstThrottle, SensitiveSustainedThrottle
+
 try:
     from allauth.account.models import EmailAddress
 except Exception:  # pragma: no cover
@@ -118,6 +120,9 @@ class AccountView(APIView):
 
 class DeleteAccountView(APIView):
     permission_classes = [IsAuthenticated]
+    # This endpoint verifies the account password, so it gets a tighter budget
+    # than the default per-user one.
+    throttle_classes = [SensitiveBurstThrottle, SensitiveSustainedThrottle]
 
     def post(self, request):
         user = request.user

@@ -91,6 +91,32 @@ Endpoints applicatifs complémentaires (`/api/v1/auth/`) :
 - `GET|PATCH /api/v1/auth/preferences/` *(auth)* — `landing_redirect_enabled`,
   `landing_redirect_target` (`start|discover|cards|review|quiz`)
 
+### Rate limiting
+
+Trois couches, toutes configurables par variables d'environnement (voir `.env.example`) :
+
+| Portée | Quota par défaut | Où |
+| --- | --- | --- |
+| Anonyme (par IP) | `60/min` | `DJANGO_THROTTLE_RATE_ANON` |
+| Authentifié (par compte) | `300/min` | `DJANGO_THROTTLE_RATE_USER` |
+| Endpoints sensibles (`/api/v1/auth/account/delete/`) | `5/min` + `30/hour` | `DJANGO_THROTTLE_RATE_SENSITIVE_BURST` / `_SUSTAINED` |
+
+Les endpoints allauth headless (`/auth/…`) ne passent pas par DRF : ils sont couverts
+par `ACCOUNT_RATE_LIMITS` (login `10/m/ip`, 5 échecs par compte et par 5 min, signup
+`10/m/ip`, reset password `10/m/ip` + `3/m` par adresse). Un dépassement renvoie `429`.
+
+Trois points à vérifier au déploiement :
+
+- **`DJANGO_TRUSTED_PROXY_COUNT`** doit correspondre au nombre réel de reverse proxies.
+  Les compteurs identifient le client par la N-ième entrée de `X-Forwarded-For` **en
+  partant de la fin** ; une valeur trop basse laisse un client forger son identité,
+  une valeur trop haute met tout le monde dans le même compteur.
+- **`DJANGO_THROTTLE_EXEMPT_IPS`** doit contenir l'adresse du front Next.js si celui-ci
+  appelle l'API en SSR : sinon tous les visiteurs partagent le quota anonyme de ce serveur.
+- **`DJANGO_CACHE_URL`** (Redis) rend les quotas globaux. Sans lui, le cache local à
+  chaque worker gunicorn multiplie de fait la limite par le nombre de workers.
+  Le backend Redis est fourni par Django mais nécessite le client : `pip install redis`.
+
 ### Taxonomies & tags
 
 Taxonomies disponibles : `theme`, `maladies`, `medicament`, `pharmacologie`

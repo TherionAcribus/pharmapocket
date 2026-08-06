@@ -3,8 +3,15 @@ from django.core.exceptions import ValidationError
 
 from allauth.account.adapter import DefaultAccountAdapter
 
+from pharmapocket.throttling import get_client_ip
+
 
 class AccountAdapter(DefaultAccountAdapter):
+    def get_client_ip(self, request) -> str:
+        # allauth trusts the leftmost X-Forwarded-For entry, which a client can
+        # forge to get a fresh rate-limit bucket on every attempt.
+        return get_client_ip(request) or super().get_client_ip(request)
+
     def clean_username(self, username, *args, **kwargs):
         username = super().clean_username(username, *args, **kwargs)
         username = (username or "").strip()

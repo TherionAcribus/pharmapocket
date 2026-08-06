@@ -89,23 +89,45 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   });
 }
 
+function formatRetryDelay(seconds: number): string {
+  if (seconds < 60) return `${Math.ceil(seconds)} secondes`;
+  const minutes = Math.ceil(seconds / 60);
+  return minutes === 1 ? "une minute" : `${minutes} minutes`;
+}
+
+async function apiError(res: Response, path: string): Promise<Error> {
+  const contentType = res.headers.get("content-type") ?? "";
+  const raw = await res.text();
+  let parsed: unknown = raw;
+  if (contentType.includes("application/json")) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = raw;
+    }
+  }
+
+  if (res.status === 429) {
+    // L'API limite le débit : le détail technique n'apprend rien à l'utilisateur.
+    // `Retry-After` n'est lisible que parce que le backend l'expose via CORS.
+    const retryAfter = Number(res.headers.get("Retry-After"));
+    const delay =
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? `Réessayez dans ${formatRetryDelay(retryAfter)}.`
+        : "Réessayez dans quelques instants.";
+    return new Error(`Trop de tentatives. ${delay}`);
+  }
+
+  return new Error(
+    `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(parsed)}`
+  );
+}
+
 async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await apiFetch(path, init);
 
   if (!res.ok) {
-    const contentType = res.headers.get("content-type") ?? "";
-    const raw = await res.text();
-    let parsed: unknown = raw;
-    if (contentType.includes("application/json")) {
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = raw;
-      }
-    }
-    throw new Error(
-      `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(parsed)}`
-    );
+    throw await apiError(res, path);
   }
 
   return (await res.json()) as T;
@@ -115,19 +137,7 @@ async function apiJson<T>(path: string, init: RequestInit): Promise<T> {
   const res = await apiFetch(path, init);
 
   if (!res.ok) {
-    const contentType = res.headers.get("content-type") ?? "";
-    const raw = await res.text();
-    let parsed: unknown = raw;
-    if (contentType.includes("application/json")) {
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = raw;
-      }
-    }
-    throw new Error(
-      `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(parsed)}`
-    );
+    throw await apiError(res, path);
   }
 
   if (res.status === 204) return undefined as T;
@@ -147,19 +157,7 @@ async function apiPostOkOr401(path: string, payload: unknown): Promise<void> {
     return;
   }
 
-  const contentType = res.headers.get("content-type") ?? "";
-  const raw = await res.text();
-  let parsed: unknown = raw;
-  if (contentType.includes("application/json")) {
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      parsed = raw;
-    }
-  }
-  throw new Error(
-    `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(parsed)}`
-  );
+  throw await apiError(res, path);
 }
 
 export type FeedQuery = {
@@ -823,21 +821,7 @@ export async function adminUploadImage(input: {
   });
 
   if (!res.ok) {
-    const contentType = res.headers.get("content-type") ?? "";
-    const raw = await res.text();
-    let parsed: unknown = raw;
-    if (contentType.includes("application/json")) {
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = raw;
-      }
-    }
-    throw new Error(
-      `API ${res.status} on /api/v1/content/admin/images/upload/ (content-type: ${
-        contentType || "unknown"
-      }): ${JSON.stringify(parsed)}`
-    );
+    throw await apiError(res, "/api/v1/content/admin/images/upload/");
   }
 
   return (await res.json()) as { id: number; url: string | null; title: string };

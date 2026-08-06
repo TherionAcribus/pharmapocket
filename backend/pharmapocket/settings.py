@@ -1,3 +1,4 @@
+import ipaddress
 import os
 from pathlib import Path
 
@@ -19,6 +20,32 @@ def _env_bool(name: str, *, default: bool) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise ImproperlyConfigured(f"{name} must be a boolean value")
+
+
+def _throttle_rate(name: str, *, default: str) -> str | None:
+    """Read a DRF throttle rate such as ``60/min``. Empty or ``off`` disables it."""
+    value = os.environ.get(name, default).strip()
+    if value.lower() in {"", "off", "none"}:
+        return None
+
+    count, sep, period = value.partition("/")
+    if not sep or not count.isdigit() or not period:
+        raise ImproperlyConfigured(f"{name} must look like '60/min' (or 'off' to disable)")
+    # DRF only looks at the first letter of the period ("min" and "m" are the same).
+    if period[0] not in {"s", "m", "h", "d"}:
+        raise ImproperlyConfigured(f"{name} period must start with s, m, h or d")
+    return value
+
+
+def _ip_networks(name: str) -> list[str]:
+    """Read a comma-separated list of IP addresses or CIDR ranges."""
+    entries = [e.strip() for e in os.environ.get(name, "").split(",") if e.strip()]
+    for entry in entries:
+        try:
+            ipaddress.ip_network(entry, strict=False)
+        except ValueError as exc:
+            raise ImproperlyConfigured(f"{name} contains an invalid IP or CIDR: {entry!r}") from exc
+    return entries
 
 
 def _cookie_samesite(name: str, *, default: str) -> str:
@@ -164,6 +191,38 @@ else:
     EMAIL_USE_SSL = os.environ.get("DJANGO_EMAIL_USE_SSL", "0") == "1"
     SERVER_EMAIL = os.environ.get("DJANGO_SERVER_EMAIL", DEFAULT_FROM_EMAIL) 
 
+# Rate limiting relies on the default cache. LocMemCache is per-process, so each
+# gunicorn worker enforces its own budget: point DJANGO_CACHE_URL at a shared
+# Redis in production to make the limits global.
+CACHE_URL = os.environ.get("DJANGO_CACHE_URL", "").strip()
+if CACHE_URL:
+    if not CACHE_URL.startswith(("redis://", "rediss://", "unix://")):
+        raise ImproperlyConfigured("DJANGO_CACHE_URL must be a redis://, rediss:// or unix:// URL")
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": CACHE_URL,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "pharmapocket-default",
+        }
+    }
+
+# Number of reverse proxies in front of the app whose X-Forwarded-For entries we
+# trust. Anything below that count in the header is client-supplied and must not
+# be used to identify a caller. See pharmapocket.throttling.get_client_ip.
+TRUSTED_PROXY_COUNT = int(os.environ.get("DJANGO_TRUSTED_PROXY_COUNT", "0" if DEBUG else "1"))
+if TRUSTED_PROXY_COUNT < 0:
+    raise ImproperlyConfigured("DJANGO_TRUSTED_PROXY_COUNT must be zero or positive")
+
+# Internal clients that bypass throttling — typically the SSR frontend, whose
+# requests all originate from a single address on behalf of many visitors.
+THROTTLE_EXEMPT_IPS = _ip_networks("DJANGO_THROTTLE_EXEMPT_IPS")
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
@@ -171,6 +230,19 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "pharmapocket.throttling.AnonThrottle",
+        "pharmapocket.throttling.UserThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": _throttle_rate("DJANGO_THROTTLE_RATE_ANON", default="60/min"),
+        "user": _throttle_rate("DJANGO_THROTTLE_RATE_USER", default="300/min"),
+        # Applied on top of the defaults for endpoints that verify a secret.
+        "sensitive_burst": _throttle_rate("DJANGO_THROTTLE_RATE_SENSITIVE_BURST", default="5/min"),
+        "sensitive_sustained": _throttle_rate(
+            "DJANGO_THROTTLE_RATE_SENSITIVE_SUSTAINED", default="30/hour"
+        ),
+    },
 }
 
 AUTH_USER_MODEL = "users.User"
@@ -188,6 +260,24 @@ ACCOUNT_EMAIL_VERIFICATION_SUPPORTS_RESEND = True
 ACCOUNT_CHANGE_EMAIL = True
 
 ACCOUNT_ADAPTER = "users.adapters.AccountAdapter"
+
+# DRF throttling does not cover the allauth headless endpoints (/auth/…), which
+# are plain Django views: allauth has its own limiter, configured explicitly here
+# rather than left on its defaults. Rates are merged over allauth's defaults, and
+# "key" buckets are scoped to the targeted email/account rather than to the IP.
+ACCOUNT_RATE_LIMITS = {
+    "login": "10/m/ip",
+    # "key" is the submitted login: 5 failures per 5 minutes on a given account,
+    # on top of a per-IP cap that covers attempts spread over many accounts.
+    "login_failed": "5/m/ip,5/300s/key",
+    "signup": "10/m/ip",
+    "reset_password": "10/m/ip,3/m/key",
+    "reset_password_from_key": "10/m/ip",
+    "confirm_email": "1/180s/key",
+    "change_password": "5/m/user",
+    "manage_email": "10/m/user",
+    "reauthenticate": "5/m/user",
+}
 
 HEADLESS_FRONTEND_URLS = {
     "account_confirm_email": os.environ.get(
@@ -213,6 +303,9 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = (*default_headers, "x-csrftoken")
+
+# Sans cela, le front (autre origine) ne peut pas lire l'en-tête d'un 429.
+CORS_EXPOSE_HEADERS = ["Retry-After"]
 
 CSRF_TRUSTED_ORIGINS = [
     o.strip()
