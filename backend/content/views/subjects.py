@@ -2,13 +2,18 @@
 
 from django.db import models
 from django.db.models import Count, Exists, OuterRef, Q
-from django.utils.text import slugify
-from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import CardType, MicroArticlePage, Subject, SubjectCard
+from ..models import CardType, Subject, SubjectCard
+from ..serializers.inputs import (
+    SubjectCardAddSerializer,
+    SubjectCardPatchSerializer,
+    SubjectCardsReorderSerializer,
+    SubjectCreateSerializer,
+    SubjectPatchSerializer,
+)
 from .helpers import _require_staff, _subject_detail_cards, _subject_recap_card
 
 
@@ -57,25 +62,10 @@ class SubjectListCreateView(APIView):
         if denied is not None:
             return denied
 
-        payload = request.data if isinstance(request.data, dict) else {}
-        name = payload.get("name")
-        if not name or not isinstance(name, str) or not name.strip():
-            raise DRFValidationError({"name": "name is required"})
+        serializer = SubjectCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        slug = payload.get("slug")
-        if slug:
-            slug = slugify(slug)
-        else:
-            slug = slugify(name)
-
-        if Subject.objects.filter(slug=slug).exists():
-            raise DRFValidationError({"slug": "slug already exists"})
-
-        subject = Subject.objects.create(
-            name=name.strip(),
-            slug=slug,
-            description=payload.get("description", ""),
-        )
+        subject = Subject.objects.create(**serializer.validated_data)
         return Response(
             {
                 "id": subject.id,
@@ -123,33 +113,12 @@ class SubjectDetailView(APIView):
         if subject is None:
             return Response(status=404)
 
-        payload = request.data if isinstance(request.data, dict) else {}
-        update_fields = ["updated_at"]
+        serializer = SubjectPatchSerializer(data=request.data, context={"subject": subject})
+        serializer.is_valid(raise_exception=True)
 
-        if "name" in payload:
-            name = payload.get("name")
-            if not isinstance(name, str) or not name.strip():
-                raise DRFValidationError({"name": "name must be a non-empty string"})
-            subject.name = name.strip()
-            update_fields.append("name")
-
-        if "slug" in payload:
-            new_slug = slugify(payload.get("slug") or "")
-            if not new_slug:
-                raise DRFValidationError({"slug": "Invalid slug"})
-            if new_slug != subject.slug and Subject.objects.filter(slug=new_slug).exists():
-                raise DRFValidationError({"slug": "slug already exists"})
-            subject.slug = new_slug
-            update_fields.append("slug")
-
-        if "description" in payload:
-            subject.description = payload.get("description") or ""
-            update_fields.append("description")
-
-        if len(update_fields) == 1:
-            raise DRFValidationError({"detail": "No fields to update"})
-
-        subject.save(update_fields=update_fields)
+        for field, value in serializer.validated_data.items():
+            setattr(subject, field, value)
+        subject.save(update_fields=[*serializer.validated_data, "updated_at"])
         return Response(
             {
                 "id": subject.id,
@@ -215,26 +184,11 @@ class SubjectCardsView(APIView):
         if subject is None:
             return Response(status=404)
 
-        payload = request.data if isinstance(request.data, dict) else {}
-        card_slug = payload.get("card_slug")
-        if not card_slug or not isinstance(card_slug, str):
-            raise DRFValidationError({"card_slug": "card_slug is required"})
+        serializer = SubjectCardAddSerializer(data=request.data, context={"subject": subject})
+        serializer.is_valid(raise_exception=True)
+        page = serializer.validated_data["card"]
+        label = serializer.validated_data["label"]
 
-        page = MicroArticlePage.objects.live().public().filter(slug=card_slug).first()
-        if page is None:
-            raise DRFValidationError({"card_slug": "Unknown card"})
-
-        # Check for recap uniqueness
-        if page.card_type == CardType.RECAP:
-            existing_recap = subject.subject_cards.filter(
-                microarticle__card_type=CardType.RECAP
-            ).exclude(microarticle=page).exists()
-            if existing_recap:
-                raise DRFValidationError(
-                    {"card_slug": "Subject already has a recap card"}
-                )
-
-        label = payload.get("label", "") or ""
         max_order = subject.subject_cards.aggregate(m=models.Max("sort_order"))["m"] or 0
 
         link, created = SubjectCard.objects.get_or_create(
@@ -279,17 +233,13 @@ class SubjectCardDetailView(APIView):
         if link is None:
             return Response(status=404)
 
-        payload = request.data if isinstance(request.data, dict) else {}
+        serializer = SubjectCardPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        if "label" in payload:
-            link.label = payload.get("label") or ""
-            link.save(update_fields=["label"])
-
-        if "sort_order" in payload:
-            new_order = payload.get("sort_order")
-            if isinstance(new_order, int):
-                link.sort_order = new_order
-                link.save(update_fields=["sort_order"])
+        if serializer.validated_data:
+            for field, value in serializer.validated_data.items():
+                setattr(link, field, value)
+            link.save(update_fields=list(serializer.validated_data))
 
         return Response(
             {
@@ -332,10 +282,9 @@ class SubjectCardsReorderView(APIView):
         if subject is None:
             return Response(status=404)
 
-        payload = request.data if isinstance(request.data, dict) else {}
-        order = payload.get("order")
-        if not isinstance(order, list):
-            raise DRFValidationError({"order": "order must be a list of card IDs"})
+        serializer = SubjectCardsReorderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = serializer.validated_data["order"]
 
         links = {link.id: link for link in subject.subject_cards.all()}
         updated = []

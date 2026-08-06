@@ -10,6 +10,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import Deck, DeckCard, MicroArticlePage, UserDeckProgress
+from ..serializers.inputs import (
+    CardDecksUpdateSerializer,
+    DeckCardAddSerializer,
+    DeckCardsBulkAddSerializer,
+    DeckCreateSerializer,
+    DeckPatchSerializer,
+    OfficialDeckProgressSerializer,
+)
 from .helpers import (
     _get_or_create_default_deck,
     _image_payload,
@@ -188,12 +196,8 @@ class DeckListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        name = request.data.get("name") if isinstance(request.data, dict) else None
-        if not name or not isinstance(name, str):
-            raise DRFValidationError({"name": "name is required"})
-        name = name.strip()
-        if not name:
-            raise DRFValidationError({"name": "name is required"})
+        serializer = DeckCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
         _get_or_create_default_deck(request.user)
         sort_order = (
@@ -205,7 +209,7 @@ class DeckListCreateView(APIView):
         deck = Deck.objects.create(
             user=request.user,
             type=Deck.DeckType.USER,
-            name=name,
+            name=serializer.validated_data["name"],
             sort_order=int(sort_order) + 1,
         )
         return Response({"id": deck.id, "name": deck.name, "is_default": bool(deck.is_default), "sort_order": deck.sort_order})
@@ -282,24 +286,12 @@ class DeckDetailView(APIView):
         if deck is None:
             return Response(status=404)
 
-        name = request.data.get("name") if isinstance(request.data, dict) else None
-        sort_order = request.data.get("sort_order") if isinstance(request.data, dict) else None
+        serializer = DeckPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        update_fields = ["updated_at"]
-        if isinstance(name, str):
-            deck.name = name.strip()
-            update_fields.append("name")
-        if sort_order is not None:
-            try:
-                deck.sort_order = int(sort_order)
-                update_fields.append("sort_order")
-            except (TypeError, ValueError):
-                raise DRFValidationError({"sort_order": "sort_order must be an integer"})
-
-        if len(update_fields) == 1:
-            raise DRFValidationError({"detail": "No fields to update"})
-
-        deck.save(update_fields=update_fields)
+        for field, value in serializer.validated_data.items():
+            setattr(deck, field, value)
+        deck.save(update_fields=[*serializer.validated_data, "updated_at"])
         return Response({"id": deck.id, "name": deck.name, "is_default": bool(deck.is_default), "sort_order": deck.sort_order})
 
     def delete(self, request, deck_id: int):
@@ -307,7 +299,7 @@ class DeckDetailView(APIView):
         if deck is None:
             return Response(status=404)
         if deck.is_default:
-            raise DRFValidationError({"detail": "Default deck cannot be deleted"})
+            raise DRFValidationError({"detail": ["Default deck cannot be deleted"]})
         deck.delete()
         return Response(status=204)
 
@@ -399,16 +391,9 @@ class DeckCardsView(APIView):
         if deck is None:
             return Response(status=404)
 
-        card_id = request.data.get("card_id") if isinstance(request.data, dict) else None
-        if card_id is None:
-            raise DRFValidationError({"card_id": "card_id is required"})
-        try:
-            microarticle_id = int(card_id)
-        except (TypeError, ValueError):
-            raise DRFValidationError({"card_id": "card_id must be an integer"})
-
-        if not MicroArticlePage.objects.live().public().filter(id=microarticle_id).exists():
-            raise DRFValidationError({"card_id": "Unknown or unavailable card"})
+        serializer = DeckCardAddSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        microarticle_id = serializer.validated_data["card"].pk
 
         obj, created = DeckCard.objects.get_or_create(deck=deck, microarticle_id=microarticle_id)
         if created and getattr(deck, "source_pack_id", None):
@@ -435,15 +420,9 @@ class DeckCardsBulkAddView(APIView):
         if deck is None:
             return Response(status=404)
 
-        payload = request.data if isinstance(request.data, dict) else {}
-        ids = payload.get("card_ids") or payload.get("microarticle_ids")
-        if not isinstance(ids, list):
-            raise DRFValidationError({"card_ids": "card_ids must be a list"})
-        try:
-            micro_ids = [int(x) for x in ids]
-        except (TypeError, ValueError):
-            raise DRFValidationError({"card_ids": "card_ids must be a list of integers"})
-        micro_ids = list(dict.fromkeys(mid for mid in micro_ids if mid > 0))
+        serializer = DeckCardsBulkAddSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        micro_ids = serializer.validated_data["card_ids"]
         if not micro_ids:
             return Response({"added": 0, "already_present": 0})
 
@@ -454,7 +433,7 @@ class DeckCardsBulkAddView(APIView):
             .values_list("id", flat=True)
         )
         if len(public_ids) != len(micro_ids):
-            raise DRFValidationError({"card_ids": "Contains an unknown or unavailable card"})
+            raise DRFValidationError({"card_ids": ["Contains an unknown or unavailable card"]})
 
         existing = set(
             DeckCard.objects.filter(deck_id=deck.id, microarticle_id__in=micro_ids).values_list(
@@ -576,13 +555,14 @@ class OfficialDeckProgressView(APIView):
         if deck is None:
             return Response(status=404)
 
-        if not isinstance(request.data, dict):
-            raise DRFValidationError({"detail": "Invalid JSON body"})
+        serializer = OfficialDeckProgressSerializer(data=request.data, context={"deck": deck})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
 
-        mode_last = request.data.get("mode_last")
-        last_card_id = request.data.get("last_card_id")
-        cards_seen_count = request.data.get("cards_seen_count")
-        cards_done_count = request.data.get("cards_done_count")
+        mode_last = data.get("mode_last")
+        last_card_id = data.get("last_card_id")
+        cards_seen_count = data.get("cards_seen_count")
+        cards_done_count = data.get("cards_done_count")
 
         update_fields: list[str] = ["last_seen_at"]
 
@@ -592,24 +572,13 @@ class OfficialDeckProgressView(APIView):
         )
         obj.last_seen_at = timezone.now()
 
-        if isinstance(mode_last, str) and mode_last in UserDeckProgress.ProgressMode.values:
+        if mode_last is not None:
             obj.mode_last = mode_last
             update_fields.append("mode_last")
 
         if last_card_id is not None:
-            try:
-                candidate_card_id = int(last_card_id)
-                is_available = DeckCard.objects.filter(
-                    deck_id=deck.id,
-                    microarticle_id=candidate_card_id,
-                    microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
-                ).exists()
-                if not is_available:
-                    raise DRFValidationError({"last_card_id": "Unknown or unavailable card in this deck"})
-                obj.last_card_id = candidate_card_id
-                update_fields.append("last_card")
-            except (TypeError, ValueError):
-                raise DRFValidationError({"last_card_id": "last_card_id must be an integer"})
+            obj.last_card_id = last_card_id
+            update_fields.append("last_card")
 
         if obj.last_card_id is not None and cards_seen_count is None:
             pos = DeckCard.objects.filter(
@@ -623,18 +592,12 @@ class OfficialDeckProgressView(APIView):
                     update_fields.append("cards_seen_count")
 
         if cards_seen_count is not None:
-            try:
-                obj.cards_seen_count = max(0, int(cards_seen_count))
-                update_fields.append("cards_seen_count")
-            except (TypeError, ValueError):
-                raise DRFValidationError({"cards_seen_count": "cards_seen_count must be an integer"})
+            obj.cards_seen_count = cards_seen_count
+            update_fields.append("cards_seen_count")
 
         if cards_done_count is not None:
-            try:
-                obj.cards_done_count = max(0, int(cards_done_count))
-                update_fields.append("cards_done_count")
-            except (TypeError, ValueError):
-                raise DRFValidationError({"cards_done_count": "cards_done_count must be an integer"})
+            obj.cards_done_count = cards_done_count
+            update_fields.append("cards_done_count")
 
         # Always persist last_seen_at
         obj.save(update_fields=list(dict.fromkeys(update_fields)))
@@ -687,16 +650,9 @@ class CardDecksView(APIView):
     def put(self, request, card_id: int):
         if not MicroArticlePage.objects.live().public().filter(id=card_id).exists():
             return Response(status=404)
-        deck_ids = request.data.get("deck_ids") if isinstance(request.data, dict) else None
-        if not isinstance(deck_ids, list):
-            raise DRFValidationError({"deck_ids": "deck_ids must be a list"})
-
-        normalized: list[int] = []
-        for d in deck_ids:
-            try:
-                normalized.append(int(d))
-            except (TypeError, ValueError):
-                raise DRFValidationError({"deck_ids": "deck_ids must contain integers"})
+        serializer = CardDecksUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        normalized = serializer.validated_data["deck_ids"]
 
         allowed_decks = Deck.objects.filter(user=request.user, type=Deck.DeckType.USER, id__in=normalized)
         allowed_ids = set(allowed_decks.values_list("id", flat=True))

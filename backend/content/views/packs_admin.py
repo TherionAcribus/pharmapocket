@@ -1,6 +1,5 @@
 """Back-office des packs officiels : CRUD, recherche de fiches, upload d'images."""
 
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
@@ -11,7 +10,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from wagtail.images import get_image_model
-from wagtail.images.fields import WagtailImageField
 from wagtail.models import Collection
 
 from ..models import (
@@ -24,6 +22,13 @@ from ..models import (
     MicroArticlePage,
 )
 from ..search import filter_microarticles
+from ..serializers.inputs import (
+    AdminImageUploadSerializer,
+    AdminPackBulkAddSerializer,
+    AdminPackCreateSerializer,
+    AdminPackPatchSerializer,
+    AdminPackReorderSerializer,
+)
 from .helpers import _image_payload, _microarticle_list_item, _require_staff
 
 
@@ -69,40 +74,11 @@ class AdminPackListCreateView(APIView):
         if denied is not None:
             return denied
 
-        payload = request.data if isinstance(request.data, dict) else {}
-        name = payload.get("name")
-        if not isinstance(name, str) or not name.strip():
-            raise DRFValidationError({"name": "name is required"})
+        serializer = AdminPackCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
 
-        description = payload.get("description")
-        if description is not None and not isinstance(description, str):
-            raise DRFValidationError({"description": "description must be a string"})
-
-        difficulty = payload.get("difficulty")
-        if difficulty is not None and not isinstance(difficulty, str):
-            raise DRFValidationError({"difficulty": "difficulty must be a string"})
-
-        estimated_minutes = payload.get("estimated_minutes")
-        if estimated_minutes is not None:
-            try:
-                estimated_minutes = int(estimated_minutes)
-            except (TypeError, ValueError):
-                raise DRFValidationError({"estimated_minutes": "estimated_minutes must be an integer"})
-
-        status = payload.get("status")
-        if status is not None and (not isinstance(status, str) or status not in Deck.Status.values):
-            raise DRFValidationError({"status": "invalid status"})
-
-        cover_image_id = payload.get("cover_image_id")
-        if cover_image_id in (None, ""):
-            cover_image_id = None
-        elif cover_image_id is not None:
-            try:
-                cover_image_id = int(cover_image_id)
-            except (TypeError, ValueError):
-                raise DRFValidationError({"cover_image_id": "cover_image_id must be an integer"})
-
-        sort_order = payload.get("sort_order")
+        sort_order = data.get("sort_order")
         if sort_order is None:
             sort_order = (
                 Deck.objects.filter(type=Deck.DeckType.OFFICIAL)
@@ -110,21 +86,16 @@ class AdminPackListCreateView(APIView):
                 .get("sort_order__max")
             )
             sort_order = int(sort_order) + 1 if sort_order is not None else 0
-        else:
-            try:
-                sort_order = int(sort_order)
-            except (TypeError, ValueError):
-                raise DRFValidationError({"sort_order": "sort_order must be an integer"})
 
         deck = Deck.objects.create(
             type=Deck.DeckType.OFFICIAL,
-            status=status or Deck.Status.DRAFT,
+            status=data.get("status") or Deck.Status.DRAFT,
             user=None,
-            name=name.strip(),
-            description=(description or ""),
-            difficulty=(difficulty or ""),
-            estimated_minutes=estimated_minutes,
-            cover_image_id=cover_image_id,
+            name=data["name"],
+            description=data.get("description", ""),
+            difficulty=data.get("difficulty", ""),
+            estimated_minutes=data.get("estimated_minutes"),
+            cover_image_id=data.get("cover_image_id"),
             is_default=False,
             sort_order=sort_order,
         )
@@ -173,75 +144,15 @@ class AdminPackDetailView(APIView):
         if deck is None:
             return Response(status=404)
 
-        payload = request.data if isinstance(request.data, dict) else {}
+        serializer = AdminPackPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
         update_fields = ["updated_at"]
-
-        if "name" in payload:
-            name = payload.get("name")
-            if not isinstance(name, str) or not name.strip():
-                raise DRFValidationError({"name": "name must be a non-empty string"})
-            deck.name = name.strip()
-            update_fields.append("name")
-
-        if "description" in payload:
-            desc = payload.get("description")
-            if desc is None:
-                deck.description = ""
-            elif not isinstance(desc, str):
-                raise DRFValidationError({"description": "description must be a string"})
-            else:
-                deck.description = desc
-            update_fields.append("description")
-
-        if "difficulty" in payload:
-            diff = payload.get("difficulty")
-            if diff is None:
-                deck.difficulty = ""
-            elif not isinstance(diff, str):
-                raise DRFValidationError({"difficulty": "difficulty must be a string"})
-            else:
-                deck.difficulty = diff
-            update_fields.append("difficulty")
-
-        if "estimated_minutes" in payload:
-            v = payload.get("estimated_minutes")
-            if v in (None, ""):
-                deck.estimated_minutes = None
-            else:
-                try:
-                    deck.estimated_minutes = int(v)
-                except (TypeError, ValueError):
-                    raise DRFValidationError({"estimated_minutes": "estimated_minutes must be an integer"})
-            update_fields.append("estimated_minutes")
-
-        if "status" in payload:
-            st = payload.get("status")
-            if not isinstance(st, str) or st not in Deck.Status.values:
-                raise DRFValidationError({"status": "invalid status"})
-            deck.status = st
-            update_fields.append("status")
-
-        if "cover_image_id" in payload:
-            cid = payload.get("cover_image_id")
-            if cid in (None, ""):
-                deck.cover_image_id = None
-            else:
-                try:
-                    deck.cover_image_id = int(cid)
-                except (TypeError, ValueError):
-                    raise DRFValidationError({"cover_image_id": "cover_image_id must be an integer"})
-            update_fields.append("cover_image")
-
-        if "sort_order" in payload:
-            so = payload.get("sort_order")
-            try:
-                deck.sort_order = int(so)
-            except (TypeError, ValueError):
-                raise DRFValidationError({"sort_order": "sort_order must be an integer"})
-            update_fields.append("sort_order")
-
-        if len(update_fields) == 1:
-            raise DRFValidationError({"detail": "No fields to update"})
+        for field, value in serializer.validated_data.items():
+            setattr(deck, field, value)
+            # `cover_image_id` s'écrit via la colonne, mais `update_fields` attend
+            # le nom du champ du modèle.
+            update_fields.append("cover_image" if field == "cover_image_id" else field)
 
         deck.type = Deck.DeckType.OFFICIAL
         deck.user_id = None
@@ -420,22 +331,12 @@ class AdminImageUploadView(APIView):
         if denied is not None:
             return denied
 
-        upload = request.FILES.get("file") or request.FILES.get("image")
-        if upload is None:
-            raise DRFValidationError({"file": "file is required"})
-
-        # This view bypasses the Wagtail form, so replay its validation here:
-        # WagtailImageField checks the extension against WAGTAILIMAGES_EXTENSIONS,
-        # that the real file format matches that extension, the file size
-        # (WAGTAILIMAGES_MAX_UPLOAD_SIZE) and the pixel count.
-        try:
-            upload = WagtailImageField(required=True).clean(upload)
-        except DjangoValidationError as exc:
-            raise DRFValidationError({"file": list(exc.messages)}) from exc
-
-        title = request.data.get("title") if hasattr(request, "data") else None
-        if not isinstance(title, str) or not title.strip():
-            title = getattr(upload, "name", "cover")
+        # La vue court-circuite le formulaire Wagtail : `AdminImageUploadSerializer`
+        # rejoue sa validation (extension, format réel, taille, nombre de pixels).
+        serializer = AdminImageUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        upload = serializer.validated_data["file"]
+        title = serializer.validated_data["title"]
 
         ImageModel = get_image_model()
         try:
@@ -443,24 +344,12 @@ class AdminImageUploadView(APIView):
         except Exception:
             collection = None
 
-        image = ImageModel(title=title.strip(), file=upload)
+        image = ImageModel(title=title, file=upload)
         if collection is not None and hasattr(image, "collection_id"):
             image.collection = collection
         image.save()
 
         return Response(_image_payload(image), status=201)
-
-
-def _parse_bulk_tokens(raw: str) -> list[str]:
-    if not raw:
-        return []
-    parts = []
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        parts.extend([p for p in line.replace(",", " ").replace(";", " ").split() if p])
-    return [p.strip() for p in parts if p.strip()]
 
 
 class AdminPackBulkAddView(APIView):
@@ -475,17 +364,9 @@ class AdminPackBulkAddView(APIView):
         if deck is None:
             return Response(status=404)
 
-        payload = request.data if isinstance(request.data, dict) else {}
-        tokens: list[str] = []
-
-        if isinstance(payload.get("items"), str):
-            tokens = _parse_bulk_tokens(payload.get("items") or "")
-        elif isinstance(payload.get("microarticle_ids"), list):
-            tokens = [str(x) for x in payload.get("microarticle_ids")]
-        elif isinstance(payload.get("slugs"), list):
-            tokens = [str(x) for x in payload.get("slugs")]
-        else:
-            raise DRFValidationError({"detail": "Provide items (string) or microarticle_ids/slugs (list)"})
+        serializer = AdminPackBulkAddSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        tokens: list[str] = serializer.validated_data["tokens"]
 
         existing_ids = set(
             DeckCard.objects.filter(deck_id=deck.id).values_list("microarticle_id", flat=True)
@@ -571,22 +452,16 @@ class AdminPackReorderCardsView(APIView):
         if deck is None:
             return Response(status=404)
 
-        payload = request.data if isinstance(request.data, dict) else {}
-        order = payload.get("microarticle_ids")
-        if not isinstance(order, list):
-            raise DRFValidationError({"microarticle_ids": "microarticle_ids must be a list"})
-
-        try:
-            ids = [int(x) for x in order]
-        except (TypeError, ValueError):
-            raise DRFValidationError({"microarticle_ids": "microarticle_ids must be a list of integers"})
+        serializer = AdminPackReorderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data["microarticle_ids"]
 
         cards = list(DeckCard.objects.filter(deck_id=deck.id, microarticle_id__in=ids))
         cards_by_mid = {c.microarticle_id: c for c in cards}
 
         missing = [mid for mid in ids if mid not in cards_by_mid]
         if missing:
-            raise DRFValidationError({"microarticle_ids": "Some ids are not in this pack"})
+            raise DRFValidationError({"microarticle_ids": ["Some ids are not in this pack"]})
 
         updated = []
         for idx, mid in enumerate(ids):

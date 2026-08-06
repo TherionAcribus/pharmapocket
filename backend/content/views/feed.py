@@ -23,6 +23,10 @@ from ..models import (
 from ..pagination import MicroArticleCursorPagination
 from ..search import filter_microarticles
 from ..serializers import MicroArticleDetailSerializer, MicroArticleListSerializer
+from ..serializers.inputs import (
+    MicroArticleReadStateSerializer,
+    SavedMicroArticleCreateSerializer,
+)
 from .helpers import (
     _apply_tree_filter,
     _cat_payload,
@@ -140,7 +144,7 @@ class MicroArticleListView(ListAPIView):
                 if invalid:
                     raise DRFValidationError(
                         {
-                            "tags": "tags must be a comma-separated list of slugs.",
+                            "tags": ["tags must be a comma-separated list of slugs."],
                             "invalid": invalid,
                         }
                     )
@@ -329,19 +333,9 @@ class SavedMicroArticleListView(APIView):
         return Response(items)
 
     def post(self, request):
-        slug = request.data.get("slug") if isinstance(request.data, dict) else None
-        if not slug or not isinstance(slug, str):
-            raise DRFValidationError({"slug": "slug is required"})
-
-        page = (
-            MicroArticlePage.objects.live()
-            .public()
-            .filter(slug=slug)
-            .specific()
-            .first()
-        )
-        if page is None:
-            raise DRFValidationError({"slug": "Unknown microarticle"})
+        serializer = SavedMicroArticleCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        page = serializer.validated_data["page"]
 
         default_deck = _get_or_create_default_deck(request.user)
         DeckCard.objects.get_or_create(deck=default_deck, microarticle=page)
@@ -386,7 +380,7 @@ class MicroArticleReadStateView(APIView):
     def get(self, request):
         slugs_param = request.query_params.get("slugs")
         if not slugs_param or not isinstance(slugs_param, str):
-            raise DRFValidationError({"slugs": "slugs is required (comma-separated)"})
+            raise DRFValidationError({"slugs": ["slugs is required (comma-separated)"]})
 
         slugs = [s.strip() for s in slugs_param.split(",") if s.strip()]
         if not slugs:
@@ -411,22 +405,10 @@ class MicroArticleReadStateView(APIView):
         return Response({"items": items})
 
     def post(self, request):
-        slug = request.data.get("slug") if isinstance(request.data, dict) else None
-        is_read = request.data.get("is_read") if isinstance(request.data, dict) else None
-        if not slug or not isinstance(slug, str):
-            raise DRFValidationError({"slug": "slug is required"})
-        if not isinstance(is_read, bool):
-            raise DRFValidationError({"is_read": "is_read must be a boolean"})
-
-        page = (
-            MicroArticlePage.objects.live()
-            .public()
-            .filter(slug=slug)
-            .specific()
-            .first()
-        )
-        if page is None:
-            raise DRFValidationError({"slug": "Unknown microarticle"})
+        serializer = MicroArticleReadStateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        page = serializer.validated_data["page"]
+        is_read = serializer.validated_data["is_read"]
 
         obj, _ = MicroArticleReadState.objects.get_or_create(
             user=request.user,

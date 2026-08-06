@@ -1,6 +1,6 @@
-from rest_framework import serializers
+"""Serializers de sortie : forme des payloads renvoyés par l'API."""
 
-from .models import MicroArticlePage
+from rest_framework import serializers
 
 
 class MicroArticleListSerializer(serializers.Serializer):

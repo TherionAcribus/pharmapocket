@@ -871,3 +871,416 @@ class MicroArticleSearchTests(APITestCase):
         ):
             self.assertEqual(self._feed_slugs("Metformine"), ["metformine"])
             self.assertEqual(self._admin_slugs("insulines-lentes"), ["insulines-lentes"])
+
+
+class InputSerializerValidationTests(APITestCase):
+    """Validation des corps de requête déléguée aux serializers d'entrée.
+
+    Deux choses sont vérifiées : le format des 400 (toujours
+    `{"champ": ["message"]}`) et les cas que la validation manuelle laissait
+    filer jusqu'à la base.
+    """
+
+    def setUp(self):
+        super().setUp()
+        root = Page.get_first_root_node()
+        if not Site.objects.exists():
+            Site.objects.create(hostname="localhost", root_page=root, is_default_site=True)
+
+        self.index = MicroArticleIndexPage(title="Micro validation", slug="micro-validation")
+        root.add_child(instance=self.index)
+        self.index.save_revision().publish()
+
+        self.card = self._add_page("Carte validee", "carte-validee")
+
+        self.staff = get_user_model().objects.create_user(
+            username="validation-staff",
+            email="validation-staff@example.com",
+            password="pharmapocket-test-pwd",
+            is_staff=True,
+        )
+        self.client.force_authenticate(user=self.staff)
+
+    def _add_page(self, title: str, slug: str, card_type: str = CardType.DETAIL) -> MicroArticlePage:
+        page = MicroArticlePage(
+            title=title,
+            slug=slug,
+            answer_express=f"Reponse {slug}.",
+            card_type=card_type,
+        )
+        self.index.add_child(instance=page)
+        page.save_revision().publish()
+        return page
+
+    def _post(self, url: str, payload):
+        return self.client.post(url, payload, format="json", secure=True)
+
+    def _patch(self, url: str, payload):
+        return self.client.patch(url, payload, format="json", secure=True)
+
+    def assertFieldError(self, resp, field: str, message: str):
+        """Un 400 DRF : la clé porte une *liste* de messages."""
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn(field, resp.data)
+        self.assertIsInstance(resp.data[field], list, resp.data)
+        self.assertIn(message, [str(m) for m in resp.data[field]])
+
+    # --- Decks -------------------------------------------------------------
+
+    def test_deck_create_rejects_a_blank_name(self):
+        self.assertFieldError(
+            self._post("/api/v1/content/decks/", {"name": "   "}), "name", "name is required"
+        )
+        self.assertFieldError(self._post("/api/v1/content/decks/", {}), "name", "name is required")
+
+    def test_deck_create_rejects_a_name_longer_than_the_column(self):
+        # `Deck.name` est un CharField(max_length=60) : sans le serializer, la
+        # base refusait la valeur, donc 500 au lieu de 400.
+        resp = self._post("/api/v1/content/decks/", {"name": "x" * 61})
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("name", resp.data)
+        self.assertFalse(Deck.objects.filter(name="x" * 61).exists())
+
+    def test_deck_patch_needs_a_known_field(self):
+        self._post("/api/v1/content/decks/", {"name": "Revisions"})
+        deck = Deck.objects.get(user=self.staff, name="Revisions")
+
+        self.assertFieldError(
+            self._patch(f"/api/v1/content/decks/{deck.id}/", {"inconnu": 1}),
+            "detail",
+            "No fields to update",
+        )
+        self.assertFieldError(
+            self._patch(f"/api/v1/content/decks/{deck.id}/", {"sort_order": "abc"}),
+            "sort_order",
+            "sort_order must be an integer",
+        )
+
+    def test_deck_patch_applies_the_submitted_fields(self):
+        self._post("/api/v1/content/decks/", {"name": "Avant"})
+        deck = Deck.objects.get(user=self.staff, name="Avant")
+
+        resp = self._patch(f"/api/v1/content/decks/{deck.id}/", {"name": "Apres", "sort_order": 7})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        deck.refresh_from_db()
+        self.assertEqual((deck.name, deck.sort_order), ("Apres", 7))
+
+    def test_deck_add_card_separates_bad_type_from_unknown_card(self):
+        self._post("/api/v1/content/decks/", {"name": "Cible"})
+        deck = Deck.objects.get(user=self.staff, name="Cible")
+        url = f"/api/v1/content/decks/{deck.id}/cards/"
+
+        self.assertFieldError(self._post(url, {"card_id": "abc"}), "card_id", "card_id must be an integer")
+        self.assertFieldError(self._post(url, {}), "card_id", "card_id is required")
+        self.assertFieldError(
+            self._post(url, {"card_id": 999999}), "card_id", "Unknown or unavailable card"
+        )
+        self.assertEqual(self._post(url, {"card_id": self.card.id}).status_code, 200)
+
+    def test_deck_bulk_add_requires_a_list(self):
+        self._post("/api/v1/content/decks/", {"name": "Lot"})
+        deck = Deck.objects.get(user=self.staff, name="Lot")
+        url = f"/api/v1/content/decks/{deck.id}/cards/bulk-add/"
+
+        self.assertFieldError(self._post(url, {"card_ids": "12"}), "card_ids", "card_ids must be a list")
+        self.assertFieldError(self._post(url, {}), "card_ids", "card_ids must be a list")
+
+        resp = self._post(url, {"card_ids": [self.card.id, self.card.id]})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["added"], 1)
+
+    def test_card_decks_put_requires_a_list(self):
+        resp = self.client.put(
+            f"/api/v1/content/cards/{self.card.id}/decks/",
+            {"deck_ids": "1"},
+            format="json",
+            secure=True,
+        )
+        self.assertFieldError(resp, "deck_ids", "deck_ids must be a list")
+
+    # --- Progression d'un pack officiel ------------------------------------
+
+    def _official_pack_with_card(self) -> Deck:
+        pack = Deck.objects.create(
+            type=Deck.DeckType.OFFICIAL,
+            status=Deck.Status.PUBLISHED,
+            name="Pack progression",
+            sort_order=0,
+        )
+        DeckCard.objects.create(deck=pack, microarticle=self.card, sort_order=0)
+        return pack
+
+    def test_progress_rejects_a_card_outside_the_deck(self):
+        pack = self._official_pack_with_card()
+        outsider = self._add_page("Hors pack", "hors-pack")
+
+        self.assertFieldError(
+            self._post(f"/api/v1/content/decks/{pack.id}/progress/", {"last_card_id": outsider.id}),
+            "last_card_id",
+            "Unknown or unavailable card in this deck",
+        )
+        self.assertFieldError(
+            self._post(f"/api/v1/content/decks/{pack.id}/progress/", {"last_card_id": "abc"}),
+            "last_card_id",
+            "last_card_id must be an integer",
+        )
+
+    def test_progress_clamps_negative_counters(self):
+        pack = self._official_pack_with_card()
+
+        resp = self._post(
+            f"/api/v1/content/decks/{pack.id}/progress/",
+            {"cards_seen_count": -5, "cards_done_count": -1, "mode_last": "shuffle"},
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["cards_seen_count"], 0)
+        self.assertEqual(resp.data["cards_done_count"], 0)
+        self.assertEqual(resp.data["mode_last"], "shuffle")
+
+    def test_progress_rejects_an_unknown_mode(self):
+        # La validation manuelle ignorait silencieusement un mode inconnu.
+        pack = self._official_pack_with_card()
+
+        resp = self._post(f"/api/v1/content/decks/{pack.id}/progress/", {"mode_last": "aleatoire"})
+
+        self.assertFieldError(resp, "mode_last", "invalid mode_last")
+        self.assertFalse(UserDeckProgress.objects.filter(deck=pack).exists())
+
+    # --- Sauvegardes et état de lecture -------------------------------------
+
+    def test_saved_post_rejects_an_unknown_slug(self):
+        self.assertFieldError(
+            self._post("/api/v1/content/saved/", {"slug": "nexiste-pas"}),
+            "slug",
+            "Unknown microarticle",
+        )
+        self.assertFieldError(self._post("/api/v1/content/saved/", {}), "slug", "slug is required")
+        self.assertEqual(
+            self._post("/api/v1/content/saved/", {"slug": self.card.slug}).status_code, 200
+        )
+
+    def test_read_state_post_requires_a_boolean(self):
+        url = "/api/v1/content/read-state/"
+
+        self.assertFieldError(
+            self._post(url, {"slug": self.card.slug}), "is_read", "is_read must be a boolean"
+        )
+        self.assertFieldError(
+            self._post(url, {"slug": self.card.slug, "is_read": "peut-etre"}),
+            "is_read",
+            "is_read must be a boolean",
+        )
+
+        resp = self._post(url, {"slug": self.card.slug, "is_read": True})
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertTrue(resp.data["is_read"])
+
+    # --- Overrides de vignettes ---------------------------------------------
+
+    def test_thumb_override_create_validates_colors_pattern_and_unicity(self):
+        url = "/api/v1/content/admin/thumb-overrides/"
+        # Slug volontairement absent des overrides posés par la migration de données.
+        valid = {
+            "pathology_slug": "Pathologie De Test",
+            "bg": "#6D5BD0",
+            "accent": "#D7D2FF",
+            "pattern": "waves",
+        }
+
+        self.assertFieldError(
+            self._post(url, {**valid, "bg": "6D5BD0"}), "bg", "bg must be a hex color (ex: #6D5BD0)"
+        )
+        self.assertFieldError(
+            self._post(url, {**valid, "accent": 12}),
+            "accent",
+            "accent must be a hex color (ex: #D7D2FF)",
+        )
+        self.assertFieldError(
+            self._post(url, {**valid, "pattern": "spirales"}), "pattern", "invalid pattern"
+        )
+        self.assertFieldError(
+            self._post(url, {**valid, "pathology_slug": "###"}),
+            "pathology_slug",
+            "Invalid pathology_slug",
+        )
+
+        resp = self._post(url, valid)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["pathology_slug"], "pathologie-de-test")
+
+        self.assertFieldError(self._post(url, valid), "pathology_slug", "pathology_slug already exists")
+
+    def test_thumb_override_patch_updates_only_the_submitted_fields(self):
+        override = PathologyThumbOverride.objects.create(
+            pathology_slug="grippe-patch",
+            bg="#6D5BD0",
+            accent="#D7D2FF",
+            pattern=PathologyThumbOverride.Pattern.WAVES,
+        )
+        url = f"/api/v1/content/admin/thumb-overrides/{override.pathology_slug}/"
+
+        self.assertFieldError(self._patch(url, {}), "detail", "No fields to update")
+
+        resp = self._patch(url, {"bg": "#000000"})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        override.refresh_from_db()
+        self.assertEqual(override.bg, "#000000")
+        self.assertEqual(override.accent, "#D7D2FF")
+        self.assertEqual(override.pathology_slug, "grippe-patch")
+
+    # --- Sujets --------------------------------------------------------------
+
+    def test_subject_create_derives_the_slug_and_refuses_duplicates(self):
+        url = "/api/v1/content/subjects/"
+
+        self.assertFieldError(self._post(url, {"name": "  "}), "name", "name is required")
+
+        resp = self._post(url, {"name": "Insuffisance renale"})
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["slug"], "insuffisance-renale")
+        self.assertEqual(resp.data["description"], "")
+
+        self.assertFieldError(
+            self._post(url, {"name": "Autre", "slug": "insuffisance-renale"}),
+            "slug",
+            "slug already exists",
+        )
+        # Un nom qui ne produit aucun slug : 400 plutôt qu'une ligne au slug vide.
+        self.assertFieldError(self._post(url, {"name": "###"}), "slug", "Invalid slug")
+
+    def test_subject_patch_requires_a_known_field(self):
+        subject = Subject.objects.create(name="Sujet patch", slug="sujet-patch")
+        url = f"/api/v1/content/subjects/{subject.slug}/"
+
+        self.assertFieldError(self._patch(url, {"inconnu": 1}), "detail", "No fields to update")
+        self.assertFieldError(self._patch(url, {"slug": "###"}), "slug", "Invalid slug")
+
+        resp = self._patch(url, {"description": None})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        subject.refresh_from_db()
+        self.assertEqual(subject.description, "")
+
+    def test_subject_add_card_validates_the_slug_and_recap_unicity(self):
+        subject = Subject.objects.create(name="Sujet cartes", slug="sujet-cartes")
+        url = f"/api/v1/content/subjects/{subject.slug}/cards/"
+
+        self.assertFieldError(self._post(url, {}), "card_slug", "card_slug is required")
+        self.assertFieldError(self._post(url, {"card_slug": "inconnu"}), "card_slug", "Unknown card")
+
+        recap = self._add_page("Recap 1", "recap-1", card_type=CardType.RECAP)
+        other_recap = self._add_page("Recap 2", "recap-2", card_type=CardType.RECAP)
+        self.assertEqual(self._post(url, {"card_slug": recap.slug}).status_code, 201)
+        self.assertFieldError(
+            self._post(url, {"card_slug": other_recap.slug}),
+            "card_slug",
+            "Subject already has a recap card",
+        )
+
+    def test_subject_card_patch_rejects_a_non_integer_order(self):
+        # Un `sort_order` non entier était ignoré en silence, donc un 200 trompeur.
+        subject = Subject.objects.create(name="Sujet ordre", slug="sujet-ordre")
+        link = SubjectCard.objects.create(subject=subject, microarticle=self.card)
+        url = f"/api/v1/content/subjects/{subject.slug}/cards/{link.id}/"
+
+        self.assertFieldError(
+            self._patch(url, {"sort_order": "deuxieme"}),
+            "sort_order",
+            "sort_order must be an integer",
+        )
+
+        resp = self._patch(url, {"label": None, "sort_order": 3})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        link.refresh_from_db()
+        self.assertEqual((link.label, link.sort_order), ("", 3))
+
+    def test_subject_reorder_requires_a_list_of_ids(self):
+        subject = Subject.objects.create(name="Sujet reorder", slug="sujet-reorder")
+        url = f"/api/v1/content/subjects/{subject.slug}/cards/reorder/"
+
+        self.assertFieldError(self._post(url, {"order": 3}), "order", "order must be a list of card IDs")
+        self.assertFieldError(self._post(url, {}), "order", "order must be a list of card IDs")
+
+    # --- Back-office des packs -----------------------------------------------
+
+    def test_admin_pack_create_validates_status_and_cover(self):
+        url = "/api/v1/content/admin/packs/"
+
+        self.assertFieldError(
+            self._post(url, {"name": "Pack", "status": "brouillon"}), "status", "invalid status"
+        )
+        # Un id d'image inconnu partait en IntegrityError (500) avant le serializer.
+        self.assertFieldError(
+            self._post(url, {"name": "Pack", "cover_image_id": 999999}),
+            "cover_image_id",
+            "Unknown image",
+        )
+
+        resp = self._post(url, {"name": "Pack", "estimated_minutes": "", "cover_image_id": ""})
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertIsNone(resp.data["estimated_minutes"])
+        self.assertIsNone(resp.data["cover_image"])
+        self.assertEqual(resp.data["status"], Deck.Status.DRAFT)
+
+    def test_admin_pack_patch_updates_only_the_submitted_fields(self):
+        pack = Deck.objects.create(
+            type=Deck.DeckType.OFFICIAL,
+            name="Pack meta",
+            description="Description initiale",
+            status=Deck.Status.DRAFT,
+            sort_order=0,
+        )
+        url = f"/api/v1/content/admin/packs/{pack.id}/"
+
+        self.assertFieldError(self._patch(url, {}), "detail", "No fields to update")
+        self.assertFieldError(self._patch(url, {"name": " "}), "name", "name must be a non-empty string")
+
+        resp = self._patch(url, {"status": Deck.Status.PUBLISHED, "estimated_minutes": None})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        pack.refresh_from_db()
+        self.assertEqual(pack.status, Deck.Status.PUBLISHED)
+        self.assertIsNone(pack.estimated_minutes)
+        self.assertEqual(pack.description, "Description initiale")
+
+    def test_admin_pack_bulk_add_requires_one_of_the_three_shapes(self):
+        pack = Deck.objects.create(type=Deck.DeckType.OFFICIAL, name="Pack bulk", sort_order=0)
+        url = f"/api/v1/content/admin/packs/{pack.id}/bulk-add/"
+
+        self.assertFieldError(
+            self._post(url, {"autre": []}),
+            "detail",
+            "Provide items (string) or microarticle_ids/slugs (list)",
+        )
+
+        resp = self._post(url, {"slugs": [self.card.slug, "inconnu"]})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual((resp.data["added"], resp.data["not_found"]), (1, 1))
+
+    def test_admin_pack_reorder_requires_a_list(self):
+        pack = Deck.objects.create(type=Deck.DeckType.OFFICIAL, name="Pack ordre", sort_order=0)
+        url = f"/api/v1/content/admin/packs/{pack.id}/cards/reorder/"
+
+        self.assertFieldError(
+            self._post(url, {"microarticle_ids": 4}),
+            "microarticle_ids",
+            "microarticle_ids must be a list",
+        )
+        self.assertFieldError(
+            self._post(url, {"microarticle_ids": ["abc"]}),
+            "microarticle_ids",
+            "microarticle_ids must be a list of integers",
+        )
+
+    def test_image_upload_reports_a_missing_file_under_the_file_key(self):
+        resp = self.client.post(
+            "/api/v1/content/admin/images/upload/", {}, format="multipart", secure=True
+        )
+        self.assertFieldError(resp, "file", "file is required")
