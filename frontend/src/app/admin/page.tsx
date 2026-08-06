@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Image as ImageIcon, Package as PackageIcon } from "lucide-react";
+import { FileJson as FileJsonIcon, Image as ImageIcon, Package as PackageIcon } from "lucide-react";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,13 @@ export default function AdminHomePage() {
             <Link href="/admin/packs">
               <PackageIcon className="size-4" />
               Packs
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="justify-start gap-2">
+            <Link href="/admin/import">
+              <FileJsonIcon className="size-4" />
+              Import de fiches (JSON)
             </Link>
           </Button>
         </div>

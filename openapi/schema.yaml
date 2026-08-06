@@ -178,6 +178,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ImagePayload'
           description: ''
+  /api/v1/content/admin/microarticles/import/:
+    post:
+      operationId: admin_card_import
+      description: |-
+        Crée des fiches à partir du JSON décrit dans `docs/prompt_generation_cartes.md`.
+
+        L'import est tout-ou-rien : une seule carte en erreur annule le lot, et le
+        rapport détaille carte par carte ce qu'il faut corriger. `dry_run` rejoue
+        exactement le même chemin puis annule la transaction.
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCardImport'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminCardImport'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminCardImport'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCardImportReport'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCardImportReport'
+          description: ''
   /api/v1/content/admin/microarticles/search/:
     get:
       operationId: admin_microarticle_search
@@ -1678,6 +1716,95 @@ components:
       - has_usable_password
       - pseudo
       - username
+    AdminCardImport:
+      type: object
+      description: |-
+        POST /admin/microarticles/import/
+
+        Seule l'enveloppe est validée ici : la forme d'une carte est trop imbriquée
+        pour un serializer plat, et `content.importers` doit renvoyer *toutes* les
+        erreurs d'un coup plutôt que la première. `cards` accepte une carte seule
+        autant qu'une liste, parce qu'un LLM produit indifféremment l'une ou l'autre.
+      properties:
+        cards: {}
+        publish:
+          type: boolean
+          default: false
+        dry_run:
+          type: boolean
+          default: false
+        create_sources:
+          type: boolean
+          default: true
+      required:
+      - cards
+    AdminCardImportReport:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        dry_run:
+          type: boolean
+        published:
+          type: boolean
+        imported:
+          type: integer
+        detail:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminCardImportResult'
+      required:
+      - dry_run
+      - ok
+      - results
+    AdminCardImportResult:
+      type: object
+      description: Résultat d'une carte du lot ; `ok=False` porte les erreurs à corriger.
+      properties:
+        index:
+          type: integer
+        ok:
+          type: boolean
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        card_type:
+          type: string
+        status:
+          type: string
+        subject:
+          type: string
+          nullable: true
+        created_sources:
+          type: array
+          items:
+            type: string
+        created_questions:
+          type: integer
+        reused_questions:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+      - errors
+      - index
+      - ok
+      - warnings
     AdminImageUpload:
       type: object
       description: |-

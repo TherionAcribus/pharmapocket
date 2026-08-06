@@ -456,6 +456,37 @@ class SubjectCardsReorderSerializer(serializers.Serializer):
 
 
 # ---------------------------------------------------------------------------
+# Import de fiches
+# ---------------------------------------------------------------------------
+
+
+class AdminCardImportSerializer(serializers.Serializer):
+    """POST /admin/microarticles/import/
+
+    Seule l'enveloppe est validée ici : la forme d'une carte est trop imbriquée
+    pour un serializer plat, et `content.importers` doit renvoyer *toutes* les
+    erreurs d'un coup plutôt que la première. `cards` accepte une carte seule
+    autant qu'une liste, parce qu'un LLM produit indifféremment l'une ou l'autre.
+    """
+
+    cards = serializers.JSONField(
+        error_messages=_required_messages("cards is required"),
+    )
+    publish = serializers.BooleanField(required=False, default=False)
+    dry_run = serializers.BooleanField(required=False, default=False)
+    create_sources = serializers.BooleanField(required=False, default=True)
+
+    def validate_cards(self, value):
+        if isinstance(value, dict):
+            value = value.get("cards", [value])
+        if not isinstance(value, list):
+            raise serializers.ValidationError("cards must be a card object or a list of cards")
+        if not value:
+            raise serializers.ValidationError("cards must not be empty")
+        return value
+
+
+# ---------------------------------------------------------------------------
 # Overrides de vignettes
 # ---------------------------------------------------------------------------
 

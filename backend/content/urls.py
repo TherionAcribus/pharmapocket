@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    AdminCardImportView,
     AdminImageUploadView,
     AdminMicroArticleSearchView,
     AdminPackBulkAddView,
@@ -61,6 +62,11 @@ urlpatterns = [
         "admin/packs/<int:pack_id>/cards/<int:card_id>/remove/",
         AdminPackRemoveCardView.as_view(),
         name="admin-pack-remove-card",
+    ),
+    path(
+        "admin/microarticles/import/",
+        AdminCardImportView.as_view(),
+        name="admin-microarticle-import",
     ),
     path(
         "admin/microarticles/search/",

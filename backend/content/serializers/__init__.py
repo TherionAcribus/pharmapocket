@@ -23,6 +23,8 @@ from .outputs import (
     image_payload,
 )
 from .responses import (
+    AdminCardImportReportSerializer,
+    AdminCardImportResultSerializer,
     AdminMicroArticleSearchResultSerializer,
     AdminPackDetailSerializer,
     AdminPackSummarySerializer,
@@ -68,6 +70,8 @@ __all__ = [
     "SubjectSummarySerializer",
     "TagPayloadSerializer",
     "image_payload",
+    "AdminCardImportReportSerializer",
+    "AdminCardImportResultSerializer",
     "AdminMicroArticleSearchResultSerializer",
     "AdminPackDetailSerializer",
     "AdminPackSummarySerializer",

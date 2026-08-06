@@ -239,6 +239,8 @@ Staff uniquement (`/api/v1/content/admin/`) :
   · `POST .../packs/<pack_id>/cards/<card_id>/remove/`
 - `GET /api/v1/content/admin/microarticles/search/` — `q`, `recent`, `tags`,
   `<taxonomy>_nodes` + `<taxonomy>_scope` (`theme`, `maladies`, `medicament`, `pharmacologie`)
+- `POST /api/v1/content/admin/microarticles/import/` — création de fiches depuis
+  un JSON éditorial (voir [docs/prompt_generation_cartes.md](docs/prompt_generation_cartes.md))
 - `POST /api/v1/content/admin/images/upload/`
 - `GET|POST /api/v1/content/admin/thumb-overrides/`
   · `GET|PATCH|DELETE .../thumb-overrides/<pathology_slug>/`
@@ -278,6 +280,27 @@ Garde-fous appliqués :
 - `key_points` : 3 à 5 items, 90 caractères max / item
 - `links` : max 5
 - `see_more` : max 3 blocs
+
+### Import de fiches (JSON généré par IA)
+
+Le format JSON, le prompt de génération et la boucle de travail sont décrits dans
+[docs/prompt_generation_cartes.md](docs/prompt_generation_cartes.md). Trois portes
+d'entrée pour le même import :
+
+- l'app : **Admin → Import de fiches (JSON)** (`/admin/import`, staff) ;
+- la ligne de commande :
+
+  ```bash
+  python manage.py import_cards fiches.json --dry-run   # valide sans écrire
+  python manage.py import_cards fiches.json             # crée en brouillon
+  python manage.py import_cards fiches.json --publish   # crée et publie
+  ```
+
+- l'API : `POST /api/v1/content/admin/microarticles/import/`.
+
+L'import est tout-ou-rien, crée les fiches en brouillon par défaut, refuse une
+catégorie inconnue (l'arbre se gère dans Wagtail) et crée à la volée les sources,
+tags et sujets manquants.
 
 ## Base de données
 

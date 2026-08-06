@@ -4,6 +4,7 @@ Ce module réexporte tout ce que l'ancien `content/views.py` exposait, pour que
 `from .views import X` (notamment dans `content/urls.py`) continue de fonctionner.
 """
 
+from .cards_admin import AdminCardImportView
 from .decks import (
     CardDecksView,
     DeckCardDetailView,
@@ -89,6 +90,8 @@ __all__ = [
     "OfficialDeckProgressView",
     "OfficialDeckStartView",
     "build_progress_payload",
+    # fiches admin
+    "AdminCardImportView",
     # packs admin
     "AdminImageUploadView",
     "AdminMicroArticleSearchView",

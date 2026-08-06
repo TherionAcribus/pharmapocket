@@ -17,6 +17,7 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  adminImportCards,
   adminMicroArticleSearch,
   adminPackBulkAdd,
   adminPackRemoveCard,
@@ -501,6 +502,22 @@ function invalidateAdminPack(queryClient: QueryClient, packId?: number) {
   if (packId != null) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.adminPack(packId) });
   }
+}
+
+/**
+ * Import de fiches. Seul un lot *publié* change ce que voit le feed : un
+ * brouillon ou un dry-run n'invalide rien.
+ */
+export function useImportCards() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: adminImportCards,
+    onSuccess: (report) => {
+      if (report.ok && !report.dry_run && report.published) {
+        void queryClient.invalidateQueries({ queryKey: ["feed"] });
+      }
+    },
+  });
 }
 
 export function useCreateAdminPack() {

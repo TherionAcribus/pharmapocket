@@ -1,6 +1,7 @@
-import { apiGet, apiJson, jsonBody } from "@/lib/api/client";
+import { apiGet, apiJson, isApiError, jsonBody } from "@/lib/api/client";
 import type { ThumbPattern } from "@/lib/api/content";
 import type {
+  AdminCardImportReport,
   AdminMicroArticleSearchResult,
   AdminPackDetail,
   AdminPackSummary,
@@ -141,6 +142,42 @@ export async function adminUploadImage(input: {
     "/api/v1/content/admin/images/upload/",
     { method: "POST", body: fd }
   );
+}
+
+// -----------------------------------------------------------------------------
+// Import de fiches (JSON généré par IA)
+// -----------------------------------------------------------------------------
+
+function isImportReport(value: unknown): value is AdminCardImportReport {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    Array.isArray((value as AdminCardImportReport).results)
+  );
+}
+
+/**
+ * Un lot refusé revient en 400 *avec* le rapport détaillé : c'est la réponse
+ * utile pour l'éditeur, pas une erreur de transport. On la renvoie donc comme
+ * un résultat normal et on ne laisse remonter que les vraies erreurs (403, 500…).
+ */
+export async function adminImportCards(input: {
+  cards: unknown;
+  publish?: boolean;
+  dry_run?: boolean;
+  create_sources?: boolean;
+}): Promise<AdminCardImportReport> {
+  try {
+    return await apiJson<AdminCardImportReport>(
+      "/api/v1/content/admin/microarticles/import/",
+      jsonBody("POST", input)
+    );
+  } catch (error) {
+    if (isApiError(error) && error.status === 400 && isImportReport(error.body)) {
+      return error.body;
+    }
+    throw error;
+  }
 }
 
 // -----------------------------------------------------------------------------

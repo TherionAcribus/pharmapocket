@@ -116,6 +116,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/content/admin/microarticles/import/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Crée des fiches à partir du JSON décrit dans `docs/prompt_generation_cartes.md`.
+         *
+         *     L'import est tout-ou-rien : une seule carte en erreur annule le lot, et le
+         *     rapport détaille carte par carte ce qu'il faut corriger. `dry_run` rejoue
+         *     exactement le même chemin puis annule la transaction.
+         */
+        post: operations["admin_card_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/content/admin/microarticles/search/": {
         parameters: {
             query?: never;
@@ -807,6 +830,48 @@ export interface components {
             username: string;
             pseudo: string;
             has_usable_password: boolean;
+        };
+        /**
+         * @description POST /admin/microarticles/import/
+         *
+         *     Seule l'enveloppe est validée ici : la forme d'une carte est trop imbriquée
+         *     pour un serializer plat, et `content.importers` doit renvoyer *toutes* les
+         *     erreurs d'un coup plutôt que la première. `cards` accepte une carte seule
+         *     autant qu'une liste, parce qu'un LLM produit indifféremment l'une ou l'autre.
+         */
+        AdminCardImport: {
+            cards: unknown;
+            /** @default false */
+            publish: boolean;
+            /** @default false */
+            dry_run: boolean;
+            /** @default true */
+            create_sources: boolean;
+        };
+        AdminCardImportReport: {
+            ok: boolean;
+            dry_run: boolean;
+            published?: boolean;
+            imported?: number;
+            detail?: string;
+            results: components["schemas"]["AdminCardImportResult"][];
+        };
+        /** @description Résultat d'une carte du lot ; `ok=False` porte les erreurs à corriger. */
+        AdminCardImportResult: {
+            index: number;
+            ok: boolean;
+            id?: number;
+            slug?: string;
+            title?: string;
+            card_type?: string;
+            status?: string;
+            subject?: string | null;
+            created_sources?: string[];
+            created_questions?: number;
+            reused_questions?: number;
+            tags?: string[];
+            errors: string[];
+            warnings: string[];
         };
         /**
          * @description POST /admin/images/upload/ — le fichier arrive sous `file` ou `image`.
@@ -1574,6 +1639,9 @@ export interface components {
     pathItems: never;
 }
 export type AccountSummary = components['schemas']['AccountSummary'];
+export type AdminCardImport = components['schemas']['AdminCardImport'];
+export type AdminCardImportReport = components['schemas']['AdminCardImportReport'];
+export type AdminCardImportResult = components['schemas']['AdminCardImportResult'];
 export type AdminImageUpload = components['schemas']['AdminImageUpload'];
 export type AdminMicroArticleSearchResult = components['schemas']['AdminMicroArticleSearchResult'];
 export type AdminPackBulkAdd = components['schemas']['AdminPackBulkAdd'];
@@ -1861,6 +1929,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImagePayload"];
+                };
+            };
+        };
+    };
+    admin_card_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCardImport"];
+                "application/x-www-form-urlencoded": components["schemas"]["AdminCardImport"];
+                "multipart/form-data": components["schemas"]["AdminCardImport"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCardImportReport"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCardImportReport"];
                 };
             };
         };

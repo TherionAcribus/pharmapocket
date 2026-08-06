@@ -200,6 +200,34 @@ class AdminMicroArticleSearchResultSerializer(serializers.Serializer):
     packs_count = serializers.IntegerField(min_value=0)
 
 
+class AdminCardImportResultSerializer(serializers.Serializer):
+    """Résultat d'une carte du lot ; `ok=False` porte les erreurs à corriger."""
+
+    index = serializers.IntegerField()
+    ok = serializers.BooleanField()
+    id = serializers.IntegerField(required=False)
+    slug = serializers.CharField(required=False)
+    title = serializers.CharField(required=False)
+    card_type = serializers.CharField(required=False)
+    status = serializers.CharField(required=False)
+    subject = serializers.CharField(allow_null=True, required=False)
+    created_sources = serializers.ListField(child=serializers.CharField(), required=False)
+    created_questions = serializers.IntegerField(required=False)
+    reused_questions = serializers.IntegerField(required=False)
+    tags = serializers.ListField(child=serializers.CharField(), required=False)
+    errors = serializers.ListField(child=serializers.CharField())
+    warnings = serializers.ListField(child=serializers.CharField())
+
+
+class AdminCardImportReportSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    dry_run = serializers.BooleanField()
+    published = serializers.BooleanField(required=False)
+    imported = serializers.IntegerField(required=False)
+    detail = serializers.CharField(required=False)
+    results = AdminCardImportResultSerializer(many=True)
+
+
 class DefaultDeckResponseSerializer(OkResponseSerializer):
     default_deck_id = serializers.IntegerField()
 
