@@ -486,6 +486,45 @@ class AdminCardImportSerializer(serializers.Serializer):
         return value
 
 
+class AdminTaxonomyNodeCreateSerializer(serializers.Serializer):
+    """POST /admin/taxonomies/<taxonomy>/nodes/ — `context["model"]` porte la taxonomie.
+
+    Le slug est dérivé du nom quand il n'est pas fourni, comme dans le formulaire
+    Wagtail ; l'unicité est vérifiée ici pour renvoyer un 400 lisible plutôt
+    qu'une erreur d'intégrité.
+    """
+
+    name = serializers.CharField(
+        max_length=120,
+        error_messages=_required_messages("name is required"),
+    )
+    slug = SlugifiedField(required=False, allow_blank=True)
+    parent_id = NullableIntegerField(required=False)
+
+    def validate(self, attrs):
+        model = self.context["model"]
+
+        name = attrs["name"].strip()
+        if not name:
+            raise serializers.ValidationError({"name": "name is required"})
+        attrs["name"] = name
+        attrs["slug"] = attrs.get("slug") or slugify(name)
+
+        if model.objects.filter(name__iexact=name).exists():
+            raise serializers.ValidationError({"name": "Cette catégorie existe déjà."})
+        if model.objects.filter(slug=attrs["slug"]).exists():
+            raise serializers.ValidationError({"slug": "Ce slug est déjà pris."})
+
+        parent_id = attrs.pop("parent_id", None)
+        parent = None
+        if parent_id is not None:
+            parent = model.objects.filter(id=parent_id).first()
+            if parent is None:
+                raise serializers.ValidationError({"parent_id": "Catégorie parente introuvable."})
+        attrs["parent"] = parent
+        return attrs
+
+
 # ---------------------------------------------------------------------------
 # Overrides de vignettes
 # ---------------------------------------------------------------------------

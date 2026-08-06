@@ -94,6 +94,27 @@ class CardImportTests(APITestCase):
         self.assertEqual(page.sources[0].value["source"], source)
         self.assertEqual(report["results"][0]["created_sources"], ["Bon usage des IEC"])
 
+    def test_answer_detail_is_stored_and_served_in_see_more(self):
+        report = import_cards([
+            _card(
+                answer_detail="<p>Le contrôle porte sur la kaliémie <b>et</b> la créatinine.</p>",
+                see_more=[{"type": "final_summary", "value": "Contrôle à J7-J14."}],
+            )
+        ], publish=True)
+
+        self.assertTrue(report["ok"], report)
+        page = MicroArticlePage.objects.get(id=report["results"][0]["id"])
+        self.assertIn("créatinine", page.answer_detail)
+
+        # L'API sert `answer_detail` en tête de `see_more` : c'est ce que lit
+        # l'utilisateur qui déplie la fiche.
+        resp = self.client.get(f"/api/v1/content/microarticles/{page.slug}/", secure=True)
+        self.assertEqual(resp.status_code, 200)
+        blocks = resp.data["see_more"]
+        self.assertEqual(blocks[0]["type"], "detail")
+        self.assertIn("créatinine", blocks[0]["value"])
+        self.assertEqual(blocks[1]["type"], "final_summary")
+
     def test_publish_makes_the_card_live(self):
         report = import_cards([_card()], publish=True)
 
@@ -169,11 +190,34 @@ class CardImportTests(APITestCase):
         self.assertEqual(Source.objects.count(), 0)
 
     def test_unknown_category_is_reported_without_creating_it(self):
-        report = import_cards([_card(categories_maladies=["pathologie-inexistante"])])
+        report = import_cards([_card(categories_maladies=["Insuffisance rénale chronique"])])
 
         self.assertFalse(report["ok"])
         self.assertIn("categories_maladies", report["results"][0]["errors"][0])
         self.assertEqual(CategoryMaladies.objects.count(), 0)
+
+        # Le rapport doit permettre de créer la catégorie sans la ressaisir.
+        self.assertEqual(
+            report["unknown_categories"],
+            [
+                {
+                    "field": "categories_maladies",
+                    "taxonomy": "maladies",
+                    "value": "Insuffisance rénale chronique",
+                    "suggested_name": "Insuffisance rénale chronique",
+                    "suggested_slug": "insuffisance-renale-chronique",
+                }
+            ],
+        )
+
+    def test_unknown_categories_are_deduplicated_across_the_batch(self):
+        report = import_cards([
+            _card(categories_maladies=["Insuffisance rénale chronique"]),
+            _card(title="Deuxième fiche", categories_maladies=["insuffisance-renale-chronique"]),
+        ])
+
+        self.assertFalse(report["ok"])
+        self.assertEqual(len(report["unknown_categories"]), 1)
 
     def test_missing_source_is_rejected(self):
         report = import_cards([_card(sources=[])])
@@ -301,6 +345,32 @@ class CardImportEndpointTests(APITestCase):
         self.assertFalse(resp.data["ok"])
         self.assertTrue(resp.data["results"][0]["errors"])
         self.assertEqual(MicroArticlePage.objects.count(), 0)
+
+    def test_staff_creates_the_category_proposed_by_the_report_then_imports(self):
+        self.client.force_authenticate(user=self.staff)
+        card = _card(categories_maladies=["Insuffisance rénale chronique"])
+
+        refused = self.client.post(IMPORT_URL, {"cards": [card]}, format="json", secure=True)
+        self.assertEqual(refused.status_code, 400)
+        proposed = refused.data["unknown_categories"][0]
+
+        created = self.client.post(
+            f"/api/v1/content/admin/taxonomies/{proposed['taxonomy']}/nodes/",
+            {"name": proposed["suggested_name"], "slug": proposed["suggested_slug"]},
+            format="json",
+            secure=True,
+        )
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertEqual(created.data["slug"], "insuffisance-renale-chronique")
+        self.assertIsNone(created.data["parent_id"])
+
+        retried = self.client.post(IMPORT_URL, {"cards": [card]}, format="json", secure=True)
+        self.assertEqual(retried.status_code, 200, retried.data)
+        page = MicroArticlePage.objects.get(id=retried.data["results"][0]["id"])
+        self.assertEqual(
+            list(page.categories_maladies.values_list("slug", flat=True)),
+            ["insuffisance-renale-chronique"],
+        )
 
     def test_import_requires_staff(self):
         member = get_user_model().objects.create_user(

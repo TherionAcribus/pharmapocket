@@ -241,6 +241,8 @@ Staff uniquement (`/api/v1/content/admin/`) :
   `<taxonomy>_nodes` + `<taxonomy>_scope` (`theme`, `maladies`, `medicament`, `pharmacologie`)
 - `POST /api/v1/content/admin/microarticles/import/` — création de fiches depuis
   un JSON éditorial (voir [docs/prompt_generation_cartes.md](docs/prompt_generation_cartes.md))
+- `POST /api/v1/content/admin/taxonomies/<taxonomy>/nodes/` — création d'une
+  catégorie (`name`, `slug` optionnel, `parent_id` optionnel)
 - `POST /api/v1/content/admin/images/upload/`
 - `GET|POST /api/v1/content/admin/thumb-overrides/`
   · `GET|PATCH|DELETE .../thumb-overrides/<pathology_slug>/`
@@ -287,7 +289,9 @@ Le format JSON, le prompt de génération et la boucle de travail sont décrits 
 [docs/prompt_generation_cartes.md](docs/prompt_generation_cartes.md). Trois portes
 d'entrée pour le même import :
 
-- l'app : **Admin → Import de fiches (JSON)** (`/admin/import`, staff) ;
+- l'app : **Admin → Import de fiches (JSON)** (`/admin/import`, staff) — génère
+  aussi le prompt, taxonomies injectées, et propose de créer les catégories
+  manquantes ;
 - la ligne de commande :
 
   ```bash
@@ -298,9 +302,10 @@ d'entrée pour le même import :
 
 - l'API : `POST /api/v1/content/admin/microarticles/import/`.
 
-L'import est tout-ou-rien, crée les fiches en brouillon par défaut, refuse une
-catégorie inconnue (l'arbre se gère dans Wagtail) et crée à la volée les sources,
-tags et sujets manquants.
+L'import est tout-ou-rien, crée les fiches en brouillon par défaut, et crée à la
+volée les sources, tags et sujets manquants. Une catégorie inconnue ne bloque pas
+définitivement : elle est renvoyée dans `unknown_categories`, et la page d'import
+propose de la créer (nom, slug et parent éditables) avant de relancer.
 
 ## Base de données
 

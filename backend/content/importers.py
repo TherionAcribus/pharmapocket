@@ -47,6 +47,7 @@ CARD_KEYS = {
     "slug",
     "card_type",
     "answer_express",
+    "answer_detail",
     "key_points",
     "takeaway",
     "see_more",
@@ -64,11 +65,13 @@ CARD_KEYS = {
     "cover_image_id",
 }
 
+# Champ de la carte -> (modèle, nom de taxonomie de l'API publique). Le second
+# permet au rapport de désigner la taxonomie où créer une catégorie manquante.
 TAXONOMIES = {
-    "categories_theme": CategoryTheme,
-    "categories_maladies": CategoryMaladies,
-    "categories_medicament": CategoryMedicament,
-    "categories_pharmacologie": CategoryPharmacologie,
+    "categories_theme": (CategoryTheme, "theme"),
+    "categories_maladies": (CategoryMaladies, "maladies"),
+    "categories_medicament": (CategoryMedicament, "medicament"),
+    "categories_pharmacologie": (CategoryPharmacologie, "pharmacologie"),
 }
 
 # `see_more` : blocs de type ListBlock(CharBlock) et longueur max par item.
@@ -85,6 +88,7 @@ MAX_SEE_MORE_BLOCKS = 3
 MAX_SOURCES = 5
 MAX_LINKS = 5
 ANSWER_EXPRESS_SOFT_LIMIT = 350
+ANSWER_DETAIL_SOFT_LIMIT = 2000
 TAKEAWAY_SOFT_LIMIT = 200
 
 
@@ -105,6 +109,9 @@ class _Ctx:
     created_sources: list[str] = field(default_factory=list)
     created_questions: int = 0
     reused_questions: int = 0
+    # Catégories proposées par le LLM et absentes de l'arbre : une erreur, mais
+    # une erreur *réparable* — le back-office propose de les créer.
+    unknown_categories: list[dict] = field(default_factory=list)
 
     def error(self, message: str) -> None:
         self.errors.append(message)
@@ -162,7 +169,7 @@ def _str_list(value: Any, label: str, ctx: _Ctx) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_taxonomy(model, values: list[str], label: str, ctx: _Ctx) -> list:
+def _resolve_taxonomy(model, values: list[str], field_name: str, taxonomy: str, ctx: _Ctx) -> list:
     """Résout des catégories par slug, par nom, ou par chemin « parent/enfant »."""
     if not values:
         return []
@@ -179,8 +186,17 @@ def _resolve_taxonomy(model, values: list[str], label: str, ctx: _Ctx) -> list:
         node = by_slug.get(leaf) or by_slug.get(slugify(leaf)) or by_name.get(_normalize(leaf))
         if node is None:
             ctx.error(
-                f"{label} : catégorie inconnue « {raw} ». "
-                "Utiliser un slug ou un nom existant de cette taxonomie."
+                f"{field_name} : catégorie inconnue « {raw} ». "
+                "La créer depuis le rapport d'import, ou utiliser un slug existant."
+            )
+            ctx.unknown_categories.append(
+                {
+                    "field": field_name,
+                    "taxonomy": taxonomy,
+                    "value": raw,
+                    "suggested_name": leaf,
+                    "suggested_slug": slugify(leaf),
+                }
             )
             continue
         if node not in resolved:
@@ -609,6 +625,15 @@ def _import_one(
             f"(cible ≈ {ANSWER_EXPRESS_SOFT_LIMIT})."
         )
 
+    # `answer_detail` est servi par l'API en tête de `see_more` : c'est le
+    # développement long de la fiche, hors des blocs structurés.
+    answer_detail = sanitize_rich_text(payload.get("answer_detail"))
+    if answer_detail and _plain_len(answer_detail) > ANSWER_DETAIL_SOFT_LIMIT:
+        ctx.warn(
+            f"answer_detail : {_plain_len(answer_detail)} caractères "
+            f"(cible ≈ {ANSWER_DETAIL_SOFT_LIMIT})."
+        )
+
     takeaway = sanitize_rich_text(payload.get("takeaway"))
     if takeaway and _plain_len(takeaway) > TAKEAWAY_SOFT_LIMIT:
         ctx.warn(f"takeaway : {_plain_len(takeaway)} caractères (cible ≈ {TAKEAWAY_SOFT_LIMIT}).")
@@ -620,11 +645,11 @@ def _import_one(
 
     categories: dict[str, list] = {}
     theme_values: list[str] = []
-    for field_name, model in TAXONOMIES.items():
+    for field_name, (model, taxonomy) in TAXONOMIES.items():
         values = _str_list(payload.get(field_name), field_name, ctx)
         if field_name == "categories_theme":
             theme_values = values
-        categories[field_name] = _resolve_taxonomy(model, values, field_name, ctx)
+        categories[field_name] = _resolve_taxonomy(model, values, field_name, taxonomy, ctx)
     # Une catégorie non résolue a déjà produit son message : ne pas le doubler.
     if not theme_values:
         ctx.error("categories_theme : au moins une catégorie thème est obligatoire.")
@@ -654,6 +679,7 @@ def _import_one(
             "slug": slug,
             "errors": ctx.errors,
             "warnings": ctx.warnings,
+            "unknown_categories": ctx.unknown_categories,
         }
 
     page = MicroArticlePage(
@@ -661,6 +687,7 @@ def _import_one(
         slug=slug,
         card_type=card_type,
         answer_express=answer_express,
+        answer_detail=answer_detail,
         takeaway=takeaway,
         key_points=key_points,
         sources=sources,
@@ -761,6 +788,7 @@ def _import_one(
         "tags": tags,
         "errors": [],
         "warnings": ctx.warnings,
+        "unknown_categories": [],
     }
 
 
@@ -781,9 +809,21 @@ def import_cards(
     if isinstance(cards, dict):
         cards = cards.get("cards", [cards])
     if not isinstance(cards, list):
-        return {"ok": False, "dry_run": dry_run, "results": [], "detail": "Le JSON doit être une carte ou une liste de cartes."}
+        return {
+            "ok": False,
+            "dry_run": dry_run,
+            "results": [],
+            "unknown_categories": [],
+            "detail": "Le JSON doit être une carte ou une liste de cartes.",
+        }
     if not cards:
-        return {"ok": False, "dry_run": dry_run, "results": [], "detail": "Aucune carte à importer."}
+        return {
+            "ok": False,
+            "dry_run": dry_run,
+            "results": [],
+            "unknown_categories": [],
+            "detail": "Aucune carte à importer.",
+        }
 
     results: list[dict] = []
     batch: dict[str, MicroArticlePage] = {}
@@ -812,6 +852,7 @@ def import_cards(
                     "ok": False,
                     "errors": [f"Erreur inattendue : {exc}"],
                     "warnings": [],
+                    "unknown_categories": [],
                 }
             results.append(result)
 
@@ -824,5 +865,24 @@ def import_cards(
         "dry_run": dry_run,
         "published": publish and ok and not dry_run,
         "imported": sum(1 for r in results if r["ok"]) if ok and not dry_run else 0,
+        "unknown_categories": _aggregate_unknown_categories(results),
         "results": results,
     }
+
+
+def _aggregate_unknown_categories(results: list[dict]) -> list[dict]:
+    """Dédoublonne les catégories manquantes du lot.
+
+    Le back-office en fait un formulaire de création : une même catégorie citée
+    par trois fiches ne doit apparaître qu'une fois.
+    """
+    seen: set[tuple[str, str]] = set()
+    aggregated: list[dict] = []
+    for result in results:
+        for entry in result.get("unknown_categories", []):
+            key = (entry["taxonomy"], entry["suggested_slug"])
+            if key in seen:
+                continue
+            seen.add(key)
+            aggregated.append(entry)
+    return aggregated

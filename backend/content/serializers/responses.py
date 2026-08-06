@@ -200,6 +200,25 @@ class AdminMicroArticleSearchResultSerializer(serializers.Serializer):
     packs_count = serializers.IntegerField(min_value=0)
 
 
+class UnknownCategorySerializer(serializers.Serializer):
+    """Catégorie citée par le JSON et absente de l'arbre, prête à être créée."""
+
+    field = serializers.CharField()
+    taxonomy = serializers.CharField()
+    value = serializers.CharField()
+    suggested_name = serializers.CharField()
+    suggested_slug = serializers.CharField()
+
+
+class AdminTaxonomyNodeSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    slug = serializers.CharField()
+    depth = serializers.IntegerField()
+    parent_id = serializers.IntegerField(allow_null=True)
+    taxonomy = serializers.CharField()
+
+
 class AdminCardImportResultSerializer(serializers.Serializer):
     """Résultat d'une carte du lot ; `ok=False` porte les erreurs à corriger."""
 
@@ -217,6 +236,7 @@ class AdminCardImportResultSerializer(serializers.Serializer):
     tags = serializers.ListField(child=serializers.CharField(), required=False)
     errors = serializers.ListField(child=serializers.CharField())
     warnings = serializers.ListField(child=serializers.CharField())
+    unknown_categories = UnknownCategorySerializer(many=True, required=False)
 
 
 class AdminCardImportReportSerializer(serializers.Serializer):
@@ -225,6 +245,9 @@ class AdminCardImportReportSerializer(serializers.Serializer):
     published = serializers.BooleanField(required=False)
     imported = serializers.IntegerField(required=False)
     detail = serializers.CharField(required=False)
+    # Dédoublonnées sur tout le lot : c'est la liste que le back-office propose
+    # de créer en un geste avant de relancer l'import.
+    unknown_categories = UnknownCategorySerializer(many=True)
     results = AdminCardImportResultSerializer(many=True)
 
 

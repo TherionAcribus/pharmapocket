@@ -9,6 +9,7 @@ from .views import (
     AdminPackListCreateView,
     AdminPackRemoveCardView,
     AdminPackReorderCardsView,
+    AdminTaxonomyNodeCreateView,
     AdminThumbOverrideDetailView,
     AdminThumbOverrideListCreateView,
     CardDecksView,
@@ -77,6 +78,12 @@ urlpatterns = [
         "admin/images/upload/",
         AdminImageUploadView.as_view(),
         name="admin-image-upload",
+    ),
+
+    path(
+        "admin/taxonomies/<str:taxonomy>/nodes/",
+        AdminTaxonomyNodeCreateView.as_view(),
+        name="admin-taxonomy-node-create",
     ),
 
     # Admin thumb overrides (staff only)

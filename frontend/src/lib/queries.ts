@@ -17,6 +17,7 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  adminCreateTaxonomyNode,
   adminImportCards,
   adminMicroArticleSearch,
   adminPackBulkAdd,
@@ -516,6 +517,19 @@ export function useImportCards() {
       if (report.ok && !report.dry_run && report.published) {
         void queryClient.invalidateQueries({ queryKey: ["feed"] });
       }
+    },
+  });
+}
+
+/** Création d'une catégorie : l'arbre injecté dans le prompt doit suivre. */
+export function useCreateTaxonomyNode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: adminCreateTaxonomyNode,
+    onSuccess: (node) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.taxonomyTree(node.taxonomy as Taxonomy),
+      });
     },
   });
 }

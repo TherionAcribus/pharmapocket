@@ -6,18 +6,19 @@ import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useImportCards } from "@/lib/queries";
-import type { AdminCardImportReport } from "@/lib/types";
 import { useStaffGuard } from "@/lib/staffGuard";
+import type { AdminCardImportReport, AdminCardImportResult } from "@/lib/types";
+
+import { PromptBuilder } from "./PromptBuilder";
+import { UnknownCategories } from "./UnknownCategories";
 
 const PLACEHOLDER = `[
   {
     "title": "Quand contrôler la kaliémie après instauration d'un IEC ?",
-    "card_type": "standard",
-    "answer_express": "<p>Un contrôle de la <b>kaliémie</b> et de la créatinine s'impose <b>7 à 14 jours</b> après l'instauration.</p>",
+    "answer_express": "<p>Un contrôle de la <b>kaliémie</b> s'impose <b>7 à 14 jours</b> après l'instauration.</p>",
+    "answer_detail": "<p>Développement long de la fiche…</p>",
     "categories_theme": ["cardiologie"],
-    "sources": [
-      { "source": { "name": "Bon usage des IEC", "kind": "institutional", "publisher": "ANSM", "url": "https://..." } }
-    ]
+    "sources": [{ "source": { "name": "…", "publisher": "ANSM" } }]
   }
 ]`;
 
@@ -25,7 +26,24 @@ function toErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-function ResultCard({ result }: { result: AdminCardImportReport["results"][number] }) {
+/**
+ * Le LLM peut faire suivre son JSON de remarques (catégories proposées,
+ * ambiguïtés) : on récupère le tableau plutôt que d'imposer un copier-coller
+ * chirurgical.
+ */
+function extractJson(raw: string): string {
+  const text = raw.trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidate = (fenced ? fenced[1] : text).trim();
+
+  const start = candidate.search(/[[{]/);
+  if (start === -1) return candidate;
+
+  const end = Math.max(candidate.lastIndexOf("]"), candidate.lastIndexOf("}"));
+  return end > start ? candidate.slice(start, end + 1) : candidate.slice(start);
+}
+
+function ResultCard({ result }: { result: AdminCardImportResult }) {
   const label = result.title || result.slug || `Carte #${result.index + 1}`;
 
   return (
@@ -51,9 +69,7 @@ function ResultCard({ result }: { result: AdminCardImportReport["results"][numbe
           {result.created_sources?.length
             ? `Sources créées : ${result.created_sources.join(", ")}. `
             : ""}
-          {result.created_questions
-            ? `${result.created_questions} question(s) créée(s).`
-            : ""}
+          {result.created_questions ? `${result.created_questions} question(s) créée(s).` : ""}
         </div>
       ) : null}
 
@@ -77,23 +93,25 @@ function ResultCard({ result }: { result: AdminCardImportReport["results"][numbe
 }
 
 export default function AdminImportPage() {
-  const { checking } = useStaffGuard();
+  const { checking, isStaff } = useStaffGuard();
   const importMutation = useImportCards();
 
   const [raw, setRaw] = React.useState("");
   const [publish, setPublish] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [report, setReport] = React.useState<AdminCardImportReport | null>(null);
+  const [categoriesCreated, setCategoriesCreated] = React.useState(false);
 
   const busy = importMutation.isPending;
 
   const run = async (dryRun: boolean) => {
     setError(null);
     setReport(null);
+    setCategoriesCreated(false);
 
     let cards: unknown;
     try {
-      cards = JSON.parse(raw);
+      cards = JSON.parse(extractJson(raw));
     } catch (e: unknown) {
       // Le JSON collé est la première source d'erreur : on la distingue des
       // erreurs éditoriales, qui viennent du serveur.
@@ -112,12 +130,14 @@ export default function AdminImportPage() {
     <MobileScaffold title="Admin — Import de fiches" contentClassName="space-y-4">
       {checking ? <div className="text-sm text-muted-foreground">Vérification…</div> : null}
 
+      <PromptBuilder enabled={isStaff} />
+
       <div className="rounded-xl border bg-card p-4 space-y-3">
-        <div className="text-sm font-semibold">JSON généré</div>
+        <div className="text-sm font-semibold">2 · Importer le JSON</div>
         <p className="text-xs text-muted-foreground">
-          Une carte ou une liste de cartes, au format décrit dans{" "}
-          <code>docs/prompt_generation_cartes.md</code>. L&apos;import est tout-ou-rien : une carte
-          en erreur annule le lot.
+          Colle la réponse du modèle : le tableau JSON est extrait même s&apos;il est
+          suivi de remarques. L&apos;import est tout-ou-rien — une carte en erreur annule
+          le lot.
         </p>
 
         <textarea
@@ -125,7 +145,7 @@ export default function AdminImportPage() {
           onChange={(e) => setRaw(e.target.value)}
           placeholder={PLACEHOLDER}
           spellCheck={false}
-          rows={16}
+          rows={14}
           disabled={busy}
           className="border-input focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 w-full rounded-md border bg-transparent p-3 font-mono text-xs shadow-xs outline-none transition-[color,box-shadow] focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
         />
@@ -160,6 +180,20 @@ export default function AdminImportPage() {
         ) : null}
       </div>
 
+      {report?.unknown_categories.length ? (
+        <UnknownCategories
+          items={report.unknown_categories}
+          onCreated={() => setCategoriesCreated(true)}
+        />
+      ) : null}
+
+      {categoriesCreated ? (
+        <div className="rounded-xl border bg-card p-4 text-sm">
+          Catégorie(s) créée(s) — relance <span className="font-medium">Vérifier</span> pour
+          contrôler le reste du lot.
+        </div>
+      ) : null}
+
       {report ? (
         <div className="rounded-xl border bg-card p-4 space-y-3">
           <div className="text-sm font-semibold">
@@ -170,9 +204,7 @@ export default function AdminImportPage() {
               : "Import refusé — rien n'a été écrit"}
           </div>
 
-          {report.detail ? (
-            <div className="text-sm text-destructive">{report.detail}</div>
-          ) : null}
+          {report.detail ? <div className="text-sm text-destructive">{report.detail}</div> : null}
 
           <div className="grid gap-2">
             {report.results.map((result) => (
@@ -182,10 +214,8 @@ export default function AdminImportPage() {
 
           {report.ok && !report.dry_run ? (
             <p className="text-xs text-muted-foreground">
-              Les fiches restent modifiables dans Wagtail ({report.published
-                ? "publiées"
-                : "en brouillon, à publier depuis le CMS"}
-              ).
+              Les fiches restent modifiables dans Wagtail (
+              {report.published ? "publiées" : "en brouillon, à publier depuis le CMS"}).
             </p>
           ) : null}
         </div>

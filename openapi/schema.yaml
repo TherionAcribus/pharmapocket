@@ -455,6 +455,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/CountUpdateResponse'
           description: ''
+  /api/v1/content/admin/taxonomies/{taxonomy}/nodes/:
+    post:
+      operationId: admin_taxonomy_node_create
+      description: |-
+        POST /admin/taxonomies/<taxonomy>/nodes/ — crée une catégorie.
+
+        Treebeard exige `add_root()` / `parent.add_child()` pour allouer le chemin :
+        c'est la seule façon de créer un nœud, `save()` direct est refusé par le modèle.
+      parameters:
+      - in: path
+        name: taxonomy
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminTaxonomyNodeCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminTaxonomyNodeCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminTaxonomyNodeCreate'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminTaxonomyNode'
+          description: ''
   /api/v1/content/admin/thumb-overrides/:
     get:
       operationId: admin_thumb_override_list
@@ -1751,6 +1788,10 @@ components:
           type: integer
         detail:
           type: string
+        unknown_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnknownCategory'
         results:
           type: array
           items:
@@ -1759,6 +1800,7 @@ components:
       - dry_run
       - ok
       - results
+      - unknown_categories
     AdminCardImportResult:
       type: object
       description: Résultat d'une carte du lot ; `ok=False` porte les erreurs à corriger.
@@ -1800,6 +1842,10 @@ components:
           type: array
           items:
             type: string
+        unknown_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnknownCategory'
       required:
       - errors
       - index
@@ -1993,6 +2039,48 @@ components:
       - sort_order
       - status
       - type
+    AdminTaxonomyNode:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        depth:
+          type: integer
+        parent_id:
+          type: integer
+          nullable: true
+        taxonomy:
+          type: string
+      required:
+      - depth
+      - id
+      - name
+      - parent_id
+      - slug
+      - taxonomy
+    AdminTaxonomyNodeCreate:
+      type: object
+      description: |-
+        POST /admin/taxonomies/<taxonomy>/nodes/ — `context["model"]` porte la taxonomie.
+
+        Le slug est dérivé du nom quand il n'est pas fourni, comme dans le formulaire
+        Wagtail ; l'unicité est vérifiée ici pour renvoyer un 400 lisible plutôt
+        qu'une erreur d'intégrité.
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        slug:
+          type: string
+        parent_id:
+          type: integer
+          nullable: true
+      required:
+      - name
     AdminThumbOverride:
       type: object
       properties:
@@ -3754,6 +3842,27 @@ components:
       - bg
       - pathology_slug
       - pattern
+    UnknownCategory:
+      type: object
+      description: Catégorie citée par le JSON et absente de l'arbre, prête à être
+        créée.
+      properties:
+        field:
+          type: string
+        taxonomy:
+          type: string
+        value:
+          type: string
+        suggested_name:
+          type: string
+        suggested_slug:
+          type: string
+      required:
+      - field
+      - suggested_name
+      - suggested_slug
+      - taxonomy
+      - value
     UserPreferences:
       type: object
       properties:

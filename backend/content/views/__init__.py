@@ -61,6 +61,7 @@ from .subjects import (
     SubjectDetailView,
     SubjectListCreateView,
 )
+from .taxonomies_admin import AdminTaxonomyNodeCreateView
 from .thumbs import (
     AdminThumbOverrideDetailView,
     AdminThumbOverrideListCreateView,
@@ -92,6 +93,8 @@ __all__ = [
     "build_progress_payload",
     # fiches admin
     "AdminCardImportView",
+    # taxonomies admin
+    "AdminTaxonomyNodeCreateView",
     # packs admin
     "AdminImageUploadView",
     "AdminMicroArticleSearchView",

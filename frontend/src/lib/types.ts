@@ -235,6 +235,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/content/admin/taxonomies/{taxonomy}/nodes/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /admin/taxonomies/<taxonomy>/nodes/ — crée une catégorie.
+         *
+         *     Treebeard exige `add_root()` / `parent.add_child()` pour allouer le chemin :
+         *     c'est la seule façon de créer un nœud, `save()` direct est refusé par le modèle.
+         */
+        post: operations["admin_taxonomy_node_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/content/admin/thumb-overrides/": {
         parameters: {
             query?: never;
@@ -854,6 +876,7 @@ export interface components {
             published?: boolean;
             imported?: number;
             detail?: string;
+            unknown_categories: components["schemas"]["UnknownCategory"][];
             results: components["schemas"]["AdminCardImportResult"][];
         };
         /** @description Résultat d'une carte du lot ; `ok=False` porte les erreurs à corriger. */
@@ -872,6 +895,7 @@ export interface components {
             tags?: string[];
             errors: string[];
             warnings: string[];
+            unknown_categories?: components["schemas"]["UnknownCategory"][];
         };
         /**
          * @description POST /admin/images/upload/ — le fichier arrive sous `file` ou `image`.
@@ -946,6 +970,26 @@ export interface components {
             cover_image_url: string | null;
             cover_image_credit?: string | null;
             cover_image?: components["schemas"]["ImagePayload"] | null;
+        };
+        AdminTaxonomyNode: {
+            id: number;
+            name: string;
+            slug: string;
+            depth: number;
+            parent_id: number | null;
+            taxonomy: string;
+        };
+        /**
+         * @description POST /admin/taxonomies/<taxonomy>/nodes/ — `context["model"]` porte la taxonomie.
+         *
+         *     Le slug est dérivé du nom quand il n'est pas fourni, comme dans le formulaire
+         *     Wagtail ; l'unicité est vérifiée ici pour renvoyer un 400 lisible plutôt
+         *     qu'une erreur d'intégrité.
+         */
+        AdminTaxonomyNodeCreate: {
+            name: string;
+            slug?: string;
+            parent_id?: number | null;
         };
         AdminThumbOverride: {
             pathology_slug: string;
@@ -1627,6 +1671,14 @@ export interface components {
             accent: string;
             pattern: string;
         };
+        /** @description Catégorie citée par le JSON et absente de l'arbre, prête à être créée. */
+        UnknownCategory: {
+            field: string;
+            taxonomy: string;
+            value: string;
+            suggested_name: string;
+            suggested_slug: string;
+        };
         UserPreferences: {
             landing_redirect_enabled: boolean;
             landing_redirect_target: components["schemas"]["LandingRedirectTargetEnum"];
@@ -1649,6 +1701,8 @@ export type AdminPackCreate = components['schemas']['AdminPackCreate'];
 export type AdminPackDetail = components['schemas']['AdminPackDetail'];
 export type AdminPackReorder = components['schemas']['AdminPackReorder'];
 export type AdminPackSummary = components['schemas']['AdminPackSummary'];
+export type AdminTaxonomyNode = components['schemas']['AdminTaxonomyNode'];
+export type AdminTaxonomyNodeCreate = components['schemas']['AdminTaxonomyNodeCreate'];
 export type AdminThumbOverride = components['schemas']['AdminThumbOverride'];
 export type BulkAddResponse = components['schemas']['BulkAddResponse'];
 export type CardDecksUpdate = components['schemas']['CardDecksUpdate'];
@@ -1734,6 +1788,7 @@ export type TaxonomyResolveResponse = components['schemas']['TaxonomyResolveResp
 export type TaxonomyTreeResponse = components['schemas']['TaxonomyTreeResponse'];
 export type ThumbOverrideCreate = components['schemas']['ThumbOverrideCreate'];
 export type ThumbOverridePublic = components['schemas']['ThumbOverridePublic'];
+export type UnknownCategory = components['schemas']['UnknownCategory'];
 export type UserPreferences = components['schemas']['UserPreferences'];
 export type $defs = Record<string, never>;
 export interface operations {
@@ -2177,6 +2232,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CountUpdateResponse"];
+                };
+            };
+        };
+    };
+    admin_taxonomy_node_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taxonomy: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminTaxonomyNodeCreate"];
+                "application/x-www-form-urlencoded": components["schemas"]["AdminTaxonomyNodeCreate"];
+                "multipart/form-data": components["schemas"]["AdminTaxonomyNodeCreate"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTaxonomyNode"];
                 };
             };
         };

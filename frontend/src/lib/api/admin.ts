@@ -1,8 +1,10 @@
 import { apiGet, apiJson, isApiError, jsonBody } from "@/lib/api/client";
 import type { ThumbPattern } from "@/lib/api/content";
+import type { TaxonomyName } from "@/lib/api/taxonomies";
 import type {
   AdminCardImportReport,
   AdminMicroArticleSearchResult,
+  AdminTaxonomyNode,
   AdminPackDetail,
   AdminPackSummary,
 } from "@/lib/types";
@@ -178,6 +180,24 @@ export async function adminImportCards(input: {
     }
     throw error;
   }
+}
+
+/**
+ * Crée une catégorie proposée par le LLM. `parent_id: null` crée une racine ;
+ * l'arbre est un treebeard côté serveur, d'où le passage par l'API plutôt que
+ * par une écriture directe.
+ */
+export async function adminCreateTaxonomyNode(input: {
+  taxonomy: TaxonomyName;
+  name: string;
+  slug?: string;
+  parent_id?: number | null;
+}): Promise<AdminTaxonomyNode> {
+  const { taxonomy, ...body } = input;
+  return apiJson<AdminTaxonomyNode>(
+    `/api/v1/content/admin/taxonomies/${encodeURIComponent(taxonomy)}/nodes/`,
+    jsonBody("POST", body)
+  );
 }
 
 // -----------------------------------------------------------------------------
