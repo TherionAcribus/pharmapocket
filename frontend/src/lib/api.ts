@@ -1,12 +1,14 @@
-import {
+import type {
   AdminMicroArticleSearchResult,
   AdminPackDetail,
   AdminPackSummary,
-  CursorPage,
+  AccountSummary,
+  CurrentUser,
   DeckCardsResponse,
   DeckMembership,
   DeckSummary,
   LandingPayload,
+  LandingRedirectTargetEnum,
   LessonProgress,
   LessonProgressUpdate,
   MicroArticleDetail,
@@ -14,11 +16,14 @@ import {
   OfficialPackDetail,
   OfficialPackProgress,
   OfficialPackSummary,
-  SrsNextResponse,
+  PaginatedFeedItemList,
+  PaginatedMicroArticleListItemList,
+  SrsNext,
   SrsRating,
-  SrsScope,
   TagPayload,
   TaxonomyTreeResponse,
+  UserPreferences,
+  operations,
 } from "@/lib/types";
 
 function getApiBaseUrl(): string {
@@ -169,22 +174,6 @@ export type FeedQuery = {
   scope?: "exact" | "subtree";
 };
 
-type FeedItemPayload = {
-  id: number;
-  slug: string;
-  title: string;
-  answer_express: string;
-  takeaway: string;
-  key_points: string[];
-  cover_image_url: string | null;
-  tags: Array<{ id: number; name: string; slug: string }>;
-  categories_theme: Array<{ id: number; name: string; slug: string }>;
-  categories_maladies: Array<{ id: number; name: string; slug: string }>;
-  categories_medicament: Array<{ id: number; name: string; slug: string }>;
-  published_at?: string | null;
-  progress?: unknown;
-};
-
 function buildQuery(params: Record<string, string | undefined>): string {
   const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -194,10 +183,10 @@ function buildQuery(params: Record<string, string | undefined>): string {
   return qs ? `?${qs}` : "";
 }
 
-export async function fetchFeed(query: FeedQuery): Promise<CursorPage<MicroArticleListItem>> {
+export async function fetchFeed(query: FeedQuery): Promise<PaginatedMicroArticleListItemList> {
   const tagsValue = query.tags?.length ? query.tags.join(",") : undefined;
 
-  return apiGet<CursorPage<MicroArticleListItem>>(
+  return apiGet<PaginatedMicroArticleListItemList>(
     `/api/v1/content/microarticles/${buildQuery({
       cursor: query.cursor ?? undefined,
       q: query.q ?? undefined,
@@ -209,10 +198,12 @@ export async function fetchFeed(query: FeedQuery): Promise<CursorPage<MicroArtic
   );
 }
 
-export async function fetchDiscoverFeed(query: FeedQuery): Promise<CursorPage<MicroArticleListItem>> {
+export async function fetchDiscoverFeed(
+  query: FeedQuery
+): Promise<PaginatedMicroArticleListItemList> {
   const tagsValue = query.tags?.length ? query.tags.join(",") : undefined;
 
-  const page = await apiGet<CursorPage<FeedItemPayload>>(
+  const page = await apiGet<PaginatedFeedItemList>(
     `/api/v1/feed/${buildQuery({
       cursor: query.cursor ?? undefined,
       q: query.q ?? undefined,
@@ -467,6 +458,10 @@ export async function fetchTags(q?: string, limit = 200): Promise<TagPayload[]> 
   );
 }
 
+export type SrsScope = NonNullable<
+  NonNullable<operations["learning_srs_next"]["parameters"]["query"]>["scope"]
+>;
+
 export type SrsNextQuery = {
   scope: SrsScope;
   deck_id?: number | null;
@@ -474,10 +469,10 @@ export type SrsNextQuery = {
   only_due?: boolean;
 };
 
-export async function fetchSrsNext(query: SrsNextQuery): Promise<SrsNextResponse> {
+export async function fetchSrsNext(query: SrsNextQuery): Promise<SrsNext> {
   const deckIdsValue = query.deck_ids?.length ? query.deck_ids.join(",") : undefined;
 
-  return apiGet<SrsNextResponse>(
+  return apiGet<SrsNext>(
     `/api/v1/learning/srs/next/${buildQuery({
       scope: query.scope,
       deck_id: query.deck_id != null ? String(query.deck_id) : undefined,
@@ -490,8 +485,8 @@ export async function fetchSrsNext(query: SrsNextQuery): Promise<SrsNextResponse
 export async function postSrsReview(input: {
   card_id: number;
   rating: SrsRating;
-}): Promise<SrsNextResponse> {
-  return apiJson<SrsNextResponse>(`/api/v1/learning/srs/review/`, {
+}): Promise<SrsNext> {
+  return apiJson<SrsNext>(`/api/v1/learning/srs/review/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -536,28 +531,11 @@ export async function importLessonProgress(input: {
   );
 }
 
-export type CurrentUser = {
-  id: number;
-  email: string;
-  username: string;
-  pseudo?: string;
-  has_usable_password?: boolean;
-  is_staff: boolean;
-  is_superuser: boolean;
-  landing_redirect_enabled?: boolean;
-  landing_redirect_target?: "start" | "discover" | "cards" | "review" | "quiz";
-};
+export type { AccountSummary, CurrentUser, UserPreferences } from "@/lib/types";
 
 export async function fetchMe(): Promise<CurrentUser> {
   return apiGet<CurrentUser>("/api/v1/auth/me/");
 }
-
-export type AccountSummary = {
-  email: string;
-  username: string;
-  pseudo: string;
-  has_usable_password: boolean;
-};
 
 export async function fetchAccount(): Promise<AccountSummary> {
   return apiGet<AccountSummary>("/api/v1/auth/account/");
@@ -583,12 +561,7 @@ export async function deleteAccount(input?: { password?: string }): Promise<void
   });
 }
 
-export type LandingRedirectTarget = "start" | "discover" | "cards" | "review" | "quiz";
-
-export type UserPreferences = {
-  landing_redirect_enabled: boolean;
-  landing_redirect_target: LandingRedirectTarget;
-};
+export type LandingRedirectTarget = LandingRedirectTargetEnum;
 
 export async function fetchPreferences(): Promise<UserPreferences> {
   return apiGet<UserPreferences>("/api/v1/auth/preferences/");

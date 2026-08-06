@@ -10,6 +10,7 @@ from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from ..html import sanitize_rich_text
 from ..models import (
@@ -23,9 +24,13 @@ from ..models import (
 from ..pagination import MicroArticleCursorPagination
 from ..search import filter_microarticles
 from ..serializers import (
+    LandingPayloadSerializer,
     MicroArticleCardSerializer,
     MicroArticleDetailSerializer,
     MicroArticleListSerializer,
+    ReadStateMapSerializer,
+    ReadStateSerializer,
+    SavedStateSerializer,
 )
 from ..serializers.inputs import (
     MicroArticleReadStateSerializer,
@@ -50,6 +55,7 @@ logger = logging.getLogger(__name__)
 class LandingView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(operation_id="content_landing", responses=LandingPayloadSerializer)
     def get(self, request):
         page = LandingPage.objects.live().public().specific().first()
         if page is None:
@@ -299,6 +305,11 @@ class MicroArticleDetailView(RetrieveAPIView):
                     deck=default_deck,
                     microarticle_id=page.id,
                 ).exists()
+            read_state = MicroArticleReadState.objects.filter(
+                user=request.user,
+                microarticle_id=page.id,
+            ).first()
+            data["is_read"] = bool(read_state and read_state.is_read)
 
         serializer = self.get_serializer(data)
         return Response(serializer.data)
@@ -307,6 +318,10 @@ class MicroArticleDetailView(RetrieveAPIView):
 class SavedMicroArticleListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="content_saved_list",
+        responses=MicroArticleListSerializer(many=True),
+    )
     def get(self, request):
         default_deck = _get_or_create_default_deck(request.user)
         rows = (
@@ -322,6 +337,11 @@ class SavedMicroArticleListView(APIView):
         items = [MicroArticleCardSerializer(r.microarticle).data for r in rows]
         return Response(items)
 
+    @extend_schema(
+        operation_id="content_saved_create",
+        request=SavedMicroArticleCreateSerializer,
+        responses=SavedStateSerializer,
+    )
     def post(self, request):
         serializer = SavedMicroArticleCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -335,6 +355,7 @@ class SavedMicroArticleListView(APIView):
 class SavedMicroArticleDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id="content_saved_status", responses=SavedStateSerializer)
     def get(self, request, slug: str):
         page = MicroArticlePage.objects.live().public().filter(slug=slug).first()
         if page is None:
@@ -350,6 +371,7 @@ class SavedMicroArticleDetailView(APIView):
             {"saved": DeckCard.objects.filter(deck=default_deck, microarticle_id=page.id).exists()}
         )
 
+    @extend_schema(operation_id="content_saved_delete", responses={204: None})
     def delete(self, request, slug: str):
         page = MicroArticlePage.objects.live().public().filter(slug=slug).first()
         if page is None:
@@ -367,6 +389,18 @@ class SavedMicroArticleDetailView(APIView):
 class MicroArticleReadStateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="content_read_state_list",
+        parameters=[
+            OpenApiParameter(
+                name="slugs",
+                type=str,
+                required=True,
+                description="Slugs séparés par des virgules.",
+            )
+        ],
+        responses=ReadStateMapSerializer,
+    )
     def get(self, request):
         slugs_param = request.query_params.get("slugs")
         if not slugs_param or not isinstance(slugs_param, str):
@@ -394,6 +428,11 @@ class MicroArticleReadStateView(APIView):
 
         return Response({"items": items})
 
+    @extend_schema(
+        operation_id="content_read_state_update",
+        request=MicroArticleReadStateSerializer,
+        responses=ReadStateSerializer,
+    )
     def post(self, request):
         serializer = MicroArticleReadStateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

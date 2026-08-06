@@ -1,0 +1,3644 @@
+openapi: 3.0.3
+info:
+  title: PharmaPocket API
+  version: 1.0.0
+  description: Contrat de l'API v1 consommée par le frontend PharmaPocket.
+paths:
+  /api/v1/auth/account/:
+    get:
+      operationId: auth_account
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSummary'
+          description: ''
+    patch:
+      operationId: auth_account_update
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAccountUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAccountUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAccountUpdate'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSummary'
+          description: ''
+  /api/v1/auth/account/delete/:
+    post:
+      operationId: auth_account_delete
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAccount'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeleteAccount'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeleteAccount'
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/auth/csrf/:
+    get:
+      operationId: auth_csrf
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailResponse'
+          description: ''
+  /api/v1/auth/me/:
+    get:
+      operationId: auth_me
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+          description: ''
+  /api/v1/auth/preferences/:
+    get:
+      operationId: auth_preferences
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+          description: ''
+    patch:
+      operationId: auth_preferences_update
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserPreferencesUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserPreferencesUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserPreferencesUpdate'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+          description: ''
+  /api/v1/categories/resolve/:
+    get:
+      operationId: legacy_category_resolve
+      parameters:
+      - in: query
+        name: path
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: taxonomy
+        schema:
+          type: string
+        required: true
+      tags:
+      - categories
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxonomyResolveResponse'
+          description: ''
+  /api/v1/content/admin/images/upload/:
+    post:
+      operationId: admin_image_upload
+      tags:
+      - content
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminImageUpload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminImageUpload'
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImagePayload'
+          description: ''
+  /api/v1/content/admin/microarticles/search/:
+    get:
+      operationId: admin_microarticle_search
+      parameters:
+      - in: query
+        name: maladies_nodes
+        schema:
+          type: string
+      - in: query
+        name: medicament_nodes
+        schema:
+          type: string
+      - in: query
+        name: pharmacologie_nodes
+        schema:
+          type: string
+      - in: query
+        name: q
+        schema:
+          type: string
+      - in: query
+        name: recent
+        schema:
+          type: boolean
+      - in: query
+        name: tags
+        schema:
+          type: string
+      - in: query
+        name: theme_nodes
+        schema:
+          type: string
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminMicroArticleSearchResult'
+          description: ''
+  /api/v1/content/admin/packs/:
+    get:
+      operationId: admin_pack_list
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminPackSummary'
+          description: ''
+    post:
+      operationId: admin_pack_create
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminPackCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminPackCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminPackCreate'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPackSummary'
+          description: ''
+  /api/v1/content/admin/packs/{pack_id}/:
+    get:
+      operationId: admin_pack_retrieve
+      parameters:
+      - in: path
+        name: pack_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPackDetail'
+          description: ''
+    patch:
+      operationId: admin_pack_update
+      parameters:
+      - in: path
+        name: pack_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminPackPatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminPackPatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminPackPatch'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPackSummary'
+          description: ''
+    delete:
+      operationId: admin_pack_delete
+      parameters:
+      - in: path
+        name: pack_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/content/admin/packs/{pack_id}/bulk-add/:
+    post:
+      operationId: admin_pack_bulk_add
+      parameters:
+      - in: path
+        name: pack_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminPackBulkAdd'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminPackBulkAdd'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminPackBulkAdd'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkAddResponse'
+          description: ''
+  /api/v1/content/admin/packs/{pack_id}/cards/{card_id}/remove/:
+    post:
+      operationId: admin_pack_card_remove
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: pack_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+          description: ''
+  /api/v1/content/admin/packs/{pack_id}/cards/reorder/:
+    post:
+      operationId: admin_pack_card_reorder
+      parameters:
+      - in: path
+        name: pack_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminPackReorder'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminPackReorder'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminPackReorder'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountUpdateResponse'
+          description: ''
+  /api/v1/content/admin/thumb-overrides/:
+    get:
+      operationId: admin_thumb_override_list
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminThumbOverride'
+          description: ''
+    post:
+      operationId: admin_thumb_override_create
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThumbOverrideCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ThumbOverrideCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ThumbOverrideCreate'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminThumbOverride'
+          description: ''
+  /api/v1/content/admin/thumb-overrides/{pathology_slug}/:
+    get:
+      operationId: admin_thumb_override_retrieve
+      parameters:
+      - in: path
+        name: pathology_slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminThumbOverride'
+          description: ''
+    patch:
+      operationId: admin_thumb_override_update
+      parameters:
+      - in: path
+        name: pathology_slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedThumbOverridePatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedThumbOverridePatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedThumbOverridePatch'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminThumbOverride'
+          description: ''
+    delete:
+      operationId: admin_thumb_override_delete
+      parameters:
+      - in: path
+        name: pathology_slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/content/cards/{card_id}/decks/:
+    get:
+      operationId: card_deck_list
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeckMembership'
+          description: ''
+    put:
+      operationId: card_deck_update
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardDecksUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CardDecksUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CardDecksUpdate'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardDecksUpdateResponse'
+          description: ''
+  /api/v1/content/decks/:
+    get:
+      operationId: deck_list
+      parameters:
+      - in: query
+        name: type
+        schema:
+          type: string
+          enum:
+          - official
+          - user
+        description: '`official` rend la liste publique des packs.'
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeckListItem'
+          description: ''
+    post:
+      operationId: deck_create
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeckCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeckCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeckCreate'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckMutationResponse'
+          description: ''
+  /api/v1/content/decks/{deck_id}/:
+    get:
+      operationId: deck_retrieve
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialPackDetail'
+          description: ''
+    patch:
+      operationId: deck_update
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDeckPatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDeckPatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDeckPatch'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckMutationResponse'
+          description: ''
+    delete:
+      operationId: deck_delete
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/content/decks/{deck_id}/cards/:
+    get:
+      operationId: deck_card_list
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckCardsResponse'
+          description: ''
+    post:
+      operationId: deck_card_create
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeckCardAdd'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeckCardAdd'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeckCardAdd'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+          description: ''
+  /api/v1/content/decks/{deck_id}/cards/{card_id}/:
+    delete:
+      operationId: deck_card_delete
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/content/decks/{deck_id}/cards/bulk-add/:
+    post:
+      operationId: deck_card_bulk_add
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeckCardsBulkAdd'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeckCardsBulkAdd'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeckCardsBulkAdd'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkAddResponse'
+          description: ''
+  /api/v1/content/decks/{deck_id}/copy-to-user/:
+    post:
+      operationId: official_pack_copy
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyDeckResponse'
+          description: ''
+  /api/v1/content/decks/{deck_id}/progress/:
+    post:
+      operationId: official_pack_progress_update
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfficialDeckProgress'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OfficialDeckProgress'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OfficialDeckProgress'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialPackProgress'
+          description: ''
+  /api/v1/content/decks/{deck_id}/set-default/:
+    post:
+      operationId: deck_set_default
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefaultDeckResponse'
+          description: ''
+  /api/v1/content/decks/{deck_id}/start/:
+    post:
+      operationId: official_pack_start
+      parameters:
+      - in: path
+        name: deck_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficialPackProgress'
+          description: ''
+  /api/v1/content/landing/:
+    get:
+      operationId: content_landing
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LandingPayload'
+          description: ''
+  /api/v1/content/microarticles/:
+    get:
+      operationId: content_microarticles_list
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMicroArticleListItemList'
+          description: ''
+  /api/v1/content/microarticles/{slug}/:
+    get:
+      operationId: content_microarticles_retrieve
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MicroArticleDetail'
+          description: ''
+  /api/v1/content/read-state/:
+    get:
+      operationId: content_read_state_list
+      parameters:
+      - in: query
+        name: slugs
+        schema:
+          type: string
+        description: Slugs séparés par des virgules.
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadStateMap'
+          description: ''
+    post:
+      operationId: content_read_state_update
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MicroArticleReadState'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MicroArticleReadState'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MicroArticleReadState'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadState'
+          description: ''
+  /api/v1/content/saved/:
+    get:
+      operationId: content_saved_list
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MicroArticleListItem'
+          description: ''
+    post:
+      operationId: content_saved_create
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavedMicroArticleCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SavedMicroArticleCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SavedMicroArticleCreate'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedState'
+          description: ''
+  /api/v1/content/saved/{slug}/:
+    get:
+      operationId: content_saved_status
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedState'
+          description: ''
+    delete:
+      operationId: content_saved_delete
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/content/sources/search/:
+    get:
+      operationId: content_sources_search_list
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SourceSearch'
+          description: ''
+  /api/v1/content/subjects/:
+    get:
+      operationId: subject_list
+      description: List all subjects or create a new one (admin only).
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubjectListItem'
+          description: ''
+    post:
+      operationId: subject_create
+      description: List all subjects or create a new one (admin only).
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubjectCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubjectCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubjectCreate'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectMutationResponse'
+          description: ''
+  /api/v1/content/subjects/{slug}/:
+    get:
+      operationId: subject_retrieve
+      description: Get, update or delete a subject (admin only for write operations).
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectDetailResponse'
+          description: ''
+    patch:
+      operationId: subject_update
+      description: Get, update or delete a subject (admin only for write operations).
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSubjectPatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSubjectPatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSubjectPatch'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectMutationResponse'
+          description: ''
+    delete:
+      operationId: subject_delete
+      description: Get, update or delete a subject (admin only for write operations).
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/content/subjects/{slug}/cards/:
+    get:
+      operationId: subject_card_list
+      description: Get all cards in a subject with their labels and order.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubjectCard'
+          description: ''
+    post:
+      operationId: subject_card_create
+      description: Add a card to a subject.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubjectCardAdd'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubjectCardAdd'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubjectCardAdd'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectCard'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectCard'
+          description: ''
+  /api/v1/content/subjects/{slug}/cards/{card_id}/:
+    patch:
+      operationId: subject_card_update
+      description: Update a card's label or order within a subject.
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSubjectCardPatch'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSubjectCardPatch'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSubjectCardPatch'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectCard'
+          description: ''
+    delete:
+      operationId: subject_card_delete
+      description: Remove a card from a subject.
+      parameters:
+      - in: path
+        name: card_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/content/subjects/{slug}/cards/reorder/:
+    post:
+      operationId: subject_card_reorder
+      description: Reorder cards within a subject (admin only).
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubjectCardsReorder'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubjectCardsReorder'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubjectCardsReorder'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountUpdateResponse'
+          description: ''
+  /api/v1/content/thumb-overrides/:
+    get:
+      operationId: thumb_override_public_list
+      tags:
+      - content
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ThumbOverridePublic'
+          description: ''
+  /api/v1/feed/:
+    get:
+      operationId: feed_list
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      tags:
+      - feed
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFeedItemList'
+          description: ''
+  /api/v1/learning/progress/:
+    get:
+      operationId: learning_progress_list
+      tags:
+      - learning
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LessonProgress'
+          description: ''
+  /api/v1/learning/progress/{lesson_id}/:
+    patch:
+      operationId: learning_progress_update
+      parameters:
+      - in: path
+        name: lesson_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - learning
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedLessonProgressUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedLessonProgressUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedLessonProgressUpdate'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonProgress'
+          description: ''
+  /api/v1/learning/progress/import/:
+    post:
+      operationId: learning_progress_import
+      tags:
+      - learning
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgressImport'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProgressImport'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProgressImport'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressImportResponse'
+          description: ''
+  /api/v1/learning/srs/next/:
+    get:
+      operationId: learning_srs_next
+      parameters:
+      - in: query
+        name: deck_id
+        schema:
+          type: integer
+          minimum: 1
+      - in: query
+        name: deck_ids
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: only_due
+        schema:
+          type: boolean
+          default: true
+      - in: query
+        name: scope
+        schema:
+          enum:
+          - all_decks
+          - deck
+          - decks
+          - all_cards
+          type: string
+          default: all_decks
+          minLength: 1
+        description: |-
+          * `all_decks` - all_decks
+          * `deck` - deck
+          * `decks` - decks
+          * `all_cards` - all_cards
+      tags:
+      - learning
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SRSNext'
+          description: ''
+  /api/v1/learning/srs/review/:
+    post:
+      operationId: learning_srs_review
+      tags:
+      - learning
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SRSReview'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SRSReview'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SRSReview'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SRSNext'
+          description: ''
+  /api/v1/micro/{slug}/:
+    get:
+      operationId: micro_retrieve
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - micro
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MicroDetail'
+          description: ''
+  /api/v1/micro/id/{id}/:
+    get:
+      operationId: micro_id_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - micro
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MicroDetail'
+          description: ''
+  /api/v1/tags/:
+    get:
+      operationId: tag_list
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
+      tags:
+      - tags
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TagPayload'
+          description: ''
+  /api/v1/taxonomies/{taxonomy}/resolve/:
+    get:
+      operationId: taxonomy_resolve
+      parameters:
+      - in: query
+        name: path
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: taxonomy
+        schema:
+          type: string
+        required: true
+      tags:
+      - taxonomies
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxonomyResolveResponse'
+          description: ''
+  /api/v1/taxonomies/{taxonomy}/tree/:
+    get:
+      operationId: taxonomy_tree
+      parameters:
+      - in: path
+        name: taxonomy
+        schema:
+          type: string
+        required: true
+      tags:
+      - taxonomies
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxonomyTreeResponse'
+          description: ''
+components:
+  schemas:
+    AccountSummary:
+      type: object
+      properties:
+        email:
+          oneOf:
+          - type: string
+            format: email
+          - type: string
+            maxLength: 0
+        username:
+          type: string
+        pseudo:
+          type: string
+        has_usable_password:
+          type: boolean
+      required:
+      - email
+      - has_usable_password
+      - pseudo
+      - username
+    AdminImageUpload:
+      type: object
+      description: |-
+        POST /admin/images/upload/ — le fichier arrive sous `file` ou `image`.
+
+        `validated_data` expose `file` (l'upload validé) et `title` (celui fourni,
+        sinon le nom du fichier).
+      properties:
+        file:
+          type: string
+          format: binary
+        image:
+          type: string
+          format: binary
+        title:
+          type: string
+          nullable: true
+    AdminMicroArticleSearchResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        packs_count:
+          type: integer
+          minimum: 0
+      required:
+      - id
+      - packs_count
+      - slug
+      - title
+    AdminPackBulkAdd:
+      type: object
+      description: |-
+        POST /admin/packs/<id>/bulk-add/.
+
+        Trois formes d'entrée, dans cet ordre de priorité : `items` (texte collé),
+        `microarticle_ids` puis `slugs`. Toutes se ramènent à
+        `validated_data["tokens"]`, une liste de jetons id-ou-slug que la vue résout.
+      properties:
+        items:
+          type: string
+        microarticle_ids:
+          type: array
+          items:
+            type: string
+        slugs:
+          type: array
+          items:
+            type: string
+    AdminPackCreate:
+      type: object
+      description: POST /admin/packs/ — `sort_order` absent ou nul = à la suite des
+        packs existants.
+      properties:
+        name:
+          type: string
+          maxLength: 60
+        description:
+          type: string
+          nullable: true
+        difficulty:
+          type: string
+          nullable: true
+          maxLength: 16
+        estimated_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+        status:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        cover_image_id:
+          type: integer
+          nullable: true
+        sort_order:
+          type: integer
+          nullable: true
+      required:
+      - name
+    AdminPackDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        difficulty:
+          type: string
+        estimated_minutes:
+          type: integer
+          nullable: true
+        status:
+          type: string
+        type:
+          type: string
+        sort_order:
+          type: integer
+        cards_count:
+          type: integer
+          minimum: 0
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        cover_image:
+          allOf:
+          - $ref: '#/components/schemas/ImagePayload'
+          nullable: true
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeckCardItem'
+      required:
+      - cards
+      - cards_count
+      - cover_image_url
+      - description
+      - difficulty
+      - estimated_minutes
+      - id
+      - name
+      - sort_order
+      - status
+      - type
+    AdminPackReorder:
+      type: object
+      description: POST /admin/packs/<id>/cards/reorder/
+      properties:
+        microarticle_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - microarticle_ids
+    AdminPackSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        difficulty:
+          type: string
+        estimated_minutes:
+          type: integer
+          nullable: true
+        status:
+          type: string
+        type:
+          type: string
+        sort_order:
+          type: integer
+        cards_count:
+          type: integer
+          minimum: 0
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        cover_image:
+          allOf:
+          - $ref: '#/components/schemas/ImagePayload'
+          nullable: true
+      required:
+      - cover_image_url
+      - description
+      - difficulty
+      - estimated_minutes
+      - id
+      - name
+      - sort_order
+      - status
+      - type
+    AdminThumbOverride:
+      type: object
+      properties:
+        pathology_slug:
+          type: string
+        bg:
+          type: string
+        accent:
+          type: string
+        pattern:
+          type: string
+        id:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - accent
+      - bg
+      - id
+      - pathology_slug
+      - pattern
+      - updated_at
+    BulkAddResponse:
+      type: object
+      properties:
+        added:
+          type: integer
+          minimum: 0
+        already_present:
+          type: integer
+          minimum: 0
+        not_found:
+          type: integer
+          minimum: 0
+      required:
+      - added
+      - already_present
+    CardDecksUpdate:
+      type: object
+      description: PUT /cards/<id>/decks/
+      properties:
+        deck_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - deck_ids
+    CardDecksUpdateResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        deck_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - deck_ids
+      - ok
+    CardType:
+      enum:
+      - standard
+      - recap
+      - detail
+      type: string
+      description: |-
+        * `standard` - standard
+        * `recap` - recap
+        * `detail` - detail
+    CategoryPayload:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+      - id
+      - name
+      - slug
+    CopyDeckResponse:
+      type: object
+      properties:
+        deck_id:
+          type: integer
+      required:
+      - deck_id
+    CountUpdateResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        updated:
+          type: integer
+          minimum: 0
+      required:
+      - ok
+      - updated
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          oneOf:
+          - type: string
+            format: email
+          - type: string
+            maxLength: 0
+        username:
+          type: string
+        pseudo:
+          type: string
+        has_usable_password:
+          type: boolean
+        is_staff:
+          type: boolean
+        is_superuser:
+          type: boolean
+        landing_redirect_enabled:
+          type: boolean
+        landing_redirect_target:
+          $ref: '#/components/schemas/LandingRedirectTargetEnum'
+      required:
+      - email
+      - has_usable_password
+      - id
+      - is_staff
+      - is_superuser
+      - landing_redirect_enabled
+      - landing_redirect_target
+      - pseudo
+      - username
+    DeckCardAdd:
+      type: object
+      description: POST /decks/<id>/cards/ — `validated_data["card"]` est la fiche
+        résolue.
+      properties:
+        card_id:
+          type: integer
+      required:
+      - card_id
+    DeckCardItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        answer_express:
+          type: string
+        takeaway:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        cover_image:
+          allOf:
+          - $ref: '#/components/schemas/ImagePayload'
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        tags_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagPayload'
+        categories_theme_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_maladies_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_medicament_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_pharmacologie_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        decks_count:
+          type: integer
+          minimum: 0
+        card_type:
+          $ref: '#/components/schemas/CardType'
+        subject:
+          allOf:
+          - $ref: '#/components/schemas/SubjectSummary'
+          nullable: true
+        deck_card_id:
+          type: integer
+        position:
+          type: integer
+        sort_order:
+          type: integer
+        is_optional:
+          type: boolean
+        notes:
+          type: string
+      required:
+      - answer_express
+      - cover_image_url
+      - id
+      - key_points
+      - slug
+      - tags
+      - takeaway
+      - title
+    DeckCardsBulkAdd:
+      type: object
+      description: |-
+        POST /decks/<id>/cards/bulk-add/ — accepte `card_ids` ou `microarticle_ids`.
+
+        `validated_data["card_ids"]` est dédoublonné, ordonné et débarrassé des ids
+        non positifs ; il reste à vérifier que les fiches sont publiques.
+      properties:
+        card_ids:
+          type: array
+          items:
+            type: integer
+        microarticle_ids:
+          type: array
+          items:
+            type: integer
+    DeckCardsResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeckCardItem'
+      required:
+      - count
+      - results
+    DeckCreate:
+      type: object
+      description: POST /decks/
+      properties:
+        name:
+          type: string
+          maxLength: 60
+      required:
+      - name
+    DeckListItem:
+      oneOf:
+      - $ref: '#/components/schemas/DeckSummary'
+      - $ref: '#/components/schemas/OfficialPackSummary'
+    DeckMembership:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_default:
+          type: boolean
+        is_member:
+          type: boolean
+      required:
+      - id
+      - is_default
+      - is_member
+      - name
+    DeckMutationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_default:
+          type: boolean
+        sort_order:
+          type: integer
+      required:
+      - id
+      - is_default
+      - name
+      - sort_order
+    DeckSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_default:
+          type: boolean
+        sort_order:
+          type: integer
+        cards_count:
+          type: integer
+          minimum: 0
+        source_pack_id:
+          type: integer
+          nullable: true
+      required:
+      - cards_count
+      - id
+      - is_default
+      - name
+      - sort_order
+      - source_pack_id
+    DefaultDeckResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        default_deck_id:
+          type: integer
+      required:
+      - default_deck_id
+      - ok
+    DeleteAccount:
+      type: object
+      properties:
+        password:
+          type: string
+          writeOnly: true
+    DetailResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    FeedItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        answer_express:
+          type: string
+        takeaway:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagPayload'
+        categories_theme:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_maladies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_medicament:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_pharmacologie:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        progress:
+          allOf:
+          - $ref: '#/components/schemas/Progress'
+          nullable: true
+      required:
+      - answer_express
+      - categories_maladies
+      - categories_medicament
+      - categories_theme
+      - cover_image_url
+      - id
+      - key_points
+      - published_at
+      - slug
+      - tags
+      - takeaway
+      - title
+    ImagePayload:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        url:
+          type: string
+          nullable: true
+        credit_text:
+          type: string
+          nullable: true
+        credit_author:
+          type: string
+        credit_source:
+          type: string
+        credit_source_url:
+          type: string
+        credit_license:
+          type: string
+        credit_license_url:
+          type: string
+      required:
+      - id
+      - title
+      - url
+    LandingCard:
+      type: object
+      properties:
+        title:
+          type: string
+        summary:
+          type: string
+        cta_label:
+          type: string
+        href:
+          type: string
+      required:
+      - cta_label
+      - href
+      - summary
+      - title
+    LandingPayload:
+      type: object
+      properties:
+        title:
+          type: string
+        hero_title:
+          type: string
+        hero_subtitle:
+          type: string
+        hero_bullets:
+          type: array
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandingStep'
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandingCard'
+        primary_cta_label:
+          type: string
+        primary_cta_target:
+          type: string
+        secondary_cta_label:
+          type: string
+        secondary_cta_target:
+          type: string
+      required:
+      - cards
+      - hero_bullets
+      - hero_subtitle
+      - hero_title
+      - primary_cta_label
+      - primary_cta_target
+      - secondary_cta_label
+      - secondary_cta_target
+      - steps
+      - title
+    LandingRedirectTargetEnum:
+      enum:
+      - start
+      - discover
+      - cards
+      - review
+      - quiz
+      type: string
+      description: |-
+        * `start` - start
+        * `discover` - discover
+        * `cards` - cards
+        * `review` - review
+        * `quiz` - quiz
+    LandingStep:
+      type: object
+      properties:
+        title:
+          type: string
+        detail:
+          type: string
+      required:
+      - detail
+      - title
+    LessonProgress:
+      type: object
+      properties:
+        lesson_id:
+          type: integer
+        seen:
+          type: boolean
+        completed:
+          type: boolean
+        percent:
+          type: integer
+        time_ms:
+          type: integer
+        score_best:
+          type: integer
+          nullable: true
+        score_last:
+          type: integer
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - completed
+      - last_seen_at
+      - lesson_id
+      - percent
+      - score_best
+      - score_last
+      - seen
+      - time_ms
+      - updated_at
+    LessonProgressUpdate:
+      type: object
+      properties:
+        seen:
+          type: boolean
+        completed:
+          type: boolean
+        percent:
+          type: integer
+          maximum: 100
+          minimum: 0
+        time_ms:
+          type: integer
+          minimum: 0
+        score_best:
+          type: integer
+          maximum: 100
+          minimum: 0
+          nullable: true
+        score_last:
+          type: integer
+          maximum: 100
+          minimum: 0
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - updated_at
+    MicroArticleDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        answer_express:
+          type: string
+        takeaway:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        cover_image:
+          allOf:
+          - $ref: '#/components/schemas/ImagePayload'
+          nullable: true
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/StreamBlock'
+        see_more:
+          type: array
+          items:
+            $ref: '#/components/schemas/StreamBlock'
+        is_saved:
+          type: boolean
+        is_read:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        categories_theme:
+          type: array
+          items:
+            type: string
+        categories_maladies:
+          type: array
+          items:
+            type: string
+        categories_medicament:
+          type: array
+          items:
+            type: string
+        categories_pharmacologie:
+          type: array
+          items:
+            type: string
+        tags_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagPayload'
+        categories_theme_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_maladies_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_medicament_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_pharmacologie_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionPayload'
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        card_type:
+          $ref: '#/components/schemas/CardType'
+        subject:
+          allOf:
+          - $ref: '#/components/schemas/SubjectSummary'
+          nullable: true
+        detail_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubjectDetailCard'
+        recap_card:
+          allOf:
+          - $ref: '#/components/schemas/SubjectRecapCard'
+          nullable: true
+        recap_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecapPoint'
+        parent_recap_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParentRecapCard'
+      required:
+      - answer_express
+      - categories_maladies
+      - categories_medicament
+      - categories_theme
+      - cover_image_url
+      - id
+      - key_points
+      - slug
+      - tags
+      - takeaway
+      - title
+    MicroArticleListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        answer_express:
+          type: string
+        takeaway:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        cover_image:
+          allOf:
+          - $ref: '#/components/schemas/ImagePayload'
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        tags_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagPayload'
+        categories_theme_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_maladies_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_medicament_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_pharmacologie_payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        decks_count:
+          type: integer
+          minimum: 0
+        card_type:
+          $ref: '#/components/schemas/CardType'
+        subject:
+          allOf:
+          - $ref: '#/components/schemas/SubjectSummary'
+          nullable: true
+      required:
+      - answer_express
+      - cover_image_url
+      - id
+      - key_points
+      - slug
+      - tags
+      - takeaway
+      - title
+    MicroArticleReadState:
+      type: object
+      description: POST /read-state/ — `validated_data["page"]` est la fiche résolue.
+      properties:
+        slug:
+          type: string
+        is_read:
+          type: boolean
+      required:
+      - is_read
+      - slug
+    MicroDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        answer_express:
+          type: string
+        takeaway:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        links:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        see_more:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagPayload'
+        categories_theme:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_maladies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_medicament:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        categories_pharmacologie:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPayload'
+        questions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        progress:
+          allOf:
+          - $ref: '#/components/schemas/Progress'
+          nullable: true
+      required:
+      - answer_express
+      - categories_maladies
+      - categories_medicament
+      - categories_theme
+      - cover_image_url
+      - id
+      - key_points
+      - links
+      - published_at
+      - questions
+      - see_more
+      - slug
+      - tags
+      - takeaway
+      - title
+    ModeLastEnum:
+      enum:
+      - ordered
+      - shuffle
+      - due_only
+      type: string
+      description: |-
+        * `ordered` - Ordered
+        * `shuffle` - Shuffle
+        * `due_only` - Due only
+    NullEnum:
+      enum:
+      - null
+    OfficialDeckProgress:
+      type: object
+      description: |-
+        POST /decks/<id>/progress/ — `context["deck"]` porte le pack ciblé.
+
+        Tous les champs sont facultatifs : la vue n'écrit que ceux qui sont fournis
+        et rafraîchit `last_seen_at` dans tous les cas.
+      properties:
+        mode_last:
+          $ref: '#/components/schemas/ModeLastEnum'
+        last_card_id:
+          type: integer
+          nullable: true
+        cards_seen_count:
+          type: integer
+        cards_done_count:
+          type: integer
+    OfficialPackDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        cover_image:
+          allOf:
+          - $ref: '#/components/schemas/ImagePayload'
+          nullable: true
+        difficulty:
+          type: string
+        estimated_minutes:
+          type: integer
+          nullable: true
+        status:
+          type: string
+        type:
+          type: string
+        cards_count:
+          type: integer
+          minimum: 0
+        progress:
+          allOf:
+          - $ref: '#/components/schemas/OfficialPackProgress'
+          nullable: true
+        source_pack_id:
+          type: integer
+          nullable: true
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeckCardItem'
+      required:
+      - cards
+      - cards_count
+      - cover_image_url
+      - description
+      - difficulty
+      - estimated_minutes
+      - id
+      - name
+      - status
+      - type
+    OfficialPackProgress:
+      type: object
+      properties:
+        deck_id:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        cards_seen_count:
+          type: integer
+          minimum: 0
+        cards_done_count:
+          type: integer
+          minimum: 0
+        progress_pct:
+          type: integer
+          maximum: 100
+          minimum: 0
+        mode_last:
+          type: string
+        last_card_id:
+          type: integer
+          nullable: true
+      required:
+      - cards_done_count
+      - cards_seen_count
+      - last_card_id
+      - last_seen_at
+      - mode_last
+      - progress_pct
+      - started_at
+    OfficialPackSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        cover_image_url:
+          type: string
+          nullable: true
+        cover_image_credit:
+          type: string
+          nullable: true
+        cover_image:
+          allOf:
+          - $ref: '#/components/schemas/ImagePayload'
+          nullable: true
+        difficulty:
+          type: string
+        estimated_minutes:
+          type: integer
+          nullable: true
+        status:
+          type: string
+        type:
+          type: string
+        cards_count:
+          type: integer
+          minimum: 0
+        progress:
+          allOf:
+          - $ref: '#/components/schemas/OfficialPackProgress'
+          nullable: true
+      required:
+      - cards_count
+      - cover_image_url
+      - description
+      - difficulty
+      - estimated_minutes
+      - id
+      - name
+      - status
+      - type
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required:
+      - ok
+    PaginatedFeedItemList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedItem'
+    PaginatedMicroArticleListItemList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MicroArticleListItem'
+    ParentRecapCard:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+      required:
+      - id
+      - slug
+      - title
+    PatchedAccountUpdate:
+      type: object
+      properties:
+        pseudo:
+          type: string
+          nullable: true
+    PatchedAdminPackPatch:
+      type: object
+      description: PATCH /admin/packs/<id>/
+      properties:
+        name:
+          type: string
+          maxLength: 60
+        description:
+          type: string
+          nullable: true
+        difficulty:
+          type: string
+          nullable: true
+          maxLength: 16
+        estimated_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        cover_image_id:
+          type: integer
+          nullable: true
+        sort_order:
+          type: integer
+    PatchedDeckPatch:
+      type: object
+      description: PATCH /decks/<id>/
+      properties:
+        name:
+          type: string
+          maxLength: 60
+        sort_order:
+          type: integer
+    PatchedLessonProgressUpdate:
+      type: object
+      properties:
+        seen:
+          type: boolean
+        completed:
+          type: boolean
+        percent:
+          type: integer
+          maximum: 100
+          minimum: 0
+        time_ms:
+          type: integer
+          minimum: 0
+        score_best:
+          type: integer
+          maximum: 100
+          minimum: 0
+          nullable: true
+        score_last:
+          type: integer
+          maximum: 100
+          minimum: 0
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+    PatchedSubjectCardPatch:
+      type: object
+      description: PATCH /subjects/<slug>/cards/<id>/ — un corps vide laisse le lien
+        tel quel.
+      properties:
+        label:
+          type: string
+          nullable: true
+          maxLength: 120
+        sort_order:
+          type: integer
+    PatchedSubjectPatch:
+      type: object
+      description: PATCH /subjects/<slug>/ — `context["subject"]` porte le sujet ciblé.
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+    PatchedThumbOverridePatch:
+      type: object
+      description: PATCH /admin/thumb-overrides/<slug>/ — `context["override"]` porte
+        la ligne ciblée.
+      properties:
+        pathology_slug:
+          type: string
+        bg:
+          type: string
+        accent:
+          type: string
+        pattern:
+          $ref: '#/components/schemas/PatternEnum'
+    PatchedUserPreferencesUpdate:
+      type: object
+      properties:
+        landing_redirect_enabled:
+          type: boolean
+        landing_redirect_target:
+          $ref: '#/components/schemas/LandingRedirectTargetEnum'
+    PatternEnum:
+      enum:
+      - waves
+      - chevrons
+      - dots
+      - vlines
+      - diagonals
+      - grid
+      - crosshatch
+      - rings
+      - pluses
+      - triangles
+      type: string
+      description: |-
+        * `waves` - waves
+        * `chevrons` - chevrons
+        * `dots` - dots
+        * `vlines` - vlines
+        * `diagonals` - diagonals
+        * `grid` - grid
+        * `crosshatch` - crosshatch
+        * `rings` - rings
+        * `pluses` - pluses
+        * `triangles` - triangles
+    Progress:
+      type: object
+      properties:
+        seen:
+          type: boolean
+        completed:
+          type: boolean
+        percent:
+          type: integer
+        time_ms:
+          type: integer
+        score_best:
+          type: integer
+          nullable: true
+        score_last:
+          type: integer
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - completed
+      - last_seen_at
+      - percent
+      - score_best
+      - score_last
+      - seen
+      - time_ms
+      - updated_at
+    ProgressImport:
+      type: object
+      properties:
+        device_id:
+          type: string
+        lessons:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LessonProgressUpdate'
+      required:
+      - lessons
+    ProgressImportResponse:
+      type: object
+      properties:
+        imported:
+          type: integer
+          minimum: 0
+        updated:
+          type: integer
+          minimum: 0
+      required:
+      - imported
+      - updated
+    QuestionPayload:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        prompt:
+          type: string
+        choices: {}
+        correct_answers: {}
+        explanation:
+          type: string
+        difficulty:
+          type: integer
+        references: {}
+      required:
+      - id
+      - prompt
+      - type
+    ReadState:
+      type: object
+      properties:
+        slug:
+          type: string
+        is_read:
+          type: boolean
+      required:
+      - is_read
+      - slug
+    ReadStateMap:
+      type: object
+      properties:
+        items:
+          type: object
+          additionalProperties:
+            type: boolean
+      required:
+      - items
+    RecapPoint:
+      type: object
+      properties:
+        id:
+          type: integer
+        text:
+          type: string
+        sort_order:
+          type: integer
+        detail_card:
+          allOf:
+          - $ref: '#/components/schemas/SubjectRecapCard'
+          nullable: true
+      required:
+      - detail_card
+      - id
+      - sort_order
+      - text
+    SRSNext:
+      type: object
+      properties:
+        card:
+          allOf:
+          - $ref: '#/components/schemas/MicroArticleListItem'
+          nullable: true
+        srs:
+          allOf:
+          - $ref: '#/components/schemas/SRSState'
+          nullable: true
+      required:
+      - card
+      - srs
+    SRSReview:
+      type: object
+      properties:
+        card_id:
+          type: integer
+          minimum: 1
+        rating:
+          $ref: '#/components/schemas/SrsRating'
+      required:
+      - card_id
+      - rating
+    SRSState:
+      type: object
+      properties:
+        level:
+          type: integer
+          minimum: 1
+        due_at:
+          type: string
+          format: date-time
+        last_reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        reviews_count:
+          type: integer
+          minimum: 0
+        last_rating:
+          type: string
+      required:
+      - due_at
+      - level
+      - reviews_count
+    SavedMicroArticleCreate:
+      type: object
+      description: POST /saved/ — `validated_data["page"]` est la fiche résolue.
+      properties:
+        slug:
+          type: string
+      required:
+      - slug
+    SavedState:
+      type: object
+      properties:
+        saved:
+          type: boolean
+      required:
+      - saved
+    SourceSearch:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        kind:
+          type: string
+          nullable: true
+        url:
+          type: string
+          format: uri
+          nullable: true
+        publisher:
+          type: string
+        author:
+          type: string
+        publication_date:
+          type: string
+          format: date
+          nullable: true
+        accessed_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - id
+      - kind
+      - name
+    SrsRating:
+      enum:
+      - know
+      - medium
+      - again
+      type: string
+      description: |-
+        * `know` - know
+        * `medium` - medium
+        * `again` - again
+    StatusEnum:
+      enum:
+      - draft
+      - published
+      - archived
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `published` - Published
+        * `archived` - Archived
+    StreamBlock:
+      type: object
+      properties:
+        type:
+          type: string
+        value: {}
+      required:
+      - type
+      - value
+    SubjectCard:
+      type: object
+      properties:
+        id:
+          type: integer
+        microarticle_id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        card_type:
+          $ref: '#/components/schemas/CardType'
+        label:
+          type: string
+        sort_order:
+          type: integer
+      required:
+      - id
+      - label
+      - microarticle_id
+      - sort_order
+    SubjectCardAdd:
+      type: object
+      description: |-
+        POST /subjects/<slug>/cards/ — `context["subject"]` porte le sujet ciblé.
+
+        `validated_data["card"]` est la fiche résolue.
+      properties:
+        card_slug:
+          type: string
+        label:
+          type: string
+          nullable: true
+          default: ''
+          maxLength: 120
+      required:
+      - card_slug
+    SubjectCardsReorder:
+      type: object
+      description: POST /subjects/<slug>/cards/reorder/ — les ids inconnus sont ignorés
+        par la vue.
+      properties:
+        order:
+          type: array
+          items:
+            type: integer
+      required:
+      - order
+    SubjectCreate:
+      type: object
+      description: POST /subjects/ — le slug est déduit du nom quand il n'est pas
+        fourni.
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        slug:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+          default: ''
+      required:
+      - name
+    SubjectDetailCard:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        label:
+          type: string
+        sort_order:
+          type: integer
+      required:
+      - id
+      - label
+      - slug
+      - sort_order
+      - title
+    SubjectDetailResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        detail_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubjectDetailCard'
+        recap_card:
+          allOf:
+          - $ref: '#/components/schemas/SubjectRecapCard'
+          nullable: true
+      required:
+      - description
+      - detail_cards
+      - id
+      - name
+      - recap_card
+      - slug
+    SubjectListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        cards_count:
+          type: integer
+          minimum: 0
+        has_recap:
+          type: boolean
+      required:
+      - cards_count
+      - description
+      - has_recap
+      - id
+      - name
+      - slug
+    SubjectMutationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - name
+      - slug
+    SubjectRecapCard:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+      required:
+      - id
+      - slug
+      - title
+    SubjectSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - name
+      - slug
+    TagPayload:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+      - id
+      - name
+      - slug
+    TaxonomyBreadcrumb:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+      - id
+      - name
+      - slug
+    TaxonomyNode:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        parent_id:
+          type: integer
+          nullable: true
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxonomyNode'
+          readOnly: true
+      required:
+      - children
+      - id
+      - name
+      - parent_id
+      - slug
+    TaxonomyResolveResponse:
+      type: object
+      properties:
+        taxonomy:
+          type: string
+        node_id:
+          type: integer
+        breadcrumb:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxonomyBreadcrumb'
+        canonical_path:
+          type: string
+      required:
+      - breadcrumb
+      - canonical_path
+      - node_id
+      - taxonomy
+    TaxonomyTreeResponse:
+      type: object
+      properties:
+        taxonomy:
+          type: string
+        tree:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxonomyNode'
+      required:
+      - taxonomy
+      - tree
+    ThumbOverrideCreate:
+      type: object
+      description: POST /admin/thumb-overrides/
+      properties:
+        pathology_slug:
+          type: string
+        bg:
+          type: string
+        accent:
+          type: string
+        pattern:
+          $ref: '#/components/schemas/PatternEnum'
+      required:
+      - accent
+      - bg
+      - pathology_slug
+      - pattern
+    ThumbOverridePublic:
+      type: object
+      properties:
+        pathology_slug:
+          type: string
+        bg:
+          type: string
+        accent:
+          type: string
+        pattern:
+          type: string
+      required:
+      - accent
+      - bg
+      - pathology_slug
+      - pattern
+    UserPreferences:
+      type: object
+      properties:
+        landing_redirect_enabled:
+          type: boolean
+        landing_redirect_target:
+          $ref: '#/components/schemas/LandingRedirectTargetEnum'
+      required:
+      - landing_redirect_enabled
+      - landing_redirect_target
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid

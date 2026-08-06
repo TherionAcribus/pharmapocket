@@ -251,6 +251,23 @@ Staff uniquement (`/api/v1/content/admin/`) :
 - `GET /api/v1/learning/srs/next/?scope=all_decks|deck|decks|all_cards&deck_id=&deck_ids=&only_due=`
 - `POST /api/v1/learning/srs/review/`
 
+### Contrat OpenAPI et types frontend
+
+Le schéma OpenAPI v1 est exposé publiquement par `GET /api/schema/` et sa version
+de référence est suivie dans `openapi/schema.yaml`. Les types de
+`frontend/src/lib/types.ts` sont générés depuis ce fichier ; il ne faut pas les
+modifier à la main.
+
+```bash
+python backend/manage.py spectacular --urlconf pharmapocket.schema_urls --file openapi/schema.yaml --validate --fail-on-warn
+cd frontend
+npm run types:generate
+npm run types:check
+```
+
+Le workflow `openapi-contract.yml` régénère le schéma en CI et échoue si le
+schéma suivi ou les types générés ne sont plus synchronisés.
+
 ## Modèle de contenu Wagtail
 
 - Créer une page `MicroArticleIndexPage` sous la racine du site.

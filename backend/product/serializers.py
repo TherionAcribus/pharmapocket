@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from content.serializers import CategoryPayloadSerializer, TagPayloadSerializer
+
 
 class ProgressSerializer(serializers.Serializer):
     seen = serializers.BooleanField()
@@ -21,11 +23,11 @@ class FeedItemSerializer(serializers.Serializer):
     key_points = serializers.ListField(child=serializers.CharField())
     cover_image_url = serializers.CharField(allow_null=True)
     cover_image_credit = serializers.CharField(allow_null=True, required=False)
-    tags = serializers.ListField(child=serializers.DictField())
-    categories_theme = serializers.ListField(child=serializers.DictField())
-    categories_maladies = serializers.ListField(child=serializers.DictField())
-    categories_medicament = serializers.ListField(child=serializers.DictField())
-    categories_pharmacologie = serializers.ListField(child=serializers.DictField(), required=False)
+    tags = TagPayloadSerializer(many=True)
+    categories_theme = CategoryPayloadSerializer(many=True)
+    categories_maladies = CategoryPayloadSerializer(many=True)
+    categories_medicament = CategoryPayloadSerializer(many=True)
+    categories_pharmacologie = CategoryPayloadSerializer(many=True, required=False)
     published_at = serializers.DateTimeField(allow_null=True)
     progress = ProgressSerializer(required=False, allow_null=True)
 
@@ -41,11 +43,11 @@ class MicroDetailSerializer(serializers.Serializer):
     cover_image_credit = serializers.CharField(allow_null=True, required=False)
     links = serializers.ListField(child=serializers.DictField())
     see_more = serializers.ListField(child=serializers.DictField())
-    tags = serializers.ListField(child=serializers.DictField())
-    categories_theme = serializers.ListField(child=serializers.DictField())
-    categories_maladies = serializers.ListField(child=serializers.DictField())
-    categories_medicament = serializers.ListField(child=serializers.DictField())
-    categories_pharmacologie = serializers.ListField(child=serializers.DictField(), required=False)
+    tags = TagPayloadSerializer(many=True)
+    categories_theme = CategoryPayloadSerializer(many=True)
+    categories_maladies = CategoryPayloadSerializer(many=True)
+    categories_medicament = CategoryPayloadSerializer(many=True)
+    categories_pharmacologie = CategoryPayloadSerializer(many=True, required=False)
     questions = serializers.ListField(child=serializers.DictField())
     published_at = serializers.DateTimeField(allow_null=True)
     progress = ProgressSerializer(required=False, allow_null=True)

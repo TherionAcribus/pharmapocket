@@ -8,7 +8,7 @@ from django.core.cache import cache
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIClient, APIRequestFactory
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
@@ -71,6 +71,16 @@ class SettingsHardeningTests(SimpleTestCase):
         )
         self.assertEqual(logging_config["loggers"]["django"]["handlers"], ["console"])
         self.assertEqual(logging_config["loggers"]["django.server"]["handlers"], ["console"])
+
+
+class OpenApiSchemaTests(SimpleTestCase):
+    def test_schema_is_public_and_limited_to_v1(self):
+        response = APIClient().get("/api/schema/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/api/v1/content/microarticles/", response.data["paths"])
+        self.assertFalse(any(path.startswith("/api/v2/") for path in response.data["paths"]))
+        self.assertIn("MicroArticleListItem", response.data["components"]["schemas"])
 
 
 def throttle_rates(**rates: str):

@@ -520,19 +520,19 @@ export default function ReaderClient({
     const fromPayload =
       data.categories_pharmacologie_payload?.[0] ||
       data.categories_maladies_payload?.[0] ||
-      data.categories_classes_payload?.[0];
+      data.categories_theme_payload?.[0];
     if (fromPayload?.name) return fromPayload.name;
 
     const fromStrings =
-      data.categories_pharmacologie?.[0] || data.categories_maladies?.[0] || data.categories_classes?.[0];
+      data.categories_pharmacologie?.[0] || data.categories_maladies?.[0] || data.categories_theme?.[0];
     return fromStrings || null;
   }, [
-    data.categories_classes,
-    data.categories_classes_payload,
     data.categories_maladies,
     data.categories_maladies_payload,
     data.categories_pharmacologie,
     data.categories_pharmacologie_payload,
+    data.categories_theme,
+    data.categories_theme_payload,
   ]);
 
   const longPreviewHtml = React.useMemo(() => {

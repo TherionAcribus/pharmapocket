@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { fetchDecks, fetchMe, fetchSrsNext, postSrsReview } from "@/lib/api";
-import type { DeckSummary, SrsNextResponse, SrsRating, SrsScope } from "@/lib/types";
+import type { SrsScope } from "@/lib/api";
+import type { DeckSummary, SrsNext, SrsRating } from "@/lib/types";
 
 function RichText({ html, className }: { html?: string; className?: string }) {
   if (!html) return null;
@@ -28,7 +29,7 @@ export default function ReviewPage() {
   const [onlyDue, setOnlyDue] = React.useState(true);
 
   const [revealed, setRevealed] = React.useState(false);
-  const [current, setCurrent] = React.useState<SrsNextResponse | null>(null);
+  const [current, setCurrent] = React.useState<SrsNext | null>(null);
   const [loadingCard, setLoadingCard] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [sessionCount, setSessionCount] = React.useState(0);

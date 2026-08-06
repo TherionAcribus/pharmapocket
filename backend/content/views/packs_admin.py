@@ -3,6 +3,7 @@
 from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -22,7 +23,17 @@ from ..models import (
 )
 from ..permissions import IsStaff
 from ..search import filter_microarticles
-from ..serializers import MicroArticleCardSerializer, image_payload
+from ..serializers import (
+    AdminMicroArticleSearchResultSerializer,
+    AdminPackDetailSerializer,
+    AdminPackSummarySerializer,
+    BulkAddResponseSerializer,
+    CountUpdateResponseSerializer,
+    ImagePayloadSerializer,
+    MicroArticleCardSerializer,
+    OkResponseSerializer,
+    image_payload,
+)
 from ..serializers.inputs import (
     AdminImageUploadSerializer,
     AdminPackBulkAddSerializer,
@@ -56,6 +67,7 @@ def _admin_pack_payload(deck: Deck) -> dict:
 class AdminPackListCreateView(APIView):
     permission_classes = [IsStaff]
 
+    @extend_schema(operation_id="admin_pack_list", responses=AdminPackSummarySerializer(many=True))
     def get(self, request):
         qs = _admin_pack_qs().order_by("sort_order", "id").annotate(cards_count=models.Count("deck_cards"))
         items = []
@@ -65,6 +77,11 @@ class AdminPackListCreateView(APIView):
             items.append(payload)
         return Response(items)
 
+    @extend_schema(
+        operation_id="admin_pack_create",
+        request=AdminPackCreateSerializer,
+        responses={201: AdminPackSummarySerializer},
+    )
     def post(self, request):
         serializer = AdminPackCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -97,6 +114,7 @@ class AdminPackListCreateView(APIView):
 class AdminPackDetailView(APIView):
     permission_classes = [IsStaff]
 
+    @extend_schema(operation_id="admin_pack_retrieve", responses=AdminPackDetailSerializer)
     def get(self, request, pack_id: int):
         deck = _admin_pack_qs().filter(id=pack_id).first()
         if deck is None:
@@ -123,6 +141,11 @@ class AdminPackDetailView(APIView):
         out["cards_count"] = len(cards)
         return Response(out)
 
+    @extend_schema(
+        operation_id="admin_pack_update",
+        request=AdminPackPatchSerializer,
+        responses=AdminPackSummarySerializer,
+    )
     def patch(self, request, pack_id: int):
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
@@ -144,6 +167,7 @@ class AdminPackDetailView(APIView):
         deck.save(update_fields=update_fields)
         return Response(_admin_pack_payload(deck))
 
+    @extend_schema(operation_id="admin_pack_delete", responses={204: None})
     def delete(self, request, pack_id: int):
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
@@ -155,6 +179,19 @@ class AdminPackDetailView(APIView):
 class AdminMicroArticleSearchView(APIView):
     permission_classes = [IsStaff]
 
+    @extend_schema(
+        operation_id="admin_microarticle_search",
+        parameters=[
+            OpenApiParameter(name="q", type=str),
+            OpenApiParameter(name="recent", type=bool),
+            OpenApiParameter(name="tags", type=str),
+            OpenApiParameter(name="theme_nodes", type=str),
+            OpenApiParameter(name="medicament_nodes", type=str),
+            OpenApiParameter(name="maladies_nodes", type=str),
+            OpenApiParameter(name="pharmacologie_nodes", type=str),
+        ],
+        responses=AdminMicroArticleSearchResultSerializer(many=True),
+    )
     def get(self, request):
         def _parse_csv_ints(value: str | None) -> list[int]:
             if not value:
@@ -302,6 +339,11 @@ class AdminImageUploadView(APIView):
     permission_classes = [IsStaff]
     parser_classes = [MultiPartParser, FormParser]
 
+    @extend_schema(
+        operation_id="admin_image_upload",
+        request=AdminImageUploadSerializer,
+        responses={201: ImagePayloadSerializer},
+    )
     def post(self, request):
         # La vue court-circuite le formulaire Wagtail : `AdminImageUploadSerializer`
         # rejoue sa validation (extension, format réel, taille, nombre de pixels).
@@ -327,6 +369,11 @@ class AdminImageUploadView(APIView):
 class AdminPackBulkAddView(APIView):
     permission_classes = [IsStaff]
 
+    @extend_schema(
+        operation_id="admin_pack_bulk_add",
+        request=AdminPackBulkAddSerializer,
+        responses=BulkAddResponseSerializer,
+    )
     def post(self, request, pack_id: int):
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
@@ -395,6 +442,11 @@ class AdminPackBulkAddView(APIView):
 class AdminPackRemoveCardView(APIView):
     permission_classes = [IsStaff]
 
+    @extend_schema(
+        operation_id="admin_pack_card_remove",
+        request=None,
+        responses=OkResponseSerializer,
+    )
     def post(self, request, pack_id: int, card_id: int):
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
@@ -407,6 +459,11 @@ class AdminPackRemoveCardView(APIView):
 class AdminPackReorderCardsView(APIView):
     permission_classes = [IsStaff]
 
+    @extend_schema(
+        operation_id="admin_pack_card_reorder",
+        request=AdminPackReorderSerializer,
+        responses=CountUpdateResponseSerializer,
+    )
     def post(self, request, pack_id: int):
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:

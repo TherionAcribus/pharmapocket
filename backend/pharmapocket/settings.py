@@ -128,6 +128,7 @@ INSTALLED_APPS = [
     "treebeard",
     "corsheaders",
     "rest_framework",
+    "drf_spectacular",
     "taggit",
     "modelcluster",
     "wagtail.contrib.forms",
@@ -298,6 +299,7 @@ if TRUSTED_PROXY_COUNT < 0:
 THROTTLE_EXEMPT_IPS = _ip_networks("DJANGO_THROTTLE_EXEMPT_IPS")
 
 REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
@@ -316,6 +318,18 @@ REST_FRAMEWORK = {
         "sensitive_sustained": _throttle_rate(
             "DJANGO_THROTTLE_RATE_SENSITIVE_SUSTAINED", default="30/hour"
         ),
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "PharmaPocket API",
+    "DESCRIPTION": "Contrat de l'API v1 consommée par le frontend PharmaPocket.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "CardType": ["standard", "recap", "detail"],
+        "SrsRating": ["know", "medium", "again"],
+        "SrsScope": ["all_decks", "deck", "decks", "all_cards"],
     },
 }
 

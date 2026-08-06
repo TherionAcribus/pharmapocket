@@ -3,12 +3,18 @@ from __future__ import annotations
 from collections import defaultdict
 
 from django.db.models import Q
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from taggit.models import Tag
 
 from .models import CategoryMaladies, CategoryMedicament, CategoryPharmacologie, CategoryTheme
+from .serializers import (
+    TagPayloadSerializer,
+    TaxonomyResolveResponseSerializer,
+    TaxonomyTreeResponseSerializer,
+)
 
 
 def _taxonomy_model(taxonomy: str):
@@ -26,6 +32,10 @@ def _taxonomy_model(taxonomy: str):
 class TaxonomyTreeView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        operation_id="taxonomy_tree",
+        responses=TaxonomyTreeResponseSerializer,
+    )
     def get(self, request, taxonomy: str):
         model = _taxonomy_model(taxonomy)
         if model is None:
@@ -65,6 +75,11 @@ class TaxonomyTreeView(APIView):
 class TaxonomyResolveView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        operation_id="taxonomy_resolve",
+        parameters=[OpenApiParameter(name="path", type=str, required=True)],
+        responses=TaxonomyResolveResponseSerializer,
+    )
     def get(self, request, taxonomy: str):
         model = _taxonomy_model(taxonomy)
         if model is None:
@@ -105,6 +120,14 @@ class TaxonomyResolveView(APIView):
 class TagListView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        operation_id="tag_list",
+        parameters=[
+            OpenApiParameter(name="q", type=str),
+            OpenApiParameter(name="limit", type=int),
+        ],
+        responses=TagPayloadSerializer(many=True),
+    )
     def get(self, request):
         qs = Tag.objects.all().order_by("name")
 

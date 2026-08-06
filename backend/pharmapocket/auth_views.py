@@ -2,11 +2,21 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
+from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from pharmapocket.throttling import SensitiveBurstThrottle, SensitiveSustainedThrottle
+from pharmapocket.api_serializers import (
+    AccountSummarySerializer,
+    AccountUpdateSerializer,
+    CurrentUserSerializer,
+    DeleteAccountSerializer,
+    DetailResponseSerializer,
+    UserPreferencesSerializer,
+    UserPreferencesUpdateSerializer,
+)
 
 try:
     from allauth.account.models import EmailAddress
@@ -35,6 +45,7 @@ def _get_display_email(user) -> str:
 class CsrfView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(operation_id="auth_csrf", responses=DetailResponseSerializer)
     def get(self, request):
         return Response({"detail": "CSRF cookie set"})
 
@@ -42,6 +53,7 @@ class CsrfView(APIView):
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id="auth_me", responses=CurrentUserSerializer)
     def get(self, request):
         user_model = get_user_model()
         user = user_model.objects.filter(id=request.user.id).first()
@@ -66,6 +78,7 @@ class MeView(APIView):
 class AccountView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id="auth_account", responses=AccountSummarySerializer)
     def get(self, request):
         user = request.user
         return Response(
@@ -77,6 +90,11 @@ class AccountView(APIView):
             }
         )
 
+    @extend_schema(
+        operation_id="auth_account_update",
+        request=AccountUpdateSerializer,
+        responses=AccountSummarySerializer,
+    )
     def patch(self, request):
         user = request.user
         payload = request.data if isinstance(request.data, dict) else {}
@@ -124,6 +142,11 @@ class DeleteAccountView(APIView):
     # than the default per-user one.
     throttle_classes = [SensitiveBurstThrottle, SensitiveSustainedThrottle]
 
+    @extend_schema(
+        operation_id="auth_account_delete",
+        request=DeleteAccountSerializer,
+        responses={204: None},
+    )
     def post(self, request):
         user = request.user
         payload = request.data if isinstance(request.data, dict) else {}
@@ -147,6 +170,7 @@ class DeleteAccountView(APIView):
 class PreferencesView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id="auth_preferences", responses=UserPreferencesSerializer)
     def get(self, request):
         user = request.user
         return Response(
@@ -156,6 +180,11 @@ class PreferencesView(APIView):
             }
         )
 
+    @extend_schema(
+        operation_id="auth_preferences_update",
+        request=UserPreferencesUpdateSerializer,
+        responses=UserPreferencesSerializer,
+    )
     def patch(self, request):
         user = request.user
         payload = request.data if isinstance(request.data, dict) else {}

@@ -3,6 +3,7 @@
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, PolymorphicProxySerializer, extend_schema
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -10,7 +11,22 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import Deck, DeckCard, MicroArticlePage, UserDeckProgress
-from ..serializers import MicroArticleCardSerializer, image_payload
+from ..serializers import (
+    BulkAddResponseSerializer,
+    CardDecksUpdateResponseSerializer,
+    CopyDeckResponseSerializer,
+    DeckCardsResponseSerializer,
+    DeckMembershipSerializer,
+    DeckMutationResponseSerializer,
+    DeckSummarySerializer,
+    DefaultDeckResponseSerializer,
+    MicroArticleCardSerializer,
+    OfficialPackDetailSerializer,
+    OfficialPackProgressSerializer as OfficialPackProgressResponseSerializer,
+    OfficialPackSummarySerializer,
+    OkResponseSerializer,
+    image_payload,
+)
 from ..serializers.inputs import (
     CardDecksUpdateSerializer,
     DeckCardAddSerializer,
@@ -95,6 +111,23 @@ class DeckListCreateView(APIView):
                 return [AllowAny()]
         return [IsAuthenticated()]
 
+    @extend_schema(
+        operation_id="deck_list",
+        parameters=[
+            OpenApiParameter(
+                name="type",
+                type=str,
+                enum=["official", "user"],
+                description="`official` rend la liste publique des packs.",
+            )
+        ],
+        responses=PolymorphicProxySerializer(
+            component_name="DeckListItem",
+            serializers=[DeckSummarySerializer, OfficialPackSummarySerializer],
+            resource_type_field_name=None,
+            many=True,
+        ),
+    )
     def get(self, request):
         req_type = request.query_params.get("type")
         public_card_ids = MicroArticlePage.objects.live().public().values_list("id", flat=True)
@@ -194,6 +227,11 @@ class DeckListCreateView(APIView):
         serializer = DeckListSerializer(items, many=True)
         return Response(serializer.data)
 
+    @extend_schema(
+        operation_id="deck_create",
+        request=DeckCreateSerializer,
+        responses=DeckMutationResponseSerializer,
+    )
     def post(self, request):
         serializer = DeckCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -220,6 +258,7 @@ class DeckDetailView(APIView):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    @extend_schema(operation_id="deck_retrieve", responses=OfficialPackDetailSerializer)
     def get(self, request, deck_id: int):
         deck = Deck.objects.filter(id=deck_id).first()
         if deck is None:
@@ -280,6 +319,11 @@ class DeckDetailView(APIView):
 
         return Response(payload)
 
+    @extend_schema(
+        operation_id="deck_update",
+        request=DeckPatchSerializer,
+        responses=DeckMutationResponseSerializer,
+    )
     def patch(self, request, deck_id: int):
         deck = Deck.objects.filter(id=deck_id, user=request.user, type=Deck.DeckType.USER).first()
         if deck is None:
@@ -293,6 +337,7 @@ class DeckDetailView(APIView):
         deck.save(update_fields=[*serializer.validated_data, "updated_at"])
         return Response({"id": deck.id, "name": deck.name, "is_default": bool(deck.is_default), "sort_order": deck.sort_order})
 
+    @extend_schema(operation_id="deck_delete", responses={204: None})
     def delete(self, request, deck_id: int):
         deck = Deck.objects.filter(id=deck_id, user=request.user, type=Deck.DeckType.USER).first()
         if deck is None:
@@ -306,6 +351,11 @@ class DeckDetailView(APIView):
 class DeckSetDefaultView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="deck_set_default",
+        request=None,
+        responses=DefaultDeckResponseSerializer,
+    )
     def post(self, request, deck_id: int):
         deck = Deck.objects.filter(id=deck_id, user=request.user, type=Deck.DeckType.USER).first()
         if deck is None:
@@ -324,6 +374,11 @@ class DeckCardsView(APIView):
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    @extend_schema(
+        operation_id="deck_card_list",
+        parameters=[OpenApiParameter(name="search", type=str)],
+        responses=DeckCardsResponseSerializer,
+    )
     def get(self, request, deck_id: int):
         deck = Deck.objects.filter(id=deck_id).first()
         if deck is None:
@@ -381,6 +436,11 @@ class DeckCardsView(APIView):
             items.append(item)
         return Response({"count": len(items), "results": items})
 
+    @extend_schema(
+        operation_id="deck_card_create",
+        request=DeckCardAddSerializer,
+        responses=OkResponseSerializer,
+    )
     def post(self, request, deck_id: int):
         deck = Deck.objects.filter(
             id=deck_id,
@@ -410,6 +470,11 @@ class DeckCardsView(APIView):
 class DeckCardsBulkAddView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="deck_card_bulk_add",
+        request=DeckCardsBulkAddSerializer,
+        responses=BulkAddResponseSerializer,
+    )
     def post(self, request, deck_id: int):
         deck = Deck.objects.filter(
             id=deck_id,
@@ -466,6 +531,11 @@ class DeckCardsBulkAddView(APIView):
 class OfficialDeckCopyToUserView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="official_pack_copy",
+        request=None,
+        responses=CopyDeckResponseSerializer,
+    )
     def post(self, request, deck_id: int):
         pack = Deck.objects.filter(
             id=deck_id,
@@ -515,6 +585,11 @@ class OfficialDeckCopyToUserView(APIView):
 class OfficialDeckStartView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="official_pack_start",
+        request=None,
+        responses=OfficialPackProgressResponseSerializer,
+    )
     def post(self, request, deck_id: int):
         deck = Deck.objects.filter(
             id=deck_id,
@@ -545,6 +620,11 @@ class OfficialDeckStartView(APIView):
 class OfficialDeckProgressView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="official_pack_progress_update",
+        request=OfficialDeckProgressSerializer,
+        responses=OfficialPackProgressResponseSerializer,
+    )
     def post(self, request, deck_id: int):
         deck = Deck.objects.filter(
             id=deck_id,
@@ -614,6 +694,7 @@ class OfficialDeckProgressView(APIView):
 class DeckCardDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id="deck_card_delete", responses={204: None})
     def delete(self, request, deck_id: int, card_id: int):
         deck = Deck.objects.filter(id=deck_id, user=request.user, type=Deck.DeckType.USER).first()
         if deck is None:
@@ -625,6 +706,7 @@ class DeckCardDetailView(APIView):
 class CardDecksView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id="card_deck_list", responses=DeckMembershipSerializer(many=True))
     def get(self, request, card_id: int):
         if not MicroArticlePage.objects.live().public().filter(id=card_id).exists():
             return Response(status=404)
@@ -646,6 +728,11 @@ class CardDecksView(APIView):
         ]
         return Response(items)
 
+    @extend_schema(
+        operation_id="card_deck_update",
+        request=CardDecksUpdateSerializer,
+        responses=CardDecksUpdateResponseSerializer,
+    )
     def put(self, request, card_id: int):
         if not MicroArticlePage.objects.live().public().filter(id=card_id).exists():
             return Response(status=404)

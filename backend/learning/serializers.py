@@ -1,4 +1,12 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+
+from content.serializers import MicroArticleListSerializer
+
+
+@extend_schema_field(MicroArticleListSerializer)
+class SRSCardField(serializers.DictField):
+    """Conserve le dict à l'exécution tout en décrivant sa forme dans OpenAPI."""
 
 
 class LessonProgressUpdateSerializer(serializers.Serializer):
@@ -29,6 +37,22 @@ class ProgressImportSerializer(serializers.Serializer):
     lessons = serializers.DictField(child=LessonProgressUpdateSerializer())
 
 
+class ProgressImportResponseSerializer(serializers.Serializer):
+    imported = serializers.IntegerField(min_value=0)
+    updated = serializers.IntegerField(min_value=0)
+
+
+class SRSNextQuerySerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(
+        choices=["all_decks", "deck", "decks", "all_cards"],
+        required=False,
+        default="all_decks",
+    )
+    deck_id = serializers.IntegerField(min_value=1, required=False)
+    deck_ids = serializers.CharField(required=False)
+    only_due = serializers.BooleanField(required=False, default=True)
+
+
 class SRSReviewSerializer(serializers.Serializer):
     card_id = serializers.IntegerField(min_value=1)
     rating = serializers.ChoiceField(choices=["know", "medium", "again"])
@@ -43,5 +67,5 @@ class SRSStateSerializer(serializers.Serializer):
 
 
 class SRSNextSerializer(serializers.Serializer):
-    card = serializers.DictField(allow_null=True)
+    card = SRSCardField(allow_null=True)
     srs = SRSStateSerializer(allow_null=True)

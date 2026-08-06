@@ -2,12 +2,20 @@
 
 from django.db import models
 from django.db.models import Count, Exists, OuterRef, Q
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import CardType, Subject, SubjectCard
 from ..permissions import IsStaff
+from ..serializers import (
+    CountUpdateResponseSerializer,
+    SubjectCardSerializer,
+    SubjectDetailResponseSerializer,
+    SubjectListItemSerializer,
+    SubjectMutationResponseSerializer,
+)
 from ..serializers.inputs import (
     SubjectCardAddSerializer,
     SubjectCardPatchSerializer,
@@ -28,6 +36,11 @@ class SubjectListCreateView(APIView):
             return [AllowAny()]
         return super().get_permissions()
 
+    @extend_schema(
+        operation_id="subject_list",
+        parameters=[OpenApiParameter(name="q", type=str)],
+        responses=SubjectListItemSerializer(many=True),
+    )
     def get(self, request):
         qs = (
             Subject.objects.all()
@@ -60,6 +73,11 @@ class SubjectListCreateView(APIView):
         ]
         return Response(items)
 
+    @extend_schema(
+        operation_id="subject_create",
+        request=SubjectCreateSerializer,
+        responses={201: SubjectMutationResponseSerializer},
+    )
     def post(self, request):
         serializer = SubjectCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -86,6 +104,7 @@ class SubjectDetailView(APIView):
             return [AllowAny()]
         return super().get_permissions()
 
+    @extend_schema(operation_id="subject_retrieve", responses=SubjectDetailResponseSerializer)
     def get(self, request, slug: str):
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
@@ -105,6 +124,11 @@ class SubjectDetailView(APIView):
             }
         )
 
+    @extend_schema(
+        operation_id="subject_update",
+        request=SubjectPatchSerializer,
+        responses=SubjectMutationResponseSerializer,
+    )
     def patch(self, request, slug: str):
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
@@ -125,6 +149,7 @@ class SubjectDetailView(APIView):
             }
         )
 
+    @extend_schema(operation_id="subject_delete", responses={204: None})
     def delete(self, request, slug: str):
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
@@ -139,6 +164,7 @@ class SubjectCardsView(APIView):
 
     permission_classes = [IsStaff]
 
+    @extend_schema(operation_id="subject_card_list", responses=SubjectCardSerializer(many=True))
     def get(self, request, slug: str):
         """Get all cards in a subject with their labels and order."""
         subject = Subject.objects.filter(slug=slug).first()
@@ -163,6 +189,11 @@ class SubjectCardsView(APIView):
         ]
         return Response(items)
 
+    @extend_schema(
+        operation_id="subject_card_create",
+        request=SubjectCardAddSerializer,
+        responses={200: SubjectCardSerializer, 201: SubjectCardSerializer},
+    )
     def post(self, request, slug: str):
         """Add a card to a subject."""
         subject = Subject.objects.filter(slug=slug).first()
@@ -204,6 +235,11 @@ class SubjectCardDetailView(APIView):
 
     permission_classes = [IsStaff]
 
+    @extend_schema(
+        operation_id="subject_card_update",
+        request=SubjectCardPatchSerializer,
+        responses=SubjectCardSerializer,
+    )
     def patch(self, request, slug: str, card_id: int):
         """Update a card's label or order within a subject."""
         subject = Subject.objects.filter(slug=slug).first()
@@ -231,6 +267,7 @@ class SubjectCardDetailView(APIView):
             }
         )
 
+    @extend_schema(operation_id="subject_card_delete", responses={204: None})
     def delete(self, request, slug: str, card_id: int):
         """Remove a card from a subject."""
         subject = Subject.objects.filter(slug=slug).first()
@@ -250,6 +287,11 @@ class SubjectCardsReorderView(APIView):
 
     permission_classes = [IsStaff]
 
+    @extend_schema(
+        operation_id="subject_card_reorder",
+        request=SubjectCardsReorderSerializer,
+        responses=CountUpdateResponseSerializer,
+    )
     def post(self, request, slug: str):
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:

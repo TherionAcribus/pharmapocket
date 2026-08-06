@@ -11,6 +11,8 @@ le passage aux serializers ne soit pas une rupture de contrat côté client.
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.text import slugify
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from wagtail.images import get_image_model
@@ -118,6 +120,13 @@ class MicroArticleSlugField(serializers.CharField):
         return page
 
 
+class PublicMicroArticlePrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    """Construit le queryset public à la validation, jamais à l'import du module."""
+
+    def get_queryset(self):
+        return MicroArticlePage.objects.live().public()
+
+
 class FlatListField(serializers.ListField):
     """`ListField` dont les erreurs d'éléments restent plates.
 
@@ -137,6 +146,7 @@ class FlatListField(serializers.ListField):
             raise serializers.ValidationError(self.item_message) from exc
 
 
+@extend_schema_field(OpenApiTypes.BINARY)
 class WagtailImageUploadField(serializers.Field):
     """Rejoue sur un upload brut la validation du champ image de Wagtail.
 
@@ -230,9 +240,9 @@ class DeckPatchSerializer(AtLeastOneFieldMixin, serializers.Serializer):
 class DeckCardAddSerializer(serializers.Serializer):
     """POST /decks/<id>/cards/ — `validated_data["card"]` est la fiche résolue."""
 
-    card_id = serializers.PrimaryKeyRelatedField(
+    card_id = PublicMicroArticlePrimaryKeyRelatedField(
         source="card",
-        queryset=MicroArticlePage.objects.live().public(),
+        queryset=MicroArticlePage.objects.none(),
         error_messages={
             "required": "card_id is required",
             "null": "card_id is required",

@@ -27,6 +27,7 @@ from .models import (
     PathologyThumbOverride,
     MicroArticleIndexPage,
     MicroArticlePage,
+    MicroArticleReadState,
     Subject,
     SubjectCard,
     UserDeckProgress,
@@ -147,6 +148,20 @@ class PublicApiSmokeTests(APITestCase):
         self.assertEqual(resp.data["slug"], "metformine")
         self.assertIn("questions", resp.data)
         self.assertIn("published_at", resp.data)
+
+    def test_content_detail_exposes_authenticated_read_state(self):
+        user = get_user_model().objects.create_user(
+            username="detail-read-state",
+            password="pharmapocket-test-pwd",
+        )
+        page = MicroArticlePage.objects.get(slug="metformine")
+        MicroArticleReadState.objects.create(user=user, microarticle=page, is_read=True)
+        self.client.force_authenticate(user)
+
+        resp = self.client.get("/api/v1/content/microarticles/metformine/", secure=True)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIs(resp.data["is_read"], True)
 
     def test_card_payload_is_shared_by_content_and_wagtail_v2(self):
         page = MicroArticlePage.objects.get(slug="metformine")

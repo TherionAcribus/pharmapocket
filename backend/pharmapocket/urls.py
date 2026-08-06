@@ -2,6 +2,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView
 
 from wagtail.admin import urls as wagtailadmin_urls
 from wagtail.documents import urls as wagtaildocs_urls
@@ -16,6 +17,11 @@ urlpatterns = [
     path("cms/", include(wagtailadmin_urls)),
     path("documents/", include(wagtaildocs_urls)),
     path("api/v1/", include("pharmapocket.v1_urls")),
+    path(
+        "api/schema/",
+        SpectacularAPIView.as_view(urlconf="pharmapocket.schema_urls"),
+        name="api-schema",
+    ),
     path("api/v2/", api_router.urls),
     path("", include(wagtail_urls)),
 ]

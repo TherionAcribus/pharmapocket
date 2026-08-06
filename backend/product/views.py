@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from django.db.models import Q
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from content.models import CategoryMedicament, CategoryMaladies, CategoryPharmacologie, CategoryTheme, MicroArticlePage
-from content.serializers import MicroArticleCardSerializer
+from content.serializers import MicroArticleCardSerializer, TaxonomyResolveResponseSerializer
 from learning.models import LessonProgress
 
 from .pagination import FeedCursorPagination
@@ -254,6 +255,14 @@ class MicroByIdView(MicroBySlugView):
 class CategoryResolveView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        operation_id="legacy_category_resolve",
+        parameters=[
+            OpenApiParameter(name="taxonomy", type=str, required=True),
+            OpenApiParameter(name="path", type=str, required=True),
+        ],
+        responses=TaxonomyResolveResponseSerializer,
+    )
     def get(self, request):
         taxonomy = request.query_params.get("taxonomy")
         path = request.query_params.get("path")

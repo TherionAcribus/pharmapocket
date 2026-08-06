@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { fetchFeed, fetchMe, fetchMicroArticleReadStates } from "@/lib/api";
 import type { FeedQuery } from "@/lib/api";
-import type { CursorPage, MicroArticleListItem } from "@/lib/types";
+import type { MicroArticleListItem, PaginatedMicroArticleListItemList } from "@/lib/types";
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -41,7 +41,7 @@ export function FeedClient({
   basePath?: string;
   embedded?: boolean;
   showSearch?: boolean;
-  fetchPage?: (query: FeedQuery) => Promise<CursorPage<MicroArticleListItem>>;
+  fetchPage?: (query: FeedQuery) => Promise<PaginatedMicroArticleListItemList>;
 }) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -118,7 +118,7 @@ export function FeedClient({
     try {
       const page = await fetchPage({ ...feedQuery, cursor: null });
       setItems(page.results);
-      setNextCursor(cursorFromUrl(page.next));
+      setNextCursor(cursorFromUrl(page.next ?? null));
     } catch (e: unknown) {
       setError(toErrorMessage(e));
       setItems([]);
@@ -133,12 +133,12 @@ export function FeedClient({
     setLoadingMore(true);
     setError(null);
     try {
-      const page: CursorPage<MicroArticleListItem> = await fetchPage({
+      const page: PaginatedMicroArticleListItemList = await fetchPage({
         ...feedQuery,
         cursor: nextCursor,
       });
       setItems((prev) => [...prev, ...page.results]);
-      setNextCursor(cursorFromUrl(page.next));
+      setNextCursor(cursorFromUrl(page.next ?? null));
     } catch (e: unknown) {
       setError(toErrorMessage(e));
     } finally {

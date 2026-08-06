@@ -1,6 +1,7 @@
 """Serializers de sortie : forme des payloads renvoyés par l'API."""
 
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_serializer
 
 from ..html import sanitize_rich_text
 
@@ -272,6 +273,79 @@ class MicroArticleCardField(serializers.Field):
         ]
 
 
+class TagPayloadSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    slug = serializers.CharField()
+
+
+class ImagePayloadSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    url = serializers.CharField(allow_null=True)
+    credit_text = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    credit_author = serializers.CharField(allow_blank=True, required=False)
+    credit_source = serializers.CharField(allow_blank=True, required=False)
+    credit_source_url = serializers.CharField(allow_blank=True, required=False)
+    credit_license = serializers.CharField(allow_blank=True, required=False)
+    credit_license_url = serializers.CharField(allow_blank=True, required=False)
+
+
+class CategoryPayloadSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    slug = serializers.CharField()
+
+
+class SubjectSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    slug = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+
+
+class SubjectDetailCardSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    slug = serializers.CharField()
+    title = serializers.CharField()
+    label = serializers.CharField()
+    sort_order = serializers.IntegerField()
+
+
+class SubjectRecapCardSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    slug = serializers.CharField()
+    title = serializers.CharField()
+
+
+class RecapPointSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    text = serializers.CharField()
+    sort_order = serializers.IntegerField()
+    detail_card = SubjectRecapCardSerializer(allow_null=True)
+
+
+class ParentRecapCardSerializer(SubjectRecapCardSerializer):
+    pass
+
+
+class StreamBlockSerializer(serializers.Serializer):
+    type = serializers.CharField()
+    value = serializers.JSONField()
+
+
+class QuestionPayloadSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    type = serializers.CharField()
+    prompt = serializers.CharField()
+    choices = serializers.JSONField(required=False)
+    correct_answers = serializers.JSONField(required=False)
+    explanation = serializers.CharField(allow_blank=True, required=False)
+    difficulty = serializers.IntegerField(required=False)
+    references = serializers.JSONField(required=False)
+
+
+@extend_schema_serializer(component_name="MicroArticleListItem")
 class MicroArticleListSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     slug = serializers.CharField()
@@ -281,16 +355,17 @@ class MicroArticleListSerializer(serializers.Serializer):
     key_points = serializers.ListField(child=serializers.CharField())
     cover_image_url = serializers.CharField(allow_null=True)
     cover_image_credit = serializers.CharField(allow_null=True, required=False)
-    cover_image = serializers.DictField(allow_null=True, required=False)
+    cover_image = ImagePayloadSerializer(allow_null=True, required=False)
     tags = serializers.ListField(child=serializers.CharField())
-    tags_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_theme_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_maladies_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_medicament_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_pharmacologie_payload = serializers.ListField(child=serializers.DictField(), required=False)
+    tags_payload = TagPayloadSerializer(many=True, required=False)
+    categories_theme_payload = CategoryPayloadSerializer(many=True, required=False)
+    categories_maladies_payload = CategoryPayloadSerializer(many=True, required=False)
+    categories_medicament_payload = CategoryPayloadSerializer(many=True, required=False)
+    categories_pharmacologie_payload = CategoryPayloadSerializer(many=True, required=False)
     published_at = serializers.DateTimeField(allow_null=True, required=False)
-    card_type = serializers.CharField(required=False)
-    subject = serializers.DictField(allow_null=True, required=False)
+    decks_count = serializers.IntegerField(min_value=0, required=False)
+    card_type = serializers.ChoiceField(choices=["standard", "recap", "detail"], required=False)
+    subject = SubjectSummarySerializer(allow_null=True, required=False)
 
 
 class MicroArticleDetailSerializer(serializers.Serializer):
@@ -302,25 +377,26 @@ class MicroArticleDetailSerializer(serializers.Serializer):
     key_points = serializers.ListField(child=serializers.CharField())
     cover_image_url = serializers.CharField(allow_null=True)
     cover_image_credit = serializers.CharField(allow_null=True, required=False)
-    cover_image = serializers.DictField(allow_null=True, required=False)
-    links = serializers.ListField(child=serializers.DictField(), required=False)
-    see_more = serializers.ListField(child=serializers.DictField(), required=False)
+    cover_image = ImagePayloadSerializer(allow_null=True, required=False)
+    links = StreamBlockSerializer(many=True, required=False)
+    see_more = StreamBlockSerializer(many=True, required=False)
     is_saved = serializers.BooleanField(required=False)
+    is_read = serializers.BooleanField(required=False)
     tags = serializers.ListField(child=serializers.CharField())
     categories_theme = serializers.ListField(child=serializers.CharField())
     categories_maladies = serializers.ListField(child=serializers.CharField())
     categories_medicament = serializers.ListField(child=serializers.CharField())
     categories_pharmacologie = serializers.ListField(child=serializers.CharField(), required=False)
-    tags_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_theme_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_maladies_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_medicament_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    categories_pharmacologie_payload = serializers.ListField(child=serializers.DictField(), required=False)
-    questions = serializers.ListField(child=serializers.DictField(), required=False)
+    tags_payload = TagPayloadSerializer(many=True, required=False)
+    categories_theme_payload = CategoryPayloadSerializer(many=True, required=False)
+    categories_maladies_payload = CategoryPayloadSerializer(many=True, required=False)
+    categories_medicament_payload = CategoryPayloadSerializer(many=True, required=False)
+    categories_pharmacologie_payload = CategoryPayloadSerializer(many=True, required=False)
+    questions = QuestionPayloadSerializer(many=True, required=False)
     published_at = serializers.DateTimeField(allow_null=True, required=False)
-    card_type = serializers.CharField(required=False)
-    subject = serializers.DictField(allow_null=True, required=False)
-    detail_cards = serializers.ListField(child=serializers.DictField(), required=False)
-    recap_card = serializers.DictField(allow_null=True, required=False)
-    recap_points = serializers.ListField(child=serializers.DictField(), required=False)
-    parent_recap_cards = serializers.ListField(child=serializers.DictField(), required=False)
+    card_type = serializers.ChoiceField(choices=["standard", "recap", "detail"], required=False)
+    subject = SubjectSummarySerializer(allow_null=True, required=False)
+    detail_cards = SubjectDetailCardSerializer(many=True, required=False)
+    recap_card = SubjectRecapCardSerializer(allow_null=True, required=False)
+    recap_points = RecapPointSerializer(many=True, required=False)
+    parent_recap_cards = ParentRecapCardSerializer(many=True, required=False)

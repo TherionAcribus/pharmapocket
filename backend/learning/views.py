@@ -5,6 +5,7 @@ from typing import Literal
 
 from django.db import transaction
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,6 +19,8 @@ from .serializers import (
     LessonProgressSerializer,
     LessonProgressUpdateSerializer,
     ProgressImportSerializer,
+    ProgressImportResponseSerializer,
+    SRSNextQuerySerializer,
     SRSNextSerializer,
     SRSReviewSerializer,
 )
@@ -81,6 +84,10 @@ def _public_microarticle_by_id(microarticle_id: int, *, select_cover: bool = Fal
 class ProgressListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="learning_progress_list",
+        responses=LessonProgressSerializer(many=True),
+    )
     def get(self, request):
         rows = (
             LessonProgress.objects.filter(
@@ -111,6 +118,11 @@ class ProgressListView(APIView):
 class ProgressUpsertView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="learning_progress_update",
+        request=LessonProgressUpdateSerializer,
+        responses=LessonProgressSerializer,
+    )
     def patch(self, request, lesson_id: int):
         serializer = LessonProgressUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -149,6 +161,11 @@ class ProgressUpsertView(APIView):
 class ProgressImportView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="learning_progress_import",
+        request=ProgressImportSerializer,
+        responses=ProgressImportResponseSerializer,
+    )
     def post(self, request):
         serializer = ProgressImportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -224,6 +241,11 @@ def _parse_bool(value: str | None, *, default: bool) -> bool:
 class SRSNextView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="learning_srs_next",
+        parameters=[SRSNextQuerySerializer],
+        responses=SRSNextSerializer,
+    )
     def get(self, request):
         scope = request.query_params.get("scope")
         deck_id = _parse_int(request.query_params.get("deck_id"))
@@ -343,6 +365,11 @@ class SRSNextView(APIView):
 class SRSReviewView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="learning_srs_review",
+        request=SRSReviewSerializer,
+        responses=SRSNextSerializer,
+    )
     def post(self, request):
         serializer = SRSReviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
