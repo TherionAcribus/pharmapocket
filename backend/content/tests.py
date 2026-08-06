@@ -17,6 +17,7 @@ from wagtail.images import get_image_model
 from wagtail.models import Page, Site
 
 from .models import (
+    CardType,
     CategoryMedicament,
     CategoryPharmacologie,
     Deck,
@@ -24,6 +25,8 @@ from .models import (
     PathologyThumbOverride,
     MicroArticleIndexPage,
     MicroArticlePage,
+    Subject,
+    SubjectCard,
 )
 
 
@@ -344,3 +347,74 @@ class DeckCardQueryCountTests(APITestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["count"], 1)
         self.assertEqual(sorted(resp.data["results"][0]["tags"]), ["tag-a-1", "tag-b-1"])
+
+
+class SubjectListQueryCountTests(APITestCase):
+    """La liste des sujets doit annoter cards_count / has_recap au lieu de compter par sujet."""
+
+    def setUp(self):
+        super().setUp()
+        root = Page.get_first_root_node()
+        if not Site.objects.exists():
+            Site.objects.create(hostname="localhost", root_page=root, is_default_site=True)
+
+        self.index = MicroArticleIndexPage(title="Micro subjects", slug="micro-subjects")
+        root.add_child(instance=self.index)
+        self.index.save_revision().publish()
+
+        self.subject_count = 0
+
+    def _add_subjects(self, count: int):
+        for _ in range(count):
+            self.subject_count += 1
+            n = self.subject_count
+            subject = Subject.objects.create(name=f"Sujet {n}", slug=f"sujet-{n}")
+            for card_type in (CardType.RECAP, CardType.DETAIL):
+                page = MicroArticlePage(
+                    title=f"Carte {n} {card_type}",
+                    slug=f"carte-sujet-{n}-{card_type}",
+                    answer_express=f"Réponse {n}.",
+                    card_type=card_type,
+                )
+                self.index.add_child(instance=page)
+                page.save_revision().publish()
+                SubjectCard.objects.create(subject=subject, microarticle=page)
+
+    def _query_count(self) -> int:
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get("/api/v1/content/subjects/", secure=True)
+        self.assertEqual(resp.status_code, 200)
+        return len(ctx)
+
+    def test_subject_list_query_count_is_constant(self):
+        self._add_subjects(2)
+        with_two = self._query_count()
+        self._add_subjects(4)
+        with_six = self._query_count()
+        self.assertEqual(
+            with_two,
+            with_six,
+            f"subjects/ : {with_two} requêtes pour 2 sujets vs {with_six} pour 6 → N+1",
+        )
+
+    def test_annotations_match_previous_values(self):
+        self._add_subjects(1)
+        subject_without_recap = Subject.objects.create(name="Sans récap", slug="sans-recap")
+        page = MicroArticlePage(
+            title="Détail seul",
+            slug="detail-seul",
+            answer_express="Réponse.",
+            card_type=CardType.DETAIL,
+        )
+        self.index.add_child(instance=page)
+        page.save_revision().publish()
+        SubjectCard.objects.create(subject=subject_without_recap, microarticle=page)
+
+        resp = self.client.get("/api/v1/content/subjects/", secure=True)
+        self.assertEqual(resp.status_code, 200)
+
+        by_slug = {item["slug"]: item for item in resp.data}
+        self.assertEqual(by_slug["sujet-1"]["cards_count"], 2)
+        self.assertTrue(by_slug["sujet-1"]["has_recap"])
+        self.assertEqual(by_slug["sans-recap"]["cards_count"], 1)
+        self.assertFalse(by_slug["sans-recap"]["has_recap"])

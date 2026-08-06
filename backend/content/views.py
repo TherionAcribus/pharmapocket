@@ -3,7 +3,7 @@ import logging
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import serializers
@@ -2235,7 +2235,19 @@ class SubjectListCreateView(APIView):
         return [IsAuthenticated()]
 
     def get(self, request):
-        qs = Subject.objects.all().order_by("name")
+        qs = (
+            Subject.objects.all()
+            .annotate(
+                cards_count=Count("subject_cards", distinct=True),
+                has_recap=Exists(
+                    SubjectCard.objects.filter(
+                        subject=OuterRef("pk"),
+                        microarticle__card_type=CardType.RECAP,
+                    )
+                ),
+            )
+            .order_by("name")
+        )
 
         q = request.query_params.get("q")
         if q:
@@ -2247,10 +2259,8 @@ class SubjectListCreateView(APIView):
                 "name": s.name,
                 "slug": s.slug,
                 "description": s.description,
-                "cards_count": s.subject_cards.count(),
-                "has_recap": s.subject_cards.filter(
-                    microarticle__card_type=CardType.RECAP
-                ).exists(),
+                "cards_count": s.cards_count,
+                "has_recap": s.has_recap,
             }
             for s in qs[:100]
         ]
