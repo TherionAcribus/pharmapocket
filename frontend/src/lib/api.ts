@@ -100,15 +100,39 @@ function formatRetryDelay(seconds: number): string {
   return minutes === 1 ? "une minute" : `${minutes} minutes`;
 }
 
-async function apiError(res: Response, path: string): Promise<Error> {
+/**
+ * Erreur HTTP renvoyée par l'API.
+ *
+ * `status` et `body` permettent aux pages de brancher proprement (401, 403,
+ * 404…) au lieu de fouiller le texte du message.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+  readonly path: string;
+
+  constructor(message: string, init: { status: number; body: unknown; path: string }) {
+    super(message);
+    this.name = "ApiError";
+    this.status = init.status;
+    this.body = init.body;
+    this.path = init.path;
+  }
+}
+
+export function isApiError(e: unknown): e is ApiError {
+  return e instanceof ApiError;
+}
+
+async function buildApiError(res: Response, path: string): Promise<ApiError> {
   const contentType = res.headers.get("content-type") ?? "";
   const raw = await res.text();
-  let parsed: unknown = raw;
+  let body: unknown = raw;
   if (contentType.includes("application/json")) {
     try {
-      parsed = JSON.parse(raw);
+      body = JSON.parse(raw);
     } catch {
-      parsed = raw;
+      body = raw;
     }
   }
 
@@ -120,33 +144,34 @@ async function apiError(res: Response, path: string): Promise<Error> {
       Number.isFinite(retryAfter) && retryAfter > 0
         ? `Réessayez dans ${formatRetryDelay(retryAfter)}.`
         : "Réessayez dans quelques instants.";
-    return new Error(`Trop de tentatives. ${delay}`);
+    return new ApiError(`Trop de tentatives. ${delay}`, { status: res.status, body, path });
   }
 
-  return new Error(
-    `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(parsed)}`
+  return new ApiError(
+    `API ${res.status} on ${path} (content-type: ${contentType || "unknown"}): ${JSON.stringify(body)}`,
+    { status: res.status, body, path }
   );
 }
 
-async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await apiFetch(path, init);
-
+/**
+ * Point de passage unique des réponses : lève une `ApiError` si le statut n'est
+ * pas 2xx, et décode le JSON sinon (204 -> `undefined`).
+ */
+async function handleResponse<T>(res: Response, path: string): Promise<T> {
   if (!res.ok) {
-    throw await apiError(res, path);
-  }
-
-  return (await res.json()) as T;
-}
-
-async function apiJson<T>(path: string, init: RequestInit): Promise<T> {
-  const res = await apiFetch(path, init);
-
-  if (!res.ok) {
-    throw await apiError(res, path);
+    throw await buildApiError(res, path);
   }
 
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
+  return handleResponse<T>(await apiFetch(path, init), path);
+}
+
+async function apiJson<T>(path: string, init: RequestInit): Promise<T> {
+  return handleResponse<T>(await apiFetch(path, init), path);
 }
 
 async function apiPostOkOr401(path: string, payload: unknown): Promise<void> {
@@ -158,11 +183,13 @@ async function apiPostOkOr401(path: string, payload: unknown): Promise<void> {
     body: JSON.stringify(payload),
   });
 
+  // 401 est attendu ici : l'API renvoie ce statut quand l'utilisateur n'est pas
+  // (encore) authentifié, ce qui n'est pas une erreur pour ces flux.
   if (res.status === 200 || res.status === 401) {
     return;
   }
 
-  throw await apiError(res, path);
+  throw await buildApiError(res, path);
 }
 
 export type FeedQuery = {
@@ -788,16 +815,11 @@ export async function adminUploadImage(input: {
   fd.append("file", input.file);
   if (input.title) fd.append("title", input.title);
 
-  const res = await apiFetch("/api/v1/content/admin/images/upload/", {
-    method: "POST",
-    body: fd,
-  });
-
-  if (!res.ok) {
-    throw await apiError(res, "/api/v1/content/admin/images/upload/");
-  }
-
-  return (await res.json()) as { id: number; url: string | null; title: string };
+  // FormData : pas de Content-Type explicite, le navigateur pose la boundary.
+  return apiJson<{ id: number; url: string | null; title: string }>(
+    "/api/v1/content/admin/images/upload/",
+    { method: "POST", body: fd }
+  );
 }
 
 export async function adminPackBulkAdd(

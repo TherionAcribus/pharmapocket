@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import ReaderClient from "./ReaderClient";
-import { fetchMicroArticle } from "@/lib/api";
+import { fetchMicroArticle, isApiError } from "@/lib/api";
 
 export default async function MicroArticlePage({
   params,
@@ -17,10 +17,12 @@ export default async function MicroArticlePage({
     data = await fetchMicroArticle(slug);
   } catch (e) {
     console.error("fetchMicroArticle failed", { slug, error: e });
-    if (process.env.NODE_ENV !== "production") {
-      throw e;
+    // Seul un 404 backend signifie « cette fiche n'existe pas » : une panne ou
+    // un 500 doit remonter en erreur, pas se déguiser en page inexistante.
+    if (isApiError(e) && e.status === 404) {
+      notFound();
     }
-    notFound();
+    throw e;
   }
 
   return <ReaderClient data={data} />;

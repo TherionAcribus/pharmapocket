@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authLogin, authResendVerifyEmail, ensureCsrf, fetchMe } from "@/lib/api";
+import { authLogin, authResendVerifyEmail, ensureCsrf, fetchMe, isApiError } from "@/lib/api";
 
 function getBackendBaseUrlClient(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -55,27 +55,14 @@ function toErrorMessage(e: unknown): string {
 function parseAllauthAuthenticationResponseFromError(e: unknown):
   | { flows: Array<{ id: string; is_pending?: boolean }> }
   | null {
-  if (!(e instanceof Error)) return null;
+  // allauth répond 401 avec les « flows » restants (dont la vérification email)
+  // dans le corps JSON de la réponse.
+  if (!isApiError(e) || e.status !== 401) return null;
 
-  // Error format from apiJson():
-  // "API 401 on /path (content-type: application/json): { ...json... }"
-  // We need the JSON at the end, but the message contains earlier colons.
-  const marker = "): ";
-  const idx = e.message.lastIndexOf(marker);
-  if (idx === -1) return null;
-  const jsonPart = e.message.slice(idx + marker.length).trim();
-  if (!jsonPart.startsWith("{")) return null;
-
-  try {
-    const parsed = JSON.parse(jsonPart) as {
-      data?: { flows?: Array<{ id: string; is_pending?: boolean }> };
-    };
-    const flows = parsed?.data?.flows;
-    if (!Array.isArray(flows)) return null;
-    return { flows };
-  } catch {
-    return null;
-  }
+  const body = e.body as { data?: { flows?: Array<{ id: string; is_pending?: boolean }> } } | null;
+  const flows = body?.data?.flows;
+  if (!Array.isArray(flows)) return null;
+  return { flows };
 }
 
 function landingTargetToPath(target: string | null | undefined): string {
