@@ -577,47 +577,6 @@ export default function ReaderClient({
   );
 
   React.useEffect(() => {
-    const seeMoreTypes = Array.isArray(data.see_more)
-      ? (data.see_more as StreamBlock[])
-          .map((b) => (b && typeof b === "object" ? b.type : "unknown"))
-          .filter(Boolean)
-      : [];
-
-    console.debug("[ReaderClient] micro payload", {
-      slug: data.slug,
-      title: data.title,
-      seeMoreTypes,
-      detailCount: detailBlocks.length,
-      referenceCount: referenceBlocks.length,
-      extraCount: extraBlocks.length,
-      linksCount: data.links?.length ?? 0,
-      hasLongContent,
-      hasSources,
-      hasExtra,
-      hasDetails,
-    });
-
-    if (data.see_more) {
-      console.debug("[ReaderClient] see_more raw", data.see_more);
-    }
-    if (data.links) {
-      console.debug("[ReaderClient] links raw", data.links);
-    }
-  }, [
-    data.slug,
-    data.title,
-    data.see_more,
-    data.links,
-    detailBlocks.length,
-    referenceBlocks.length,
-    extraBlocks.length,
-    hasLongContent,
-    hasSources,
-    hasExtra,
-    hasDetails,
-  ]);
-
-  React.useEffect(() => {
     const el = longPreviewRef.current;
     if (!el) return;
 
