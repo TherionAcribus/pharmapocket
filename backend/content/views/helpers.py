@@ -6,6 +6,7 @@ d'accès et filtres taxonomiques réutilisés par plusieurs modules du package.
 
 from datetime import date, datetime
 
+from django.db import IntegrityError, transaction
 from wagtail.documents.models import Document
 from wagtail.images import get_image_model
 
@@ -38,25 +39,46 @@ def _stream_items(field) -> list:
 
 
 def _get_or_create_default_deck(user) -> Deck:
-    deck = Deck.objects.filter(user=user, type=Deck.DeckType.USER, is_default=True).first()
+    default_lookup = {
+        "user": user,
+        "type": Deck.DeckType.USER,
+        "is_default": True,
+    }
+    deck = Deck.objects.filter(**default_lookup).first()
     if deck is not None:
         return deck
 
-    Deck.objects.filter(user=user, type=Deck.DeckType.USER, is_default=True).update(is_default=False)
     existing = Deck.objects.filter(user=user, type=Deck.DeckType.USER, name="Mes cartes").first()
     if existing is not None:
-        existing.is_default = True
-        existing.sort_order = 0
-        existing.save(update_fields=["is_default", "sort_order", "updated_at"])
-        return existing
+        try:
+            with transaction.atomic():
+                existing.is_default = True
+                existing.sort_order = 0
+                existing.save(update_fields=["is_default", "sort_order", "updated_at"])
+        except IntegrityError:
+            # Une requête concurrente a pu créer/promouvoir le deck par défaut.
+            deck = Deck.objects.filter(**default_lookup).first()
+            if deck is not None:
+                return deck
+            raise
+        else:
+            return existing
 
-    return Deck.objects.create(
-        user=user,
-        type=Deck.DeckType.USER,
-        name="Mes cartes",
-        is_default=True,
-        sort_order=0,
-    )
+    try:
+        with transaction.atomic():
+            return Deck.objects.create(
+                user=user,
+                type=Deck.DeckType.USER,
+                name="Mes cartes",
+                is_default=True,
+                sort_order=0,
+            )
+    except IntegrityError:
+        # La contrainte d'unicité départage les créations concurrentes.
+        deck = Deck.objects.filter(**default_lookup).first()
+        if deck is not None:
+            return deck
+        raise
 
 
 def _subject_payload(subject: Subject | None) -> dict | None:

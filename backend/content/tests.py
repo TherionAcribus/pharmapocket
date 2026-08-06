@@ -8,6 +8,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
+from django.db.models.query import QuerySet
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils.text import slugify
@@ -33,6 +34,7 @@ from .models import (
 from .permissions import IsStaff
 from .serializers import MicroArticleCardSerializer
 from .views import (
+    _get_or_create_default_deck,
     AdminImageUploadView,
     AdminMicroArticleSearchView,
     AdminPackBulkAddView,
@@ -48,6 +50,41 @@ from .views import (
     SubjectDetailView,
     SubjectListCreateView,
 )
+
+
+class DefaultDeckConcurrencyTests(APITestCase):
+    def test_creation_collision_returns_the_concurrent_default_deck(self):
+        user = get_user_model().objects.create_user(
+            username="default-deck-race",
+            email="default-deck-race@example.com",
+            password="pharmapocket-test-pwd",
+        )
+        concurrent_deck = Deck.objects.create(
+            user=user,
+            type=Deck.DeckType.USER,
+            name="Deck concurrent",
+            is_default=True,
+            sort_order=0,
+        )
+
+        original_first = QuerySet.first
+        first_deck_read = True
+
+        def hide_default_on_initial_read(queryset):
+            nonlocal first_deck_read
+            if first_deck_read and queryset.model is Deck:
+                first_deck_read = False
+                return None
+            return original_first(queryset)
+
+        with mock.patch.object(QuerySet, "first", autospec=True, side_effect=hide_default_on_initial_read):
+            deck = _get_or_create_default_deck(user)
+
+        self.assertEqual(deck.pk, concurrent_deck.pk)
+        self.assertEqual(
+            Deck.objects.filter(user=user, type=Deck.DeckType.USER, is_default=True).count(),
+            1,
+        )
 
 
 class PublicApiSmokeTests(APITestCase):
