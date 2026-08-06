@@ -1,6 +1,7 @@
 from datetime import date, datetime
 import logging
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -16,6 +17,7 @@ from rest_framework.views import APIView
 
 from wagtail.documents.models import Document
 from wagtail.images import get_image_model
+from wagtail.images.fields import WagtailImageField
 from wagtail.models import Collection
 
 from .html import sanitize_rich_text
@@ -1906,6 +1908,15 @@ class AdminImageUploadView(APIView):
         upload = request.FILES.get("file") or request.FILES.get("image")
         if upload is None:
             raise DRFValidationError({"file": "file is required"})
+
+        # This view bypasses the Wagtail form, so replay its validation here:
+        # WagtailImageField checks the extension against WAGTAILIMAGES_EXTENSIONS,
+        # that the real file format matches that extension, the file size
+        # (WAGTAILIMAGES_MAX_UPLOAD_SIZE) and the pixel count.
+        try:
+            upload = WagtailImageField(required=True).clean(upload)
+        except DjangoValidationError as exc:
+            raise DRFValidationError({"file": list(exc.messages)}) from exc
 
         title = request.data.get("title") if hasattr(request, "data") else None
         if not isinstance(title, str) or not title.strip():

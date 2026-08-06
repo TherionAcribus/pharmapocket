@@ -172,6 +172,15 @@ WAGTAIL_SITE_NAME = "PharmaPocket"
 WAGTAILIMAGES_IMAGE_MODEL = "content.CustomImage"
 WAGTAILIMAGES_RENDITION_MODEL = "content.CustomRendition"
 
+# Upload limits enforced by the Wagtail admin and by content.views.AdminImageUploadView.
+# SVG is deliberately absent: an unsanitised SVG can carry JavaScript.
+WAGTAILIMAGES_EXTENSIONS = ["avif", "gif", "jpg", "jpeg", "png", "webp"]
+WAGTAILIMAGES_MAX_UPLOAD_SIZE = int(
+    os.environ.get("DJANGO_MAX_IMAGE_UPLOAD_SIZE", str(10 * 1024 * 1024))
+)
+if WAGTAILIMAGES_MAX_UPLOAD_SIZE <= 0:
+    raise ImproperlyConfigured("DJANGO_MAX_IMAGE_UPLOAD_SIZE must be a positive number of bytes")
+
 WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "http://localhost:8000")
 
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@localhost")

@@ -117,6 +117,16 @@ Trois points à vérifier au déploiement :
   chaque worker gunicorn multiplie de fait la limite par le nombre de workers.
   Le backend Redis est fourni par Django mais nécessite le client : `pip install redis`.
 
+### Upload d'images
+
+`POST /api/v1/content/admin/images/upload/` *(staff)* crée une image Wagtail à partir d'un
+multipart (`file` ou `image`, `title` optionnel). La vue n'utilise pas le formulaire Wagtail :
+elle rejoue ses validations via `WagtailImageField`, donc un fichier refusé renvoie `400`
+avec le détail sous la clé `file`. Sont vérifiés l'extension (`WAGTAILIMAGES_EXTENSIONS`,
+SVG exclu volontairement), la correspondance entre extension et format réel du fichier, la
+taille (`DJANGO_MAX_IMAGE_UPLOAD_SIZE`, 10 Mo par défaut) et le nombre de pixels
+(`WAGTAILIMAGES_MAX_IMAGE_PIXELS`, défaut Wagtail de 128 Mpx, contre les *decompression bombs*).
+
 ### Taxonomies & tags
 
 Taxonomies disponibles : `theme`, `maladies`, `medicament`, `pharmacologie`

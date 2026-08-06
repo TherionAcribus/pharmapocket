@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
+from io import BytesIO
+
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.utils.text import slugify
+from PIL import Image
 from rest_framework.test import APITestCase
 from taggit.models import Tag
+from wagtail.images import get_image_model
 from wagtail.models import Page, Site
 
 from .models import (
@@ -168,3 +177,87 @@ class PublicApiSmokeTests(APITestCase):
         self.assertEqual(listing.status_code, 200)
         listed_deck = next(item for item in listing.data if item["id"] == deck.id)
         self.assertEqual(listed_deck["cards_count"], 0)
+
+
+def _png_bytes(size: tuple[int, int] = (8, 8)) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", size, (255, 0, 0)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+class AdminImageUploadTests(APITestCase):
+    """The admin upload API skips the Wagtail form, so it must validate on its own."""
+
+    URL = "/api/v1/content/admin/images/upload/"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._media_root = tempfile.mkdtemp()
+        cls._media_override = override_settings(MEDIA_ROOT=cls._media_root)
+        cls._media_override.enable()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._media_override.disable()
+        shutil.rmtree(cls._media_root, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        super().setUp()
+        self.staff = get_user_model().objects.create_user(
+            username="staff-upload",
+            email="staff-upload@example.com",
+            password="pharmapocket-test-pwd",
+            is_staff=True,
+        )
+        self.client.force_authenticate(user=self.staff)
+
+    def test_valid_png_is_accepted(self):
+        upload = SimpleUploadedFile("cover.png", _png_bytes(), content_type="image/png")
+        resp = self.client.post(self.URL, {"file": upload}, format="multipart", secure=True)
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(get_image_model().objects.count(), 1)
+
+    def test_non_image_disguised_as_png_is_rejected(self):
+        upload = SimpleUploadedFile(
+            "payload.png",
+            b"MZ\x90\x00 not an image at all",
+            content_type="image/png",
+        )
+        resp = self.client.post(self.URL, {"file": upload}, format="multipart", secure=True)
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("file", resp.data)
+        self.assertEqual(get_image_model().objects.count(), 0)
+
+    def test_disallowed_extension_is_rejected(self):
+        # Real PNG bytes, but an extension outside WAGTAILIMAGES_EXTENSIONS (SVG = stored XSS).
+        upload = SimpleUploadedFile("cover.svg", _png_bytes(), content_type="image/svg+xml")
+        resp = self.client.post(self.URL, {"file": upload}, format="multipart", secure=True)
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(get_image_model().objects.count(), 0)
+
+    @override_settings(WAGTAILIMAGES_MAX_UPLOAD_SIZE=256)
+    def test_oversized_image_is_rejected(self):
+        upload = SimpleUploadedFile("big.png", _png_bytes((512, 512)), content_type="image/png")
+        resp = self.client.post(self.URL, {"file": upload}, format="multipart", secure=True)
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(get_image_model().objects.count(), 0)
+
+    def test_upload_requires_staff(self):
+        self.client.force_authenticate(
+            user=get_user_model().objects.create_user(
+                username="member-upload",
+                email="member-upload@example.com",
+                password="pharmapocket-test-pwd",
+            )
+        )
+        upload = SimpleUploadedFile("cover.png", _png_bytes(), content_type="image/png")
+        resp = self.client.post(self.URL, {"file": upload}, format="multipart", secure=True)
+
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(get_image_model().objects.count(), 0)
