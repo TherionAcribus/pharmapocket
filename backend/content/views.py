@@ -324,7 +324,9 @@ def _microarticle_list_item(p: MicroArticlePage) -> dict:
         "cover_image_url": _cover_url(p),
         "cover_image_credit": _cover_credit(p),
         "cover_image": _cover_payload(p),
-        "tags": list(p.tags.values_list("name", flat=True)),
+        # .all() (et non .values_list) pour profiter du prefetch_related("...__tags")
+        # posé par les vues qui appellent cette fonction en boucle.
+        "tags": [t.name for t in p.tags.all()],
         "published_at": p.first_published_at,
     }
 
@@ -676,7 +678,7 @@ class MicroArticleListView(ListAPIView):
                 "cover_image_url": _cover_url(p),
                 "cover_image_credit": _cover_credit(p),
                 "cover_image": _cover_payload(p),
-                "tags": list(p.tags.values_list("name", flat=True)),
+                "tags": [t.name for t in p.tags.all()],
                 "tags_payload": _tag_payload(p),
                 "categories_theme_payload": _cat_payload(p.categories_theme),
                 "categories_maladies_payload": _cat_payload(p.categories_maladies),
@@ -818,6 +820,7 @@ class SavedMicroArticleListView(APIView):
                 microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
             )
             .select_related("microarticle", "microarticle__cover_image")
+            .prefetch_related("microarticle__tags")
             .order_by("-added_at")
         )
 
@@ -1050,10 +1053,14 @@ class DeckDetailView(APIView):
             if deck.user_id != request.user.id:
                 return Response(status=404)
 
-        cards_qs = DeckCard.objects.filter(
-            deck=deck,
-            microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
-        ).select_related("microarticle", "microarticle__cover_image")
+        cards_qs = (
+            DeckCard.objects.filter(
+                deck=deck,
+                microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
+            )
+            .select_related("microarticle", "microarticle__cover_image")
+            .prefetch_related("microarticle__tags")
+        )
         if deck.type == Deck.DeckType.OFFICIAL or getattr(deck, "source_pack_id", None):
             cards_qs = cards_qs.order_by("sort_order", "id")
         else:
@@ -1192,6 +1199,7 @@ class DeckCardsView(APIView):
                 microarticle_id__in=MicroArticlePage.objects.live().public().values_list("id", flat=True),
             )
             .select_related("microarticle", "microarticle__cover_image")
+            .prefetch_related("microarticle__tags")
         )
         if deck.type == Deck.DeckType.OFFICIAL or getattr(deck, "source_pack_id", None):
             qs = qs.order_by("sort_order", "id")
@@ -1638,6 +1646,7 @@ class AdminPackDetailView(APIView):
         cards_qs = (
             DeckCard.objects.filter(deck_id=deck.id)
             .select_related("microarticle", "microarticle__cover_image")
+            .prefetch_related("microarticle__tags")
             .order_by("sort_order", "id")
         )
         cards = []

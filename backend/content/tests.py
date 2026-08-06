@@ -6,7 +6,9 @@ from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils.text import slugify
 from PIL import Image
 from rest_framework.test import APITestCase
@@ -232,6 +234,7 @@ class AdminImageUploadTests(APITestCase):
         self.assertIn("file", resp.data)
         self.assertEqual(get_image_model().objects.count(), 0)
 
+
     def test_disallowed_extension_is_rejected(self):
         # Real PNG bytes, but an extension outside WAGTAILIMAGES_EXTENSIONS (SVG = stored XSS).
         upload = SimpleUploadedFile("cover.svg", _png_bytes(), content_type="image/svg+xml")
@@ -261,3 +264,83 @@ class AdminImageUploadTests(APITestCase):
 
         self.assertEqual(resp.status_code, 403)
         self.assertEqual(get_image_model().objects.count(), 0)
+
+
+class DeckCardQueryCountTests(APITestCase):
+    """Les vues qui sérialisent des DeckCard en boucle ne doivent pas faire de N+1 sur les tags."""
+
+    def setUp(self):
+        super().setUp()
+        root = Page.get_first_root_node()
+        if not Site.objects.exists():
+            Site.objects.create(hostname="localhost", root_page=root, is_default_site=True)
+
+        self.index = MicroArticleIndexPage(title="Micro queries", slug="micro-queries")
+        root.add_child(instance=self.index)
+        self.index.save_revision().publish()
+
+        self.user = get_user_model().objects.create_user(
+            username="deck-queries",
+            email="deck-queries@example.com",
+            password="pharmapocket-test-pwd",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.deck = Deck.objects.create(
+            user=self.user,
+            type=Deck.DeckType.USER,
+            name="Mes cartes",
+            is_default=True,
+            sort_order=0,
+        )
+        self.card_count = 0
+
+    def _add_cards(self, count: int):
+        for _ in range(count):
+            self.card_count += 1
+            n = self.card_count
+            page = MicroArticlePage(
+                title=f"Carte {n}",
+                slug=f"carte-{n}",
+                answer_express=f"Réponse {n}.",
+            )
+            self.index.add_child(instance=page)
+            # Plusieurs tags par carte : un N+1 sur les tags coûterait 1 requête par carte.
+            page.tags.add(f"tag-a-{n}", f"tag-b-{n}")
+            page.save()
+            page.save_revision().publish()
+            DeckCard.objects.create(deck=self.deck, microarticle=page, sort_order=n)
+
+    def _query_count(self, url: str) -> int:
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get(url, secure=True)
+        self.assertEqual(resp.status_code, 200)
+        return len(ctx)
+
+    def _assert_constant_query_count(self, url: str):
+        self._add_cards(2)
+        with_two = self._query_count(url)
+        self._add_cards(4)
+        with_six = self._query_count(url)
+        self.assertEqual(
+            with_two,
+            with_six,
+            f"{url} : {with_two} requêtes pour 2 cartes vs {with_six} pour 6 → N+1",
+        )
+
+    def test_deck_cards_query_count_is_constant(self):
+        self._assert_constant_query_count(f"/api/v1/content/decks/{self.deck.id}/cards/")
+
+    def test_deck_detail_query_count_is_constant(self):
+        self._assert_constant_query_count(f"/api/v1/content/decks/{self.deck.id}/")
+
+    def test_saved_list_query_count_is_constant(self):
+        self._assert_constant_query_count("/api/v1/content/saved/")
+
+    def test_tags_are_still_serialized(self):
+        self._add_cards(1)
+        resp = self.client.get(f"/api/v1/content/decks/{self.deck.id}/cards/", secure=True)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(sorted(resp.data["results"][0]["tags"]), ["tag-a-1", "tag-b-1"])
