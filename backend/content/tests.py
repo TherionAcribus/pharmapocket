@@ -30,7 +30,24 @@ from .models import (
     SubjectCard,
     UserDeckProgress,
 )
+from .permissions import IsStaff
 from .serializers import MicroArticleCardSerializer
+from .views import (
+    AdminImageUploadView,
+    AdminMicroArticleSearchView,
+    AdminPackBulkAddView,
+    AdminPackDetailView,
+    AdminPackListCreateView,
+    AdminPackRemoveCardView,
+    AdminPackReorderCardsView,
+    AdminThumbOverrideDetailView,
+    AdminThumbOverrideListCreateView,
+    SubjectCardDetailView,
+    SubjectCardsReorderView,
+    SubjectCardsView,
+    SubjectDetailView,
+    SubjectListCreateView,
+)
 
 
 class PublicApiSmokeTests(APITestCase):
@@ -226,6 +243,68 @@ class PublicApiSmokeTests(APITestCase):
         self.assertEqual(listing.status_code, 200)
         listed_deck = next(item for item in listing.data if item["id"] == deck.id)
         self.assertEqual(listed_deck["cards_count"], 0)
+
+
+class StaffPermissionTests(APITestCase):
+    ADMIN_VIEWS = (
+        AdminImageUploadView,
+        AdminMicroArticleSearchView,
+        AdminPackBulkAddView,
+        AdminPackDetailView,
+        AdminPackListCreateView,
+        AdminPackRemoveCardView,
+        AdminPackReorderCardsView,
+        AdminThumbOverrideDetailView,
+        AdminThumbOverrideListCreateView,
+        SubjectCardDetailView,
+        SubjectCardsReorderView,
+        SubjectCardsView,
+    )
+
+    def test_admin_views_use_the_shared_staff_permission(self):
+        for view in self.ADMIN_VIEWS:
+            with self.subTest(view=view.__name__):
+                self.assertEqual(view.permission_classes, [IsStaff])
+
+    def test_subject_writes_use_staff_permission_but_reads_remain_public(self):
+        subject = Subject.objects.create(name="Sujet public", slug="sujet-public")
+
+        self.assertEqual(SubjectListCreateView.permission_classes, [IsStaff])
+        self.assertEqual(SubjectDetailView.permission_classes, [IsStaff])
+        self.assertEqual(self.client.get("/api/v1/content/subjects/", secure=True).status_code, 200)
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/content/subjects/{subject.slug}/",
+                secure=True,
+            ).status_code,
+            200,
+        )
+
+        member = get_user_model().objects.create_user(
+            username="member-subjects",
+            email="member-subjects@example.com",
+            password="pharmapocket-test-pwd",
+        )
+        self.client.force_authenticate(user=member)
+
+        self.assertEqual(
+            self.client.post(
+                "/api/v1/content/subjects/",
+                {"name": "Interdit"},
+                format="json",
+                secure=True,
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.patch(
+                f"/api/v1/content/subjects/{subject.slug}/",
+                {"description": "Interdit"},
+                format="json",
+                secure=True,
+            ).status_code,
+            403,
+        )
 
 
 def _png_bytes(size: tuple[int, int] = (8, 8)) -> bytes:

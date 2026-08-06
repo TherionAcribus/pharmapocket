@@ -6,8 +6,6 @@ d'accès et filtres taxonomiques réutilisés par plusieurs modules du package.
 
 from datetime import date, datetime
 
-from rest_framework.response import Response
-
 from wagtail.documents.models import Document
 from wagtail.images import get_image_model
 
@@ -25,14 +23,6 @@ from ..models import (
     SubjectCard,
 )
 from ..serializers import image_payload
-
-
-def _require_staff(request):
-    if not getattr(request, "user", None) or not request.user.is_authenticated:
-        return Response(status=401)
-    if not getattr(request.user, "is_staff", False):
-        return Response(status=403)
-    return None
 
 
 def _stream_items(field) -> list:

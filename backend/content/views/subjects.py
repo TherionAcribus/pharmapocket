@@ -2,11 +2,12 @@
 
 from django.db import models
 from django.db.models import Count, Exists, OuterRef, Q
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import CardType, Subject, SubjectCard
+from ..permissions import IsStaff
 from ..serializers.inputs import (
     SubjectCardAddSerializer,
     SubjectCardPatchSerializer,
@@ -14,16 +15,18 @@ from ..serializers.inputs import (
     SubjectCreateSerializer,
     SubjectPatchSerializer,
 )
-from .helpers import _require_staff, _subject_detail_cards, _subject_recap_card
+from .helpers import _subject_detail_cards, _subject_recap_card
 
 
 class SubjectListCreateView(APIView):
     """List all subjects or create a new one (admin only)."""
 
+    permission_classes = [IsStaff]
+
     def get_permissions(self):
         if self.request.method == "GET":
             return [AllowAny()]
-        return [IsAuthenticated()]
+        return super().get_permissions()
 
     def get(self, request):
         qs = (
@@ -58,10 +61,6 @@ class SubjectListCreateView(APIView):
         return Response(items)
 
     def post(self, request):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         serializer = SubjectCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -80,10 +79,12 @@ class SubjectListCreateView(APIView):
 class SubjectDetailView(APIView):
     """Get, update or delete a subject (admin only for write operations)."""
 
+    permission_classes = [IsStaff]
+
     def get_permissions(self):
         if self.request.method == "GET":
             return [AllowAny()]
-        return [IsAuthenticated()]
+        return super().get_permissions()
 
     def get(self, request, slug: str):
         subject = Subject.objects.filter(slug=slug).first()
@@ -105,10 +106,6 @@ class SubjectDetailView(APIView):
         )
 
     def patch(self, request, slug: str):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
             return Response(status=404)
@@ -129,10 +126,6 @@ class SubjectDetailView(APIView):
         )
 
     def delete(self, request, slug: str):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
             return Response(status=404)
@@ -144,14 +137,10 @@ class SubjectDetailView(APIView):
 class SubjectCardsView(APIView):
     """Manage cards within a subject (admin only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def get(self, request, slug: str):
         """Get all cards in a subject with their labels and order."""
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
             return Response(status=404)
@@ -176,10 +165,6 @@ class SubjectCardsView(APIView):
 
     def post(self, request, slug: str):
         """Add a card to a subject."""
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
             return Response(status=404)
@@ -217,14 +202,10 @@ class SubjectCardsView(APIView):
 class SubjectCardDetailView(APIView):
     """Update or remove a card from a subject (admin only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def patch(self, request, slug: str, card_id: int):
         """Update a card's label or order within a subject."""
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
             return Response(status=404)
@@ -252,10 +233,6 @@ class SubjectCardDetailView(APIView):
 
     def delete(self, request, slug: str, card_id: int):
         """Remove a card from a subject."""
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
             return Response(status=404)
@@ -271,13 +248,9 @@ class SubjectCardDetailView(APIView):
 class SubjectCardsReorderView(APIView):
     """Reorder cards within a subject (admin only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def post(self, request, slug: str):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         subject = Subject.objects.filter(slug=slug).first()
         if subject is None:
             return Response(status=404)

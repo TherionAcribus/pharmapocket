@@ -5,7 +5,6 @@ from django.db.models import Q
 from django.utils.text import slugify
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -21,6 +20,7 @@ from ..models import (
     DeckCard,
     MicroArticlePage,
 )
+from ..permissions import IsStaff
 from ..search import filter_microarticles
 from ..serializers import MicroArticleCardSerializer, image_payload
 from ..serializers.inputs import (
@@ -30,7 +30,6 @@ from ..serializers.inputs import (
     AdminPackPatchSerializer,
     AdminPackReorderSerializer,
 )
-from .helpers import _require_staff
 
 
 def _admin_pack_qs():
@@ -55,13 +54,9 @@ def _admin_pack_payload(deck: Deck) -> dict:
 
 
 class AdminPackListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def get(self, request):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         qs = _admin_pack_qs().order_by("sort_order", "id").annotate(cards_count=models.Count("deck_cards"))
         items = []
         for d in qs:
@@ -71,10 +66,6 @@ class AdminPackListCreateView(APIView):
         return Response(items)
 
     def post(self, request):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         serializer = AdminPackCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -104,13 +95,9 @@ class AdminPackListCreateView(APIView):
 
 
 class AdminPackDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def get(self, request, pack_id: int):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         deck = _admin_pack_qs().filter(id=pack_id).first()
         if deck is None:
             return Response(status=404)
@@ -137,10 +124,6 @@ class AdminPackDetailView(APIView):
         return Response(out)
 
     def patch(self, request, pack_id: int):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
             return Response(status=404)
@@ -162,10 +145,6 @@ class AdminPackDetailView(APIView):
         return Response(_admin_pack_payload(deck))
 
     def delete(self, request, pack_id: int):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
             return Response(status=404)
@@ -174,13 +153,9 @@ class AdminPackDetailView(APIView):
 
 
 class AdminMicroArticleSearchView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def get(self, request):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         def _parse_csv_ints(value: str | None) -> list[int]:
             if not value:
                 return []
@@ -324,14 +299,10 @@ class AdminMicroArticleSearchView(APIView):
 
 
 class AdminImageUploadView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         # La vue court-circuite le formulaire Wagtail : `AdminImageUploadSerializer`
         # rejoue sa validation (extension, format réel, taille, nombre de pixels).
         serializer = AdminImageUploadSerializer(data=request.data)
@@ -354,13 +325,9 @@ class AdminImageUploadView(APIView):
 
 
 class AdminPackBulkAddView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def post(self, request, pack_id: int):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
             return Response(status=404)
@@ -426,13 +393,9 @@ class AdminPackBulkAddView(APIView):
 
 
 class AdminPackRemoveCardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def post(self, request, pack_id: int, card_id: int):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
             return Response(status=404)
@@ -442,13 +405,9 @@ class AdminPackRemoveCardView(APIView):
 
 
 class AdminPackReorderCardsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaff]
 
     def post(self, request, pack_id: int):
-        denied = _require_staff(request)
-        if denied is not None:
-            return denied
-
         deck = Deck.objects.filter(id=pack_id, type=Deck.DeckType.OFFICIAL).first()
         if deck is None:
             return Response(status=404)
