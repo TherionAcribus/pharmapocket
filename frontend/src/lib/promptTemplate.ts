@@ -127,7 +127,12 @@ La lecture se fait en deux niveaux :
    prose ce que dit déjà \`answer_detail\`. Ne crée jamais un type de bloc absent de la
    liste du format.
 7. **Sources** (\`sources\`, 1 à 5, obligatoire) : uniquement celle(s) fournie(s)
-   ci-dessous. Reprends intitulé, éditeur et date tels quels.
+   ci-dessous. Reprends intitulé et éditeur tels quels.
+   **Dates** — \`publication_date\` et \`accessed_date\` s'écrivent \`AAAA-MM-JJ\`
+   (\`"2024-01-15"\`), toujours **entre guillemets**. Si la source ne donne que
+   l'année ou que le mois, écris exactement ce qu'elle donne : \`"2009"\` ou
+   \`"2018-05"\`. **N'invente jamais un jour ou un mois absent de la source** ; si
+   aucune date n'est connue, omets simplement le champ.
 8. **Questions** (\`questions\`, 0 à 3) : QCM ou vrai/faux portant sur le point
    *décisif* de la fiche. Pour un QCM, la **bonne réponse est toujours en première
    position** (l'application mélange les propositions) et les 3 distracteurs doivent
@@ -202,7 +207,7 @@ Un tableau JSON de cartes. Chaque carte :
         "url": "https://…",
         "publisher": "HAS, ANSM, éditeur…",
         "author": "",
-        "publication_date": "AAAA-MM-JJ"
+        "publication_date": "AAAA-MM-JJ (ou AAAA / AAAA-MM si la source ne donne que ça)"
       },
       "note": "citation courte ou contexte (optionnel)",
       "page": "page/chapitre (optionnel)"
@@ -275,7 +280,8 @@ réservé à ce qui est réellement structuré :
           "kind": "institutional",
           "publisher": "ANSM",
           "url": "https://ansm.sante.fr/exemple",
-          "publication_date": "2024-01-15"
+          "publication_date": "2024-01-15",
+          "accessed_date": "2024-06-02"
         }
       }
     ],
@@ -304,6 +310,8 @@ source parle d'autre chose.
 - [ ] Chaque fiche ne porte-t-elle qu'une seule idée ?
 - [ ] Les slugs de catégories existantes sont-ils copiés à l'identique ?
 - [ ] Le JSON est-il valide et sans champ inventé ?
+- [ ] Les dates sont-elles des chaînes \`AAAA-MM-JJ\`, \`AAAA-MM\` ou \`AAAA\`, sans
+      jour inventé ?
 - [ ] Les bonnes réponses des QCM sont-elles en première position ?
 
 # CATÉGORIES EXISTANTES

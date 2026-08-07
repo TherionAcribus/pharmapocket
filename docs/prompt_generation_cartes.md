@@ -102,7 +102,7 @@ rapport liste, carte par carte, ce qu'il faut corriger. Les fiches sont créées
 | `key_points` | ≤ 5 items de 90 car. |
 | `takeaway` | HTML, ~200 car. |
 | `see_more` | ≤ 3 blocs (voir ci-dessous) |
-| `sources` | **1 à 5, obligatoire** |
+| `sources` | **1 à 5, obligatoire** ; dates en `AAAA-MM-JJ`, `AAAA-MM` ou `AAAA` (voir ci-dessous) |
 | `links` | ≤ 5, `title` + `url` http(s) obligatoires |
 | `categories_theme` | **≥ 1 obligatoire** ; `categories_maladies`, `_medicament`, `_pharmacologie` optionnelles |
 | `tags` | libres, créés à la volée |
@@ -114,6 +114,23 @@ rapport liste, carte par carte, ce qu'il faut corriger. Les fiches sont créées
 
 Tout champ hors de cette liste est **ignoré avec un avertissement** — c'est le
 signal le plus utile quand le modèle invente un champ.
+
+### Dates
+
+`publication_date`, `accessed_date` et `links[].date` acceptent :
+
+| Écrit dans le JSON | Enregistré | Remarque |
+|---|---|---|
+| `"2024-01-15"` | 15/01/2024 | forme canonique |
+| `"15/01/2024"` | 15/01/2024 | format français toléré |
+| `"2018-05"` | 01/05/2018 | avertissement « mois seul » |
+| `"2009"` ou `2009` | 01/01/2009 | avertissement « année seule » |
+
+Une source ne porte souvent que son année : exiger un jour reviendrait à en faire
+inventer un, ce que le prompt interdit par ailleurs. `Source.publication_date`
+étant un `DateField`, une date partielle est ramenée au premier jour de la
+période — d'où l'avertissement, pour qu'un `2009-01-01` affiché ne se lise pas
+comme un 1er janvier attesté. Si aucune date n'est connue, le champ s'omet.
 
 ### Blocs `see_more`
 

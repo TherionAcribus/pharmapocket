@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 from taggit.models import Tag
@@ -131,6 +133,42 @@ class CardImportTests(APITestCase):
         self.assertTrue(report["ok"], report)
         self.assertEqual(Source.objects.filter(url="https://ansm.example/iec").count(), 1)
         self.assertEqual(report["results"][0]["created_sources"], [])
+
+    def test_partial_publication_dates_are_accepted_and_flagged(self):
+        report = import_cards([
+            _card(
+                sources=[
+                    {"source": {"name": "Article 2009", "publication_date": "2009"}},
+                    {"source": {"name": "Reco de mai 2018", "publication_date": "2018-05"}},
+                    {"source": {"name": "Année numérique", "publication_date": 2024}},
+                ]
+            )
+        ])
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(Source.objects.get(name="Article 2009").publication_date, date(2009, 1, 1))
+        self.assertEqual(Source.objects.get(name="Reco de mai 2018").publication_date, date(2018, 5, 1))
+        self.assertEqual(Source.objects.get(name="Année numérique").publication_date, date(2024, 1, 1))
+
+        warnings = " ".join(report["results"][0]["warnings"])
+        self.assertIn("année seule « 2009 »", warnings)
+        self.assertIn("mois seul « 2018-05 »", warnings)
+
+    def test_french_date_format_is_accepted(self):
+        report = import_cards([
+            _card(sources=[{"source": {"name": "Fiche datée", "publication_date": "15/01/2024"}}])
+        ])
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(Source.objects.get(name="Fiche datée").publication_date, date(2024, 1, 15))
+
+    def test_unparsable_date_is_still_rejected(self):
+        report = import_cards([
+            _card(sources=[{"source": {"name": "X", "publication_date": "printemps 2024"}}])
+        ])
+
+        self.assertFalse(report["ok"])
+        self.assertIn("date invalide", report["results"][0]["errors"][0])
 
     def test_source_matching_ignores_case_accents_and_trailing_slash(self):
         source = Source.objects.create(

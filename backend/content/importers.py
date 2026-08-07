@@ -13,6 +13,7 @@ Wagtail, pas à l'enregistrement.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
@@ -165,15 +166,49 @@ def _closest_name(name: str, candidates: Iterable[str]) -> str | None:
 
 
 def _parse_date(value: Any, label: str, ctx: _Ctx) -> date | None:
+    """Accepte une date bibliographique partielle.
+
+    Un article ou un ouvrage ne porte souvent que son année : exiger un jour
+    reviendrait à en faire inventer un. `Source.publication_date` étant un
+    `DateField`, une date partielle est ramenée au premier jour de la période —
+    convention signalée par un avertissement, pour qu'un « 2009-01-01 » affiché
+    ne se lise pas comme un 1er janvier attesté.
+    """
     if value in (None, ""):
         return None
-    if not isinstance(value, str):
+
+    # Un JSON peut porter l'année comme un nombre.
+    text = str(value).strip() if isinstance(value, (str, int)) else ""
+    if not text:
         ctx.error(f"{label} : date attendue au format AAAA-MM-JJ.")
         return None
+
+    if re.fullmatch(r"\d{4}", text):
+        ctx.warn(f"{label} : année seule « {text} », enregistrée au {text}-01-01.")
+        return date(int(text), 1, 1)
+
+    if re.fullmatch(r"\d{4}-\d{2}", text):
+        year, month = (int(part) for part in text.split("-"))
+        if 1 <= month <= 12:
+            ctx.warn(f"{label} : mois seul « {text} », enregistré au {text}-01.")
+            return date(year, month, 1)
+
+    # Format français, fréquent dans les sources francophones.
+    french = re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", text)
+    if french:
+        day, month, year = (int(part) for part in french.groups())
+        try:
+            return date(year, month, day)
+        except ValueError:
+            pass
+
     try:
-        return date.fromisoformat(value.strip())
+        return date.fromisoformat(text)
     except ValueError:
-        ctx.error(f"{label} : date invalide « {value} » (format attendu AAAA-MM-JJ).")
+        ctx.error(
+            f"{label} : date invalide « {text} » (attendu AAAA-MM-JJ, "
+            "ou AAAA / AAAA-MM si la source ne donne que l'année ou le mois)."
+        )
         return None
 
 
