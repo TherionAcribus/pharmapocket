@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 
+import { LoginCta } from "@/components/LoginCta";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,9 +105,7 @@ export default function ReviewPage() {
       {loadingUser ? (
         <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Chargement…</div>
       ) : !isLoggedIn ? (
-        <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-          Connecte-toi pour lancer une session de révision.
-        </div>
+        <LoginCta>Connecte-toi pour lancer une session de révision.</LoginCta>
       ) : (
         <div className="space-y-4">
           <div className="rounded-xl border bg-card p-4">

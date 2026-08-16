@@ -158,10 +158,13 @@ export function useCardActions({
   data,
   isLoggedIn,
   showMessage,
+  showLoginPrompt,
 }: {
   data: MicroArticleDetail;
   isLoggedIn: boolean;
   showMessage: (text: string) => void;
+  /** Comme `showMessage`, mais le message porte le lien de connexion. */
+  showLoginPrompt: (text: string) => void;
 }): CardActions {
   const [saved, setSaved] = React.useState(false);
   const [isRead, setIsRead] = React.useState(false);
@@ -192,7 +195,7 @@ export function useCardActions({
 
   const toggleSaved = async (source: "button" | "double_tap") => {
     if (!isLoggedIn) {
-      showMessage("Connecte-toi pour sauvegarder cette carte.");
+      showLoginPrompt("Connecte-toi pour sauvegarder cette carte.");
       return;
     }
 
@@ -214,7 +217,7 @@ export function useCardActions({
   // le serveur (et retente tant que la leçon reste dans `pending`).
   const toggleRead = () => {
     if (!isLoggedIn) {
-      showMessage("Connecte-toi pour marquer lu / non lu.");
+      showLoginPrompt("Connecte-toi pour marquer lu / non lu.");
       return;
     }
 

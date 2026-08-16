@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
+import { useLoginHref } from "@/lib/authRedirect";
 import { useMe } from "@/lib/queries";
 import type { MicroArticleDetail } from "@/lib/types";
 
@@ -10,7 +11,7 @@ import { DeckPickerSheet } from "./reader/DeckPickerSheet";
 import { ReaderCard } from "./reader/ReaderCard";
 import { ReaderDetailsSheet } from "./reader/ReaderDetailsSheet";
 import { ReaderFooter } from "./reader/ReaderFooter";
-import { ReaderHeader } from "./reader/ReaderHeader";
+import { ReaderHeader, type ReaderMessage } from "./reader/ReaderHeader";
 import { readReturnToFromSession } from "./reader/readerSession";
 import { useSeeMoreSections } from "./reader/seeMoreSections";
 import { useDeckNavigation } from "./reader/useDeckNavigation";
@@ -18,6 +19,9 @@ import { useCardActions, useLessonProgressTracking } from "./reader/useReaderCar
 import { useReaderGestures } from "./reader/useReaderGestures";
 
 const MESSAGE_DURATION_MS = 1800;
+
+/** Un message qui propose un lien doit rester assez longtemps pour être cliqué. */
+const ACTIONABLE_MESSAGE_DURATION_MS = 8000;
 
 /**
  * Lecteur d'une fiche.
@@ -36,12 +40,40 @@ export default function ReaderClient({ data }: { data: MicroArticleDetail }) {
   const [openDetails, setOpenDetails] = React.useState(false);
   const [deckPickerOpen, setDeckPickerOpen] = React.useState(false);
   const [largeText, setLargeText] = React.useState(false);
-  const [message, setMessage] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState<ReaderMessage | null>(null);
 
-  const showMessage = React.useCallback((text: string) => {
-    setMessage(text);
-    window.setTimeout(() => setMessage(null), MESSAGE_DURATION_MS);
+  const loginHref = useLoginHref();
+
+  // Sans cette ref, le minuteur d'un message déjà affiché effacerait le suivant
+  // avant l'heure — de quoi escamoter un lien de connexion à peine apparu.
+  const messageTimerRef = React.useRef<number | null>(null);
+  React.useEffect(
+    () => () => {
+      if (messageTimerRef.current !== null) window.clearTimeout(messageTimerRef.current);
+    },
+    []
+  );
+
+  const showReaderMessage = React.useCallback((next: ReaderMessage) => {
+    if (messageTimerRef.current !== null) window.clearTimeout(messageTimerRef.current);
+    setMessage(next);
+    messageTimerRef.current = window.setTimeout(
+      () => setMessage(null),
+      next.action ? ACTIONABLE_MESSAGE_DURATION_MS : MESSAGE_DURATION_MS
+    );
   }, []);
+
+  const showMessage = React.useCallback(
+    (text: string) => showReaderMessage({ text }),
+    [showReaderMessage]
+  );
+
+  /** Action réservée aux comptes : le message porte le lien de connexion. */
+  const showLoginPrompt = React.useCallback(
+    (text: string) =>
+      showReaderMessage({ text, action: { label: "Se connecter", href: loginHref } }),
+    [loginHref, showReaderMessage]
+  );
 
   useLessonProgressTracking(data.id, isLoggedIn);
 
@@ -50,6 +82,7 @@ export default function ReaderClient({ data }: { data: MicroArticleDetail }) {
     data,
     isLoggedIn,
     showMessage,
+    showLoginPrompt,
   });
   const { deck, positionText, goRelative, cardMotion } = useDeckNavigation({
     slug: data.slug,
@@ -59,11 +92,11 @@ export default function ReaderClient({ data }: { data: MicroArticleDetail }) {
 
   const openDeckPicker = React.useCallback(() => {
     if (!isLoggedIn) {
-      showMessage("Connecte-toi pour sauvegarder cette carte.");
+      showLoginPrompt("Connecte-toi pour ranger cette carte dans un deck.");
       return;
     }
     setDeckPickerOpen(true);
-  }, [isLoggedIn, showMessage]);
+  }, [isLoggedIn, showLoginPrompt]);
 
   const gestures = useReaderGestures({
     enabled: !deckPickerOpen && !openDetails,

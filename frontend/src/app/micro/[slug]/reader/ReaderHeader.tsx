@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   MoreHorizontal as MoreHorizontalIcon,
   Star as StarIcon,
@@ -13,12 +14,18 @@ import { Button } from "@/components/ui/button";
 
 const SAVE_LONG_PRESS_MS = 550;
 
+export type ReaderMessage = {
+  text: string;
+  /** Sortie proposée avec le message, quand il annonce un blocage. */
+  action?: { label: string; href: string };
+};
+
 type ReaderHeaderProps = {
   isLoggedIn: boolean;
   saved: boolean;
   isRead: boolean;
   hasDetails: boolean;
-  message: string | null;
+  message: ReaderMessage | null;
   onBack: () => void;
   onToggleTextSize: () => void;
   onToggleSaved: () => void;
@@ -137,8 +144,16 @@ export function ReaderHeader({
       </div>
 
       {message ? (
-        <div className="mx-auto w-full max-w-3xl px-4 pb-2 text-xs text-muted-foreground">
-          {message}
+        <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 text-xs text-muted-foreground">
+          <span>{message.text}</span>
+          {message.action ? (
+            <Link
+              href={message.action.href}
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              {message.action.label}
+            </Link>
+          ) : null}
         </div>
       ) : null}
     </header>

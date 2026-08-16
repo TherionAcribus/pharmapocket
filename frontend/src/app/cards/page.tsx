@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 
+import { LoginCta } from "@/components/LoginCta";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { MicroCard } from "@/components/MicroCard";
 import { Button } from "@/components/ui/button";
@@ -181,9 +182,7 @@ export default function CardsPage() {
       {loading ? (
         <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Chargement…</div>
       ) : !isLoggedIn ? (
-        <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-          Connecte-toi pour voir tes cartes sauvegardées.
-        </div>
+        <LoginCta>Connecte-toi pour voir tes cartes sauvegardées.</LoginCta>
       ) : error ? (
         <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">{error}</div>
       ) : (

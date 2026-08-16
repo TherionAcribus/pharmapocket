@@ -5,13 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
+import { LOGIN_PATH, sanitizeNextPath } from "@/lib/authRedirect";
 import { useMe } from "@/lib/queries";
-
-function toNextPath(next: string | null): string {
-  if (!next) return "";
-  if (!next.startsWith("/")) return "/discover";
-  return next;
-}
 
 function landingTargetToPath(target: string | null | undefined): string {
   if (target === "discover") return "/discover";
@@ -25,7 +20,7 @@ export default function OAuthCallbackClient() {
   const router = useRouter();
   const sp = useSearchParams();
 
-  const next = toNextPath(sp.get("next"));
+  const next = sanitizeNextPath(sp.get("next"));
 
   const { data: me, isPending: loading, error: meError } = useMe();
 
@@ -57,8 +52,7 @@ export default function OAuthCallbackClient() {
           {error ? (
             <div className="space-y-3">
               <div className="text-sm text-destructive">{error}</div>
-              <Button type="button" onClick={() => router.replace("/account/login")}
-              >
+              <Button type="button" onClick={() => router.replace(LOGIN_PATH)}>
                 Retour à la connexion
               </Button>
             </div>

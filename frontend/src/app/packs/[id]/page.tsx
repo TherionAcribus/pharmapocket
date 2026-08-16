@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
+import { LoginCta } from "@/components/LoginCta";
 import { MicroCard } from "@/components/MicroCard";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
@@ -250,9 +251,7 @@ export default function PackDetailPage() {
             </div>
 
             {!isLoggedIn ? (
-              <div className="text-xs text-muted-foreground">
-                Connecte-toi pour suivre la progression (start/progress).
-              </div>
+              <LoginCta compact>Connecte-toi pour suivre ta progression dans ce pack.</LoginCta>
             ) : null}
           </div>
 
