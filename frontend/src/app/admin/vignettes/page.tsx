@@ -16,7 +16,7 @@ import {
 import { useStaffGuard } from "@/lib/staffGuard";
 import type { TaxonomyNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { PATTERN_OPTIONS, ThumbPatternOverlay, normalizePattern, type PatternName } from "@/components/thumbPatterns";
+import { PATTERN_OPTIONS, ThumbPatternOverlay, type PatternName } from "@/components/thumbPatterns";
 
 type AdminRow = {
   id: number;
@@ -30,10 +30,6 @@ type AdminRow = {
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
-}
-
-function parsePattern(value: string): PatternName {
-  return normalizePattern(value) ?? "waves";
 }
 
 /** Approximation du `slugify` de Django, pour comparer une saisie libre aux slugs de la taxonomie. */
@@ -53,15 +49,86 @@ function normalizeHexForColorInput(value: string): string {
   return "#000000";
 }
 
-function ThumbPreview({ bg, accent, pattern }: { bg: string; accent: string; pattern: PatternName }) {
+function ThumbPreview({
+  bg,
+  accent,
+  pattern,
+  className,
+}: {
+  bg: string;
+  accent: string;
+  pattern: PatternName;
+  className?: string;
+}) {
   return (
-    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted">
+    <div className={cn("relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted", className)}>
       <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
         <rect x="0" y="0" width="64" height="64" fill={bg} />
         <ThumbPatternOverlay pattern={pattern} accent={accent} />
         <rect x="0" y="0" width="64" height="64" fill="#000" opacity="0.06" />
       </svg>
     </div>
+  );
+}
+
+const PATTERN_LABELS: Record<PatternName, string> = {
+  waves: "Vagues",
+  chevrons: "Chevrons",
+  dots: "Points",
+  vlines: "Lignes verticales",
+  diagonals: "Diagonales",
+  grid: "Grille",
+  crosshatch: "Hachures croisées",
+  rings: "Anneaux",
+  pluses: "Croix",
+  triangles: "Triangles",
+};
+
+function PatternPicker({
+  name,
+  value,
+  bg,
+  accent,
+  disabled,
+  onChange,
+}: {
+  name: string;
+  value: PatternName;
+  bg: string;
+  accent: string;
+  disabled?: boolean;
+  onChange: (pattern: PatternName) => void;
+}) {
+  return (
+    <fieldset className="rounded-lg border bg-background p-3" disabled={disabled}>
+      <legend className="px-1 text-xs font-semibold text-muted-foreground">Motif</legend>
+      <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+        {PATTERN_OPTIONS.map((pattern) => {
+          const label = PATTERN_LABELS[pattern];
+          return (
+            <label key={pattern} className="cursor-pointer" title={label}>
+              <input
+                type="radio"
+                name={name}
+                value={pattern}
+                checked={value === pattern}
+                onChange={() => onChange(pattern)}
+                className="peer sr-only"
+              />
+              <span className="block rounded-lg p-1 transition hover:bg-accent peer-checked:bg-primary/10 peer-checked:ring-2 peer-checked:ring-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-disabled:cursor-not-allowed peer-disabled:opacity-60">
+                <ThumbPreview
+                  bg={bg}
+                  accent={accent}
+                  pattern={pattern}
+                  className="h-11 w-full rounded-md sm:h-12"
+                />
+                <span className="sr-only">{label}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 
@@ -311,7 +378,7 @@ export default function AdminVignettesPage() {
       <div className="rounded-xl border bg-card p-4 space-y-3">
         <div className="text-sm font-semibold">Créer un override</div>
         <form className="grid gap-2" onSubmit={onCreate}>
-          <div className="grid gap-2 sm:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-3">
             <Input
               value={createSlug}
               onChange={(e) => setCreateSlug(e.target.value)}
@@ -340,22 +407,16 @@ export default function AdminVignettesPage() {
               />
               <Input value={createAccent} onChange={(e) => setCreateAccent(e.target.value)} disabled={creating} />
             </div>
-            <select
-              className={cn(
-                "h-10 rounded-md border bg-background px-3 text-sm",
-                creating ? "opacity-70" : ""
-              )}
-              value={createPattern}
-              onChange={(e) => setCreatePattern(parsePattern(e.target.value))}
-              disabled={creating}
-            >
-              {PATTERN_OPTIONS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
           </div>
+
+          <PatternPicker
+            name="create-pattern"
+            value={createPattern}
+            bg={createBg.trim()}
+            accent={createAccent.trim()}
+            disabled={creating}
+            onChange={setCreatePattern}
+          />
 
           <div className="rounded-lg border bg-background p-3">
             <div className="text-xs font-semibold text-muted-foreground">Choisir une maladie existante</div>
@@ -528,7 +589,7 @@ export default function AdminVignettesPage() {
 
                   {isEditing && r ? (
                     <div className="mt-3 grid gap-2">
-                      <div className="grid gap-2 sm:grid-cols-4">
+                      <div className="grid gap-2 sm:grid-cols-3">
                         <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value)} disabled={saving} />
                         <div className="flex items-center gap-2">
                           <input
@@ -552,22 +613,16 @@ export default function AdminVignettesPage() {
                           />
                           <Input value={editAccent} onChange={(e) => setEditAccent(e.target.value)} disabled={saving} />
                         </div>
-                        <select
-                          className={cn(
-                            "h-10 rounded-md border bg-background px-3 text-sm",
-                            saving ? "opacity-70" : ""
-                          )}
-                          value={editPattern}
-                          onChange={(e) => setEditPattern(parsePattern(e.target.value))}
-                          disabled={saving}
-                        >
-                          {PATTERN_OPTIONS.map((p) => (
-                            <option key={p} value={p}>
-                              {p}
-                            </option>
-                          ))}
-                        </select>
                       </div>
+
+                      <PatternPicker
+                        name="edit-pattern"
+                        value={editPattern}
+                        bg={editBg.trim()}
+                        accent={editAccent.trim()}
+                        disabled={saving}
+                        onChange={setEditPattern}
+                      />
 
                       <div className="rounded-lg border bg-background p-3">
                         <div className="text-xs font-semibold text-muted-foreground">Changer la maladie</div>
