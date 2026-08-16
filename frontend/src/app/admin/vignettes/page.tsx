@@ -14,6 +14,12 @@ import {
   useTaxonomyTree,
 } from "@/lib/queries";
 import { useStaffGuard } from "@/lib/staffGuard";
+import {
+  evaluateThumbContrast,
+  THUMB_DARKEN_OVERLAY_ALPHA,
+  WCAG_AA_NORMAL_TEXT_RATIO,
+  WCAG_NON_TEXT_RATIO,
+} from "@/lib/thumbContrast";
 import type { TaxonomyNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PATTERN_OPTIONS, ThumbPatternOverlay, type PatternName } from "@/components/thumbPatterns";
@@ -65,7 +71,7 @@ function ThumbPreview({
       <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
         <rect x="0" y="0" width="64" height="64" fill={bg} />
         <ThumbPatternOverlay pattern={pattern} accent={accent} />
-        <rect x="0" y="0" width="64" height="64" fill="#000" opacity="0.06" />
+        <rect x="0" y="0" width="64" height="64" fill="#000" opacity={THUMB_DARKEN_OVERLAY_ALPHA} />
       </svg>
     </div>
   );
@@ -129,6 +135,42 @@ function PatternPicker({
         })}
       </div>
     </fieldset>
+  );
+}
+
+function ContrastNotice({ bg, accent }: { bg: string; accent: string }) {
+  const result = evaluateThumbContrast(bg, accent);
+
+  if (!result) {
+    return (
+      <div
+        className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive"
+        role="status"
+      >
+        Contraste impossible à vérifier : saisissez deux couleurs hexadécimales au format #RRGGBB.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border p-2 text-xs",
+        result.passes
+          ? "border-emerald-600/30 bg-emerald-600/5 text-emerald-800 dark:text-emerald-300"
+          : "border-destructive/40 bg-destructive/5 text-destructive"
+      )}
+      role="status"
+    >
+      <div className="font-semibold">
+        {result.passes ? "Contraste WCAG suffisant" : "Contraste WCAG insuffisant"}
+      </div>
+      <div>
+        Label blanc : {result.labelRatio.toFixed(2)}:1 (minimum {WCAG_AA_NORMAL_TEXT_RATIO}:1) · Icône blanche :{" "}
+        {result.iconRatio.toFixed(2)}:1 (minimum {WCAG_NON_TEXT_RATIO}:1).
+      </div>
+      {!result.passes ? <div className="mt-1">Choisissez un fond plus sombre pour préserver la lisibilité.</div> : null}
+    </div>
   );
 }
 
@@ -417,6 +459,7 @@ export default function AdminVignettesPage() {
             disabled={creating}
             onChange={setCreatePattern}
           />
+          <ContrastNotice bg={createBg.trim()} accent={createAccent.trim()} />
 
           <div className="rounded-lg border bg-background p-3">
             <div className="text-xs font-semibold text-muted-foreground">Choisir une maladie existante</div>
@@ -509,6 +552,7 @@ export default function AdminVignettesPage() {
             {filteredCoverageItems.map(({ key, pathology, override: r, visual }) => {
               const slug = pathology?.slug ?? r?.pathology_slug ?? "";
               const isEditing = Boolean(r && editingSlug === r.pathology_slug);
+              const contrast = evaluateThumbContrast(visual.bg, visual.accent);
               return (
                 <div key={key} className="rounded-lg border bg-background p-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -527,6 +571,18 @@ export default function AdminVignettesPage() {
                           >
                             {r ? "override" : "défaut"}
                           </span>
+                          {!contrast?.passes ? (
+                            <span
+                              className="rounded border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
+                              title={
+                                contrast
+                                  ? `Label ${contrast.labelRatio.toFixed(2)}:1 · Icône ${contrast.iconRatio.toFixed(2)}:1`
+                                  : "Couleurs invalides"
+                              }
+                            >
+                              contraste faible
+                            </span>
+                          ) : null}
                           {!pathology ? (
                             <span className="rounded border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
                               hors taxonomie
@@ -623,6 +679,7 @@ export default function AdminVignettesPage() {
                         disabled={saving}
                         onChange={setEditPattern}
                       />
+                      <ContrastNotice bg={editBg.trim()} accent={editAccent.trim()} />
 
                       <div className="rounded-lg border bg-background p-3">
                         <div className="text-xs font-semibold text-muted-foreground">Changer la maladie</div>

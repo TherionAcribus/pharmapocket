@@ -4,6 +4,11 @@ import * as React from "react";
 import { Gavel, Leaf, Lightbulb, Pill, Scale, Shield, Stethoscope } from "lucide-react";
 
 import type { CategoryPayload, MicroArticleListItem } from "@/lib/types";
+import {
+  THUMB_DARKEN_OVERLAY_ALPHA,
+  THUMB_ICON_FOREGROUND_ALPHA,
+  THUMB_LABEL_FOREGROUND_ALPHA,
+} from "@/lib/thumbContrast";
 import { useThumbOverrides } from "@/lib/thumbOverrides";
 import type { PatternName } from "@/components/thumbPatterns";
 import { ThumbPatternOverlay } from "@/components/thumbPatterns";
@@ -269,17 +274,20 @@ export function GeneratedThumb({
       <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
         <rect x="0" y="0" width="64" height="64" fill={visual.bg} />
         <ThumbPatternOverlay pattern={visual.pattern} accent={visual.accent} />
-        <rect x="0" y="0" width="64" height="64" fill="#000" opacity="0.06" />
+        <rect x="0" y="0" width="64" height="64" fill="#000" opacity={THUMB_DARKEN_OVERLAY_ALPHA} />
       </svg>
 
-      <div className="absolute inset-0 flex items-center justify-center" style={{ color: "rgba(255,255,255,0.92)" }}>
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ color: `rgba(255,255,255,${THUMB_ICON_FOREGROUND_ALPHA})` }}
+      >
         <ThemeIcon theme={theme} />
       </div>
 
       {label ? (
         <div
           className="absolute bottom-1 left-1 right-1 text-center text-[10px] font-semibold leading-none"
-          style={{ color: "rgba(255,255,255,0.96)" }}
+          style={{ color: `rgba(255,255,255,${THUMB_LABEL_FOREGROUND_ALPHA})` }}
           title={labelRaw || undefined}
         >
           <span className="block truncate">{label}</span>

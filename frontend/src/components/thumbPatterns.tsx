@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { THUMB_PATTERN_OPACITY } from "@/lib/thumbContrast";
+
 export type PatternName =
   | "waves"
   | "chevrons"
@@ -35,7 +37,7 @@ export function normalizePattern(value: unknown): PatternName | null {
 
 export function ThumbPatternOverlay({ pattern, accent }: { pattern: PatternName; accent: string }) {
   const strokeWidth = 4;
-  const opacity = 0.1;
+  const opacity = THUMB_PATTERN_OPACITY;
 
   if (pattern === "dots") {
     const dots: React.ReactNode[] = [];
