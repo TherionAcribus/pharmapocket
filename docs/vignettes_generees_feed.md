@@ -51,10 +51,28 @@ Notes :
 
 ## Règles de rendu
 
+### 0) Catégorie principale (préalable à tout le reste)
+Une carte peut porter plusieurs catégories par taxonomie, et **l'API ne garantit
+aucun ordre** : `_taxonomy_payload` sérialise les M2M sans `order_by`, donc
+l'ordre est celui que rend la base et peut bouger sans qu'aucune donnée
+éditoriale ne change. Prendre `payload[0]` faisait donc changer la vignette
+(couleur, motif, label) d'une réponse à l'autre.
+
+La vignette élit donc une **catégorie principale** de façon déterministe
+(`pickPrincipal` / `pickPrincipalPathology` dans `GeneratedThumb.tsx`) :
+1. pour les **maladies**, les catégories qui portent un `domain` résolu passent
+   devant celles qui retomberaient sur `other` (gris) ;
+2. à égalité, on garde le **slug le plus petit** (comparaison par code point, pas
+   `localeCompare`, pour ne pas dépendre de l'ICU du runtime) ;
+3. pour thème et médicament, seule la règle du slug s'applique.
+
+Conséquence : la vignette d'une carte ne bouge que si son éditorial bouge.
+
 ### 1) Couleur + motif (fond)
-La couleur vient du **domaine thérapeutique** de la pathologie
-(`categories_maladies_payload[0].domain`), le motif est tiré de façon
-déterministe depuis le slug pour distinguer deux pathologies d'un même domaine.
+La couleur vient du **domaine thérapeutique** de la pathologie principale
+(`domain`), le motif est tiré de façon déterministe depuis son slug pour
+distinguer deux pathologies d'un même domaine. Le seed du motif est ce seul
+slug : ajouter une pathologie secondaire à une carte ne la repeint pas.
 
 Ordre de résolution, du plus prioritaire au moins prioritaire :
 
@@ -86,7 +104,7 @@ ce qui évite un `get_ancestors()` par catégorie sérialisée dans le feed.
 
 ### 2) Icône centrale (déterminée par le Thème)
 La source de vérité est :
-- `categories_theme_payload[0]` (slug ou name)
+- la catégorie **thème** principale (slug ou name)
 
 Le code normalise le slug/name (minuscules, accents supprimés) et résout une clé de thème.
 
@@ -103,9 +121,9 @@ Thèmes pris en charge (actuels) :
 
 ### 3) Texte (label en bas)
 Règles :
-- Si Thème = **Pathologie** → afficher le nom de la catégorie **Maladies** (`categories_maladies_payload[0].name`)
-- Si Thème = **Médicament** → afficher le nom de la catégorie **Médicament** (`categories_medicament_payload[0].name`)
-- Sinon → afficher le **nom du Thème** (`categories_theme_payload[0].name`)
+- Si Thème = **Pathologie** → afficher le nom de la catégorie **Maladies** principale
+- Si Thème = **Médicament** → afficher le nom de la catégorie **Médicament** principale
+- Sinon → afficher le **nom du Thème** principal
 
 Le label est tronqué pour rester lisible en 64px.
 
@@ -147,6 +165,10 @@ laisser vide pour hériter du parent. Aucune modification de code n'est nécessa
 - **Label vide** :
   - Pathologie : vérifier `categories_maladies_payload`
   - Médicament : vérifier `categories_medicament_payload`
+
+- **Un override ne s'applique pas sur une carte à plusieurs pathologies** :
+  l'override est indexé par le slug de la pathologie **principale** (règle ci-dessus,
+  section 0) — vérifier qu'il vise bien celle-là et pas une pathologie secondaire.
 
 - **Couleurs inattendues / tout en gris** :
   - vérifier que la catégorie maladie (ou l'un de ses ancêtres) a bien un **Domaine**

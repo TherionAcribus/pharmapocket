@@ -72,6 +72,10 @@ function normalizeDomain(value: string | null | undefined): Domain {
 /**
  * Le domaine choisit la palette ; le slug ne sert plus qu'à varier le motif de
  * façon déterministe entre deux pathologies d'un même domaine.
+ *
+ * Le seed est le slug de la **seule** pathologie principale (voir
+ * `pickPrincipalPathology`), pas la liste entière : ajouter une catégorie
+ * secondaire à une carte ne doit pas repeindre sa vignette.
  */
 function resolveVisualCode(pathology?: Pick<CategoryPayload, "slug" | "domain"> | null): VisualCode {
   const slug = (pathology?.slug ?? "").toLowerCase();
@@ -90,8 +94,48 @@ function truncateLabel(label: string, max: number): string {
   return `${t.slice(0, Math.max(0, max - 1))}…`;
 }
 
-function pickFirst(arr: CategoryPayload[] | undefined): CategoryPayload | null {
-  return Array.isArray(arr) && arr.length ? arr[0] : null;
+/**
+ * Clé de tri d'une catégorie : le slug, stable dans le temps et indépendant de
+ * l'ordre de sérialisation. Comparaison par code point (`<`) et pas
+ * `localeCompare`, qui dépend de l'ICU embarquée et pourrait départager
+ * différemment serveur et navigateur.
+ */
+function categorySortKey(category: CategoryPayload): string {
+  return (category.slug || category.name || String(category.id ?? "")).toLowerCase();
+}
+
+/**
+ * Choisit la catégorie « principale » d'une liste de façon déterministe.
+ *
+ * Le backend sérialise les M2M de taxonomie sans `order_by` (voir
+ * `_taxonomy_payload` dans `backend/content/serializers/outputs.py`) : l'ordre
+ * renvoyé est celui de la base, il peut changer sans qu'aucune donnée éditoriale
+ * ne bouge. Prendre `arr[0]` faisait donc varier couleur, motif et label d'une
+ * réponse à l'autre — on tranche sur le slug le plus petit.
+ */
+function pickPrincipal(arr: CategoryPayload[] | undefined): CategoryPayload | null {
+  if (!Array.isArray(arr) || !arr.length) return null;
+  let best = arr[0];
+  let bestKey = categorySortKey(best);
+  for (let i = 1; i < arr.length; i += 1) {
+    const key = categorySortKey(arr[i]);
+    if (key < bestKey) {
+      best = arr[i];
+      bestKey = key;
+    }
+  }
+  return best;
+}
+
+/**
+ * Même chose pour les maladies, avec une préférence : une catégorie qui porte un
+ * domaine décrit mieux la carte qu'une catégorie orpheline, qui retomberait sur
+ * la palette grise `other`. À égalité on retombe sur l'ordre des slugs.
+ */
+function pickPrincipalPathology(arr: CategoryPayload[] | undefined): CategoryPayload | null {
+  if (!Array.isArray(arr) || !arr.length) return null;
+  const withDomain = arr.filter((category) => normalizeDomain(category.domain) !== "other");
+  return pickPrincipal(withDomain.length ? withDomain : arr);
 }
 
 export type ThemeKey =
@@ -123,7 +167,7 @@ type ThumbMetaSource = ThemeSource & {
 };
 
 function resolveTheme(item: ThemeSource): ThemeKey {
-  const theme = pickFirst(item.categories_theme_payload);
+  const theme = pickPrincipal(item.categories_theme_payload);
   const key = normalizeThemeSlugOrName(theme?.slug || theme?.name || "");
 
   // Accept both slugs and names (e.g. "Conseils", "conseil").
@@ -161,15 +205,21 @@ export function ThemeIcon({ theme, size = 34 }: { theme: ThemeKey; size?: number
   }
 }
 
-export function resolveGeneratedThumbMeta(source: ThumbMetaSource): {
+type ThumbMeta = {
   theme: ThemeKey;
   visual: VisualCode;
   labelRaw: string;
   label: string;
-} {
-  const pathology = pickFirst(source.categories_maladies_payload);
-  const medicament = pickFirst(source.categories_medicament_payload);
-  const themeCategory = pickFirst(source.categories_theme_payload);
+  /** Slug de la pathologie principale retenue, clé des overrides par pathologie. */
+  pathologySlug: string;
+};
+
+export type { ThumbMeta };
+
+export function resolveGeneratedThumbMeta(source: ThumbMetaSource): ThumbMeta {
+  const pathology = pickPrincipalPathology(source.categories_maladies_payload);
+  const medicament = pickPrincipal(source.categories_medicament_payload);
+  const themeCategory = pickPrincipal(source.categories_theme_payload);
   const theme = resolveTheme(source);
   const visual = resolveVisualCode(pathology);
 
@@ -181,22 +231,18 @@ export function resolveGeneratedThumbMeta(source: ThumbMetaSource): {
         : themeCategory?.name || "";
 
   const label = labelRaw ? truncateLabel(labelRaw, 11) : "";
-  return { theme, visual, labelRaw, label };
+  return { theme, visual, labelRaw, label, pathologySlug: (pathology?.slug ?? "").toLowerCase() };
 }
 
 export function resolveGeneratedThumbMetaWithOverrides(
   source: ThumbMetaSource,
   overrides: Record<string, VisualCode> | null | undefined
-): {
-  theme: ThemeKey;
-  visual: VisualCode;
-  labelRaw: string;
-  label: string;
-} {
+): ThumbMeta {
   const meta = resolveGeneratedThumbMeta(source);
-  const pathology = pickFirst(source.categories_maladies_payload);
-  const slug = (pathology?.slug ?? "").toLowerCase();
-  const override = slug && overrides ? overrides[slug] : null;
+  // On rejoue le slug calculé par `resolveGeneratedThumbMeta` plutôt que de
+  // refaire la sélection : l'override doit porter sur la pathologie qui pilote
+  // déjà la palette et le label.
+  const override = meta.pathologySlug && overrides ? overrides[meta.pathologySlug] : null;
   if (!override) return meta;
   return { ...meta, visual: override };
 }
