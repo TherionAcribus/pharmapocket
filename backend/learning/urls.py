@@ -4,6 +4,7 @@ from .views import (
     ProgressImportView,
     ProgressListView,
     ProgressUpsertView,
+    SRSCountsView,
     SRSNextView,
     SRSReviewView,
 )
@@ -12,6 +13,7 @@ urlpatterns = [
     path("progress/", ProgressListView.as_view(), name="progress-list"),
     path("progress/import/", ProgressImportView.as_view(), name="progress-import"),
     path("progress/<int:lesson_id>/", ProgressUpsertView.as_view(), name="progress-upsert"),
+    path("srs/counts/", SRSCountsView.as_view(), name="srs-counts"),
     path("srs/next/", SRSNextView.as_view(), name="srs-next"),
     path("srs/review/", SRSReviewView.as_view(), name="srs-review"),
 ]

@@ -743,6 +743,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/learning/srs/counts/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Compteurs de la file de révision pour un scope donné.
+         *
+         *     `due` + `new` = ce que `srs/next/?only_due=true` sait servir aujourd'hui :
+         *     c'est le nombre affiché à l'utilisateur (badge d'onglet, page /review).
+         *     `later` compte les cartes déjà vues dont l'échéance est future, servies
+         *     uniquement quand `only_due=false`.
+         */
+        get: operations["learning_srs_counts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/learning/srs/next/": {
         parameters: {
             query?: never;
@@ -1538,6 +1562,12 @@ export interface components {
             sort_order: number;
             detail_card: components["schemas"]["SubjectRecapCard"] | null;
         };
+        SRSCounts: {
+            due: number;
+            new: number;
+            later: number;
+            total: number;
+        };
         SRSNext: {
             card: components["schemas"]["MicroArticleListItem"] | null;
             srs: components["schemas"]["SRSState"] | null;
@@ -1796,6 +1826,7 @@ export type QuestionPayload = components['schemas']['QuestionPayload'];
 export type ReadStateMap = components['schemas']['ReadStateMap'];
 export type ReadStateQuery = components['schemas']['ReadStateQuery'];
 export type RecapPoint = components['schemas']['RecapPoint'];
+export type SrsCounts = components['schemas']['SRSCounts'];
 export type SrsNext = components['schemas']['SRSNext'];
 export type SrsReview = components['schemas']['SRSReview'];
 export type SrsState = components['schemas']['SRSState'];
@@ -3305,6 +3336,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProgressImportResponse"];
+                };
+            };
+        };
+    };
+    learning_srs_counts: {
+        parameters: {
+            query?: {
+                deck_id?: number;
+                deck_ids?: string;
+                /**
+                 * @description * `all_decks` - all_decks
+                 *     * `deck` - deck
+                 *     * `decks` - decks
+                 *     * `all_cards` - all_cards
+                 */
+                scope?: "all_decks" | "deck" | "decks" | "all_cards";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SRSCounts"];
                 };
             };
         };

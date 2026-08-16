@@ -2,6 +2,7 @@ import { apiGet, apiJson, buildQuery, jsonBody } from "@/lib/api/client";
 import type {
   LessonProgress,
   LessonProgressUpdate,
+  SrsCounts,
   SrsNext,
   SrsRating,
   operations,
@@ -27,6 +28,21 @@ export async function fetchSrsNext(query: SrsNextQuery): Promise<SrsNext> {
       deck_id: query.deck_id != null ? String(query.deck_id) : undefined,
       deck_ids: deckIdsValue,
       only_due: query.only_due === false ? "false" : "true",
+    })}`
+  );
+}
+
+/** Portée d'un comptage : les mêmes cartes que `fetchSrsNext`, sans `only_due`. */
+export type SrsCountsQuery = Omit<SrsNextQuery, "only_due">;
+
+export async function fetchSrsCounts(query: SrsCountsQuery): Promise<SrsCounts> {
+  const deckIdsValue = query.deck_ids?.length ? query.deck_ids.join(",") : undefined;
+
+  return apiGet<SrsCounts>(
+    `/api/v1/learning/srs/counts/${buildQuery({
+      scope: query.scope,
+      deck_id: query.deck_id != null ? String(query.deck_id) : undefined,
+      deck_ids: deckIdsValue,
     })}`
   );
 }

@@ -259,6 +259,9 @@ Staff uniquement (`/api/v1/content/admin/`) :
 - `PATCH /api/v1/learning/progress/<lesson_id>/`
 - `POST /api/v1/learning/progress/import/`
 - `GET /api/v1/learning/srs/next/?scope=all_decks|deck|decks|all_cards&deck_id=&deck_ids=&only_due=`
+- `GET /api/v1/learning/srs/counts/?scope=all_decks|deck|decks|all_cards&deck_id=&deck_ids=`
+  · `{due, new, later, total}` — `due + new` = ce que la file sert aujourd'hui
+  (badge de l'onglet « À revoir » et écran de démarrage de `/review`)
 - `POST /api/v1/learning/srs/review/`
 
 ### Contrat OpenAPI et types frontend

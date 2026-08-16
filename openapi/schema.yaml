@@ -1534,6 +1534,54 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProgressImportResponse'
           description: ''
+  /api/v1/learning/srs/counts/:
+    get:
+      operationId: learning_srs_counts
+      description: |-
+        Compteurs de la file de révision pour un scope donné.
+
+        `due` + `new` = ce que `srs/next/?only_due=true` sait servir aujourd'hui :
+        c'est le nombre affiché à l'utilisateur (badge d'onglet, page /review).
+        `later` compte les cartes déjà vues dont l'échéance est future, servies
+        uniquement quand `only_due=false`.
+      parameters:
+      - in: query
+        name: deck_id
+        schema:
+          type: integer
+          minimum: 1
+      - in: query
+        name: deck_ids
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: scope
+        schema:
+          enum:
+          - all_decks
+          - deck
+          - decks
+          - all_cards
+          type: string
+          default: all_decks
+          minLength: 1
+        description: |-
+          * `all_decks` - all_decks
+          * `deck` - deck
+          * `decks` - decks
+          * `all_cards` - all_cards
+      tags:
+      - learning
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SRSCounts'
+          description: ''
   /api/v1/learning/srs/next/:
     get:
       operationId: learning_srs_next
@@ -3446,6 +3494,26 @@ components:
       - id
       - sort_order
       - text
+    SRSCounts:
+      type: object
+      properties:
+        due:
+          type: integer
+          minimum: 0
+        new:
+          type: integer
+          minimum: 0
+        later:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+      required:
+      - due
+      - later
+      - new
+      - total
     SRSNext:
       type: object
       properties:

@@ -31,7 +31,8 @@ import {
 import { cn } from "@/lib/utils";
 import { EXPLORE_HOME, exploreSections, isExplorePath } from "@/components/ExploreTabs";
 import { authLogout } from "@/lib/api/auth";
-import { resetSessionCache, useMe, useTaxonomyTree } from "@/lib/queries";
+import { resetSessionCache, useMe, useSrsCounts, useTaxonomyTree } from "@/lib/queries";
+import { availableCount, formatDueCount, REVIEW_DEFAULT_SCOPE } from "@/lib/review";
 import { ensureProgressSyncLoop, setProgressSyncEnabled } from "@/lib/progressSync";
 import type { TaxonomyNode } from "@/lib/types";
 import { useQueryClient } from "@tanstack/react-query";
@@ -44,6 +45,9 @@ type TabItem = {
   isActive?: (pathname: string) => boolean;
 };
 
+/** Onglet porteur du compteur de révisions dues. */
+const REVIEW_HREF = "/review";
+
 /**
  * Barre du bas : 5 onglets max. « Explorer » regroupe les trois façons de
  * trouver du contenu (dose du jour, bibliothèque, packs), qui se partagent une
@@ -53,7 +57,7 @@ const tabs: TabItem[] = [
   { href: "/", label: "Accueil", Icon: HomeIcon },
   { href: EXPLORE_HOME, label: "Explorer", Icon: CompassIcon, isActive: isExplorePath },
   { href: "/cards", label: "Mes cartes", Icon: LayersIcon },
-  { href: "/review", label: "À revoir", Icon: ClockIcon },
+  { href: REVIEW_HREF, label: "À revoir", Icon: ClockIcon },
   { href: "/quiz", label: "Quiz", Icon: BrainIcon },
 ];
 
@@ -62,7 +66,7 @@ const menuLinks: TabItem[] = [
   { href: "/", label: "Accueil", Icon: HomeIcon },
   ...exploreSections,
   { href: "/cards", label: "Mes cartes", Icon: LayersIcon },
-  { href: "/review", label: "À revoir", Icon: ClockIcon },
+  { href: REVIEW_HREF, label: "À revoir", Icon: ClockIcon },
   { href: "/quiz", label: "Quiz", Icon: BrainIcon },
 ];
 
@@ -130,6 +134,12 @@ export function MobileScaffold({
   const currentUserEmail = me?.email || null;
   const currentUserIsStaff = Boolean(me?.is_staff);
 
+  // Le moteur de rétention d'un SRS, c'est de savoir combien de cartes
+  // attendent : on le montre en permanence sur l'onglet, avec le scope par
+  // défaut de la page /review pour que les deux chiffres coïncident.
+  const { data: srsCounts } = useSrsCounts({ scope: REVIEW_DEFAULT_SCOPE }, Boolean(currentUserEmail));
+  const dueCount = availableCount(srsCounts);
+
   React.useEffect(() => {
     ensureProgressSyncLoop();
     setProgressSyncEnabled(Boolean(currentUserEmail));
@@ -177,6 +187,11 @@ export function MobileScaffold({
                         >
                           <item.Icon className="size-4" />
                           <span className="truncate">{item.label}</span>
+                          {item.href === REVIEW_HREF && dueCount > 0 ? (
+                            <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold leading-4 text-primary-foreground">
+                              {formatDueCount(dueCount)}
+                            </span>
+                          ) : null}
                         </Link>
                       </SheetClose>
                     ))}
@@ -370,6 +385,7 @@ export function MobileScaffold({
         <div className="mx-auto flex h-14 w-full max-w-3xl">
           {tabs.map((tab) => {
             const active = isActivePath(pathname, tab);
+            const badge = tab.href === REVIEW_HREF && dueCount > 0 ? dueCount : 0;
             return (
               <Link
                 key={tab.href}
@@ -379,8 +395,19 @@ export function MobileScaffold({
                   active ? "text-foreground" : "text-muted-foreground"
                 )}
                 aria-current={active ? "page" : undefined}
+                aria-label={badge ? `${tab.label} (${badge} à revoir)` : undefined}
               >
-                <tab.Icon className="size-5 shrink-0" />
+                <span className="relative">
+                  <tab.Icon className="size-5 shrink-0" />
+                  {badge ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] font-semibold leading-4 text-primary-foreground"
+                    >
+                      {formatDueCount(badge)}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="max-w-full truncate">{tab.label}</span>
               </Link>
             );

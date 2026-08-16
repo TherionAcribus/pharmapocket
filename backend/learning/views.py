@@ -19,6 +19,8 @@ from .serializers import (
     LessonProgressUpdateSerializer,
     ProgressImportSerializer,
     ProgressImportResponseSerializer,
+    SRSCountsQuerySerializer,
+    SRSCountsSerializer,
     SRSNextQuerySerializer,
     SRSNextSerializer,
     SRSReviewSerializer,
@@ -266,6 +268,47 @@ def _parse_bool(value: str | None, *, default: bool) -> bool:
     return default
 
 
+def _scope_candidates(user, *, scope: str | None, deck_id: int | None, deck_ids: list[int]):
+    """Fiches concernées par un scope de révision.
+
+    Partagé par `srs/next/` et `srs/counts/` : les deux doivent parler du même
+    ensemble de cartes, sinon le compteur annoncerait des cartes que la session
+    ne sert jamais.
+    """
+
+    if not scope:
+        scope = "all_decks"
+
+    if scope == "all_cards":
+        return MicroArticlePage.objects.live().public().select_related("cover_image")
+
+    decks_qs = Deck.objects.filter(user=user, type=Deck.DeckType.USER)
+    if scope == "deck":
+        if deck_id is None:
+            raise DRFValidationError({"deck_id": "deck_id is required when scope=deck"})
+        decks_qs = decks_qs.filter(id=deck_id)
+    elif scope == "decks":
+        if not deck_ids:
+            raise DRFValidationError({"deck_ids": "deck_ids is required when scope=decks"})
+        decks_qs = decks_qs.filter(id__in=deck_ids)
+    elif scope != "all_decks":
+        raise DRFValidationError(
+            {"scope": "scope must be one of: all_decks, deck, decks, all_cards"}
+        )
+
+    card_ids_qs = (
+        DeckCard.objects.filter(deck__in=decks_qs)
+        .values_list("microarticle_id", flat=True)
+        .distinct()
+    )
+    return (
+        MicroArticlePage.objects.live()
+        .public()
+        .filter(id__in=card_ids_qs)
+        .select_related("cover_image")
+    )
+
+
 class SRSNextView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -275,42 +318,14 @@ class SRSNextView(APIView):
         responses=SRSNextSerializer,
     )
     def get(self, request):
-        scope = request.query_params.get("scope")
-        deck_id = _parse_int(request.query_params.get("deck_id"))
-        deck_ids = _parse_int_list(request.query_params.get("deck_ids"))
         only_due = _parse_bool(request.query_params.get("only_due"), default=True)
 
-        if not scope:
-            scope = "all_decks"
-
-        candidates = MicroArticlePage.objects.none()
-
-        if scope == "all_cards":
-            candidates = MicroArticlePage.objects.live().public().select_related("cover_image")
-        else:
-            decks_qs = Deck.objects.filter(user=request.user, type=Deck.DeckType.USER)
-            if scope == "deck":
-                if deck_id is None:
-                    raise DRFValidationError({"deck_id": "deck_id is required when scope=deck"})
-                decks_qs = decks_qs.filter(id=deck_id)
-            elif scope == "decks":
-                if not deck_ids:
-                    raise DRFValidationError({"deck_ids": "deck_ids is required when scope=decks"})
-                decks_qs = decks_qs.filter(id__in=deck_ids)
-            elif scope != "all_decks":
-                raise DRFValidationError({"scope": "scope must be one of: all_decks, deck, decks, all_cards"})
-
-            card_ids_qs = (
-                DeckCard.objects.filter(deck__in=decks_qs)
-                .values_list("microarticle_id", flat=True)
-                .distinct()
-            )
-            candidates = (
-                MicroArticlePage.objects.live()
-                .public()
-                .filter(id__in=card_ids_qs)
-                .select_related("cover_image")
-            )
+        candidates = _scope_candidates(
+            request.user,
+            scope=request.query_params.get("scope"),
+            deck_id=_parse_int(request.query_params.get("deck_id")),
+            deck_ids=_parse_int_list(request.query_params.get("deck_ids")),
+        )
 
         candidate_ids_qs = candidates.values_list("id", flat=True)
         now = timezone.now()
@@ -387,6 +402,54 @@ class SRSNextView(APIView):
             },
         }
         serializer = SRSNextSerializer(payload)
+        return Response(serializer.data)
+
+
+class SRSCountsView(APIView):
+    """Compteurs de la file de révision pour un scope donné.
+
+    `due` + `new` = ce que `srs/next/?only_due=true` sait servir aujourd'hui :
+    c'est le nombre affiché à l'utilisateur (badge d'onglet, page /review).
+    `later` compte les cartes déjà vues dont l'échéance est future, servies
+    uniquement quand `only_due=false`.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="learning_srs_counts",
+        parameters=[SRSCountsQuerySerializer],
+        responses=SRSCountsSerializer,
+    )
+    def get(self, request):
+        candidates = _scope_candidates(
+            request.user,
+            scope=request.query_params.get("scope"),
+            deck_id=_parse_int(request.query_params.get("deck_id")),
+            deck_ids=_parse_int_list(request.query_params.get("deck_ids")),
+        )
+
+        candidate_ids_qs = candidates.values_list("id", flat=True)
+        now = timezone.now()
+
+        states = CardSRSState.objects.filter(
+            user=request.user, microarticle_id__in=candidate_ids_qs
+        )
+        due = states.filter(due_at__lte=now).count()
+        seen = states.count()
+        total = candidates.count()
+        # Une carte jamais notée est servie immédiatement par `srs/next/`, même
+        # en mode « dues » : elle compte donc comme disponible, pas comme future.
+        new = max(0, total - seen)
+
+        serializer = SRSCountsSerializer(
+            {
+                "due": due,
+                "new": new,
+                "later": max(0, seen - due),
+                "total": total,
+            }
+        )
         return Response(serializer.data)
 
 

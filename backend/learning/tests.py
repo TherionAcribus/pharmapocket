@@ -92,6 +92,50 @@ class SrsApiTests(APITestCase):
         self.assertEqual(resp3.status_code, 200)
         self.assertIsNotNone(resp3.data.get("card"))
 
+    def _counts(self, query: str = ""):
+        resp = self.client.get(f"/api/v1/learning/srs/counts/{query}", secure=True)
+        self.assertEqual(resp.status_code, 200)
+        return resp.data
+
+    def test_srs_counts_reports_unseen_cards_as_available(self):
+        data = self._counts(f"?scope=deck&deck_id={self.deck.id}")
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["new"], 1)
+        self.assertEqual(data["due"], 0)
+        self.assertEqual(data["later"], 0)
+
+    def test_srs_counts_follow_reviews(self):
+        # Après une note, la carte sort de la file du jour…
+        self.client.post(
+            "/api/v1/learning/srs/review/",
+            {"card_id": self.card.id, "rating": "know"},
+            format="json",
+            secure=True,
+        )
+        data = self._counts(f"?scope=deck&deck_id={self.deck.id}")
+        self.assertEqual((data["due"], data["new"], data["later"]), (0, 0, 1))
+
+        # …et y revient dès que l'échéance est passée.
+        from learning.models import CardSRSState
+
+        CardSRSState.objects.filter(user=self.user, microarticle_id=self.card.id).update(
+            due_at=timezone.now() - timedelta(days=1)
+        )
+        data = self._counts(f"?scope=deck&deck_id={self.deck.id}")
+        self.assertEqual((data["due"], data["new"], data["later"]), (1, 0, 0))
+
+    def test_srs_counts_reject_deck_scope_without_deck_id(self):
+        resp = self.client.get("/api/v1/learning/srs/counts/?scope=deck", secure=True)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_srs_counts_ignore_other_users_decks(self):
+        User = get_user_model()
+        other = User.objects.create_user(username="u2", email="u2@example.com", password="pw")
+        self.client.force_login(other)
+
+        data = self._counts()
+        self.assertEqual((data["total"], data["due"], data["new"]), (0, 0, 0))
+
     def _import_progress(self, *, time_ms: int, updated_at):
         return self.client.post(
             "/api/v1/learning/progress/import/",

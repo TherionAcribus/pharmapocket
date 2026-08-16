@@ -53,6 +53,23 @@ class SRSNextQuerySerializer(serializers.Serializer):
     only_due = serializers.BooleanField(required=False, default=True)
 
 
+class SRSCountsQuerySerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(
+        choices=["all_decks", "deck", "decks", "all_cards"],
+        required=False,
+        default="all_decks",
+    )
+    deck_id = serializers.IntegerField(min_value=1, required=False)
+    deck_ids = serializers.CharField(required=False)
+
+
+class SRSCountsSerializer(serializers.Serializer):
+    due = serializers.IntegerField(min_value=0)
+    new = serializers.IntegerField(min_value=0)
+    later = serializers.IntegerField(min_value=0)
+    total = serializers.IntegerField(min_value=0)
+
+
 class SRSReviewSerializer(serializers.Serializer):
     card_id = serializers.IntegerField(min_value=1)
     rating = serializers.ChoiceField(choices=["know", "medium", "again"])

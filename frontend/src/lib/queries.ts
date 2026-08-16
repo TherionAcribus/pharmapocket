@@ -67,13 +67,20 @@ import {
   updateOfficialPackProgress,
 } from "@/lib/api/decks";
 import { fetchDiscoverFeed, fetchFeed, type FeedQuery } from "@/lib/api/feed";
-import { fetchSrsNext, postSrsReview, type SrsNextQuery } from "@/lib/api/srs";
+import {
+  fetchSrsCounts,
+  fetchSrsNext,
+  postSrsReview,
+  type SrsCountsQuery,
+  type SrsNextQuery,
+} from "@/lib/api/srs";
 import { fetchTags, fetchTaxonomyTree, type TaxonomyName } from "@/lib/api/taxonomies";
 import { thumbOverridesQueryKey, thumbOverridesQueryOptions } from "@/lib/thumbOverridesQuery";
 import type {
   AccountSummary,
   CurrentUser,
   PaginatedMicroArticleListItemList,
+  SrsCounts,
   SrsNext,
   UserPreferences,
 } from "@/lib/types";
@@ -107,6 +114,13 @@ export const queryKeys = {
   tags: (q: string | undefined, limit: number) => ["tags", q?.trim() || "", limit] as const,
 
   srsNext: (query: SrsNextQuery) => ["srs-next", query] as const,
+  srsCounts: (query: SrsCountsQuery) =>
+    [
+      "srs-counts",
+      query.scope,
+      query.deck_id ?? "",
+      query.deck_ids?.length ? [...query.deck_ids].sort().join(",") : "",
+    ] as const,
 
   adminPacks: ["admin", "packs"] as const,
   adminPack: (packId: number) => ["admin", "pack", packId] as const,
@@ -451,6 +465,20 @@ export function useSrsNext(query: SrsNextQuery, enabled: boolean) {
   });
 }
 
+/**
+ * Nombre de cartes disponibles pour un scope. Sert le badge de l'onglet « À
+ * revoir » et l'écran de démarrage : c'est un ordre de grandeur, pas la carte
+ * courante, d'où un `staleTime` généreux — chaque notation l'invalide.
+ */
+export function useSrsCounts(query: SrsCountsQuery, enabled = true) {
+  return useQuery<SrsCounts>({
+    queryKey: queryKeys.srsCounts(query),
+    queryFn: () => fetchSrsCounts(query),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 /** La réponse de l'API contient déjà la carte suivante : on la pose en cache. */
 export function useRateSrsCard(query: SrsNextQuery) {
   const queryClient = useQueryClient();
@@ -458,6 +486,9 @@ export function useRateSrsCard(query: SrsNextQuery) {
     mutationFn: postSrsReview,
     onSuccess: (next) => {
       queryClient.setQueryData(queryKeys.srsNext(query), next);
+      // Une note repousse l'échéance : tous les compteurs, tous scopes
+      // confondus, viennent de changer.
+      void queryClient.invalidateQueries({ queryKey: ["srs-counts"] });
     },
   });
 }
