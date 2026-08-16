@@ -1429,7 +1429,6 @@ paths:
       tags:
       - content
       security:
-      - cookieAuth: []
       - {}
       responses:
         '200':

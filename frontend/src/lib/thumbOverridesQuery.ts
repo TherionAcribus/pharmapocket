@@ -29,6 +29,12 @@ export const THUMB_OVERRIDES_STALE_TIME = 10 * 60_000;
  * l'enregistrement d'un override et son apparition sur un chargement neuf,
  * pour un coût négligeable (l'endpoint est minuscule et la réponse est
  * mutualisée entre toutes les requêtes de la période).
+ *
+ * Alignée sur le `max-age` du `Cache-Control` renvoyé par l'API
+ * (`_PUBLIC_MAX_AGE` dans `backend/content/views/thumbs.py`) : le cache de
+ * données de Next n'obéit pas aux en-têtes HTTP amont, il faut donc redire ici
+ * ce que le serveur annonce — sans quoi les deux couches expireraient à des
+ * rythmes différents sans que rien ne le signale.
  */
 const SSR_REVALIDATE_SECONDS = 60;
 
@@ -36,7 +42,16 @@ export const thumbOverridesQueryOptions = {
   queryKey: thumbOverridesQueryKey,
   // Enveloppé dans une lambda : TanStack passe un `QueryFunctionContext` en
   // premier argument, qu'on ne veut pas voir atterrir dans le `RequestInit`.
-  queryFn: () => fetchThumbOverridesPublic(),
+  queryFn: () =>
+    fetchThumbOverridesPublic({
+      // `no-cache` plutôt que le `no-store` par défaut du transport : le
+      // navigateur revalide *systématiquement* — jamais de couleur périmée
+      // après une édition dans l'admin — mais il joint cette fois son
+      // `If-None-Match`, et l'API répond 304 sans corps tant que rien n'a
+      // changé. `no-store` interdisait jusqu'à l'envoi du validateur, donc
+      // retéléchargeait la liste entière à chaque appel.
+      cache: "no-cache",
+    }),
   staleTime: THUMB_OVERRIDES_STALE_TIME,
 };
 

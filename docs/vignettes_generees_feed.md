@@ -195,6 +195,40 @@ Conséquences à connaître :
   ne casse : un `console.warn` est tracé côté serveur, le cache n'est pas semé et
   le client refait la requête lui-même — avec le flash d'origine.
 
+### L'endpoint public est cacheable
+
+`GET /api/v1/content/thumb-overrides/` renvoie
+`Cache-Control: public, max-age=60, stale-while-revalidate=300` et un `ETag`.
+Trois choses à savoir sur ce réglage :
+
+- **`max-age=60` redit ce que le front connaît déjà** : le cache de données de
+  Next n'obéit pas aux en-têtes HTTP amont, sa durée vient de
+  `next: { revalidate }`. Les deux valeurs sont volontairement identiques —
+  si l'une bouge, bouger l'autre (`_PUBLIC_MAX_AGE` côté Django,
+  `SSR_REVALIDATE_SECONDS` côté Next).
+- **L'`ETag` est un hachage de la charge utile**, pas un `MAX(updated_at)` :
+  une écriture qui contourne `save()` (`queryset.update()`, `loaddata`, shell)
+  ne touche pas `updated_at` et laisserait un validateur menteur.
+- **La vue ne déclare aucun authenticator** (`authentication_classes = []`).
+  La réponse est la même pour tout le monde ; surtout, authentifier lirait la
+  session, et `SessionMiddleware` ajouterait alors `Vary: Cookie` — ce qui
+  découperait le cache partagé par utilisateur et annulerait le `public`.
+  Contrepartie : un appel authentifié compte désormais dans le budget de débit
+  anonyme (par IP), le rendu serveur restant exempté via `THROTTLE_EXEMPT_IPS`.
+
+Côté navigateur, la requête part en `cache: "no-cache"` : elle revalide toujours
+(donc jamais de couleur périmée après une édition) mais joint son
+`If-None-Match`, et reçoit un **304 sans corps** tant que rien n'a changé.
+
+**Pas de pagination, volontairement** : une vignette a besoin de la table entière
+pour résoudre *son* slug, paginer transformerait donc une requête en N. La
+réponse est de l'ordre de la centaine d'octets par pathologie personnalisée, et
+elle est désormais lue une fois par minute pour l'ensemble des visiteurs. Si le
+volume devenait un jour un problème, la piste n'est pas la pagination mais soit
+un filtrage par les slugs réellement à l'écran (au prix d'un cache fragmenté par
+page), soit la sérialisation du visuel résolu directement dans la charge utile
+des cartes.
+
 ---
 
 ## Dépannage (symptômes fréquents)

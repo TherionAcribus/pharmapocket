@@ -269,6 +269,70 @@ class PublicApiSmokeTests(APITestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(any(r.get("pathology_slug") == "grippe" for r in resp.data))
 
+    def _seed_thumb_override(self, **overrides):
+        defaults = {
+            "bg": "#6D5BD0",
+            "accent": "#D7D2FF",
+            "pattern": PathologyThumbOverride.Pattern.WAVES,
+        }
+        defaults.update(overrides)
+        PathologyThumbOverride.objects.update_or_create(
+            pathology_slug="grippe", defaults=defaults
+        )
+
+    def test_thumb_overrides_public_is_cacheable(self):
+        self._seed_thumb_override()
+
+        resp = self.client.get("/api/v1/content/thumb-overrides/", secure=True)
+        self.assertEqual(resp.status_code, 200)
+
+        cache_control = resp.headers["Cache-Control"]
+        self.assertIn("public", cache_control)
+        self.assertIn("max-age=60", cache_control)
+        self.assertTrue(resp.headers["ETag"])
+        # The URL serves both JSON and the DRF browsable API: a shared cache must
+        # not hand one out for the other.
+        self.assertIn("Accept", resp.headers["Vary"])
+        # `Vary: Cookie` would key the shared cache per user and defeat the
+        # `public` directive — it appears as soon as the session is read, which
+        # is why the view declares no authenticator.
+        self.assertNotIn("Cookie", resp.headers.get("Vary", ""))
+
+    def test_thumb_overrides_public_answers_304_to_a_known_etag(self):
+        self._seed_thumb_override()
+
+        first = self.client.get("/api/v1/content/thumb-overrides/", secure=True)
+        etag = first.headers["ETag"]
+
+        second = self.client.get(
+            "/api/v1/content/thumb-overrides/", secure=True, headers={"if-none-match": etag}
+        )
+        self.assertEqual(second.status_code, 304)
+        self.assertEqual(second.content, b"")
+        # RFC 9110 §15.4.5: the 304 must carry the validator and the freshness
+        # directives, otherwise the client revalidates blind next time.
+        self.assertEqual(second.headers["ETag"], etag)
+        self.assertIn("max-age=60", second.headers["Cache-Control"])
+
+    def test_thumb_overrides_public_etag_follows_a_write_that_bypasses_save(self):
+        # `queryset.update()` leaves `updated_at` untouched, which is exactly the
+        # case an ETag derived from `MAX(updated_at)` would miss: the client
+        # would keep serving the old colour. The validator hashes the payload
+        # precisely so that this write invalidates it.
+        self._seed_thumb_override(bg="#111111")
+        first = self.client.get("/api/v1/content/thumb-overrides/", secure=True)
+        etag = first.headers["ETag"]
+
+        PathologyThumbOverride.objects.filter(pathology_slug="grippe").update(bg="#222222")
+
+        second = self.client.get(
+            "/api/v1/content/thumb-overrides/", secure=True, headers={"if-none-match": etag}
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertNotEqual(second.headers["ETag"], etag)
+        row = next(r for r in second.data if r["pathology_slug"] == "grippe")
+        self.assertEqual(row["bg"], "#222222")
+
     def test_admin_thumb_overrides_requires_auth(self):
         resp = self.client.get("/api/v1/content/admin/thumb-overrides/", secure=True)
         self.assertIn(resp.status_code, (401, 403))

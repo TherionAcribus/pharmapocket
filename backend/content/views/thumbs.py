@@ -1,6 +1,11 @@
 """Overrides de vignettes par pathologie : lecture publique et CRUD staff."""
 
+import hashlib
+import json
+
 from django.db import IntegrityError, transaction
+from django.utils.cache import get_conditional_response, patch_vary_headers
+from django.utils.http import quote_etag
 from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
@@ -30,8 +35,59 @@ def _thumb_override_payload(obj: PathologyThumbOverride) -> dict:
     }
 
 
+# La liste publique est identique pour tous les appelants et ne bouge qu'à
+# l'enregistrement d'un override depuis l'admin. Une minute de fraîcheur absorbe
+# les rafales (un chargement de page = une liste entière de vignettes) sans faire
+# attendre une correction éditoriale ; c'est aussi la durée de revalidation du
+# préchargement serveur côté Next (`fetchThumbOverridesForSsr`), pour que les
+# deux couches ne se contredisent pas.
+_PUBLIC_MAX_AGE = 60
+
+# Passé `max-age`, un cache partagé peut continuer à servir la réponse périmée
+# pendant ce délai le temps de la rafraîchir en tâche de fond : personne
+# n'attend jamais la base pour afficher des couleurs.
+_PUBLIC_STALE_WHILE_REVALIDATE = 300
+
+
+def _public_list_etag(items: list[dict], media_type: str | None) -> str:
+    """Validateur dérivé de la charge utile réellement renvoyée.
+
+    Volontairement pas un `MAX(updated_at)`, qui serait moins cher mais peut
+    mentir : une écriture qui contourne `save()` — `queryset.update()`,
+    `loaddata`, un script shell — ne touche pas `updated_at` et laisserait le
+    validateur inchangé, donc les clients sur une couleur périmée jusqu'à
+    expiration de *leur* cache. Hacher les octets ne peut pas se tromper, et la
+    table est trop petite (une ligne par pathologie personnalisée) pour que la
+    différence de coût se voie.
+
+    Le type de média entre dans le hachage : la même URL sert le JSON et l'API
+    navigable de DRF, deux représentations qui ne doivent pas partager un
+    validateur — d'où aussi le `Vary: Accept` posé sur la réponse.
+    """
+    raw = json.dumps(
+        {"media_type": media_type or "", "items": items},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return quote_etag(hashlib.sha256(raw).hexdigest())
+
+
 class ThumbOverridesPublicView(APIView):
     permission_classes = [AllowAny]
+
+    # Aucun authenticator, là où le reste de l'API utilise la session : la
+    # réponse ne dépend en rien de l'identité de l'appelant. Ce n'est pas
+    # seulement une lecture de session économisée à chaque appel — authentifier
+    # touche `request.session`, ce qui fait ajouter `Vary: Cookie` par
+    # `SessionMiddleware` et découperait le cache partagé par utilisateur,
+    # vidant de son sens le `Cache-Control: public` ci-dessous.
+    #
+    # Contrepartie assumée : un appel authentifié est désormais compté dans le
+    # budget anonyme (par IP) et non plus dans le budget par compte. L'endpoint
+    # est lu au plus une fois par chargement de page, et le rendu serveur — qui
+    # concentre tous les visiteurs derrière une seule IP — est déjà exempté via
+    # `THROTTLE_EXEMPT_IPS`.
+    authentication_classes = []
 
     @extend_schema(
         operation_id="thumb_override_public_list",
@@ -48,7 +104,21 @@ class ThumbOverridesPublicView(APIView):
             }
             for r in rows
         ]
-        return Response(items)
+
+        etag = _public_list_etag(items, request.accepted_media_type)
+        response = Response(items)
+        response["ETag"] = etag
+        response["Cache-Control"] = (
+            f"public, max-age={_PUBLIC_MAX_AGE}, "
+            f"stale-while-revalidate={_PUBLIC_STALE_WHILE_REVALIDATE}"
+        )
+        patch_vary_headers(response, ("Accept",))
+
+        # Renvoie un 304 sans corps si le client détient déjà cette version.
+        # Les en-têtes posés ci-dessus sont recopiés sur le 304 par Django, comme
+        # l'exige la RFC : sans eux le client repartirait sans validateur ni
+        # durée de fraîcheur, et redemanderait tout au coup suivant.
+        return get_conditional_response(request, etag=etag, response=response)
 
 
 class AdminThumbOverrideListCreateView(APIView):
