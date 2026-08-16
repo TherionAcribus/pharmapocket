@@ -22,6 +22,13 @@ class LessonProgress(models.Model):
     percent = models.PositiveSmallIntegerField(default=0)
     time_ms = models.BigIntegerField(default=0)
 
+    # Réservés au quiz, pas encore alimentés : aucun producteur n'existe côté
+    # client (les `Question` sont servies dans le détail d'une fiche mais
+    # affichées en lecture seule, et /quiz est un placeholder). Le transport est
+    # complet — serializers, merge serveur, store local, sync — donc le jour où
+    # une UI de réponse calcule un score /100, il suffira de l'écrire via
+    # `upsertLessonProgress` : aucun nouvel endpoint n'est nécessaire pour le
+    # score agrégé. Voir docs/progression_offline_sync.md § « Scores de quiz ».
     score_best = models.PositiveSmallIntegerField(null=True, blank=True)
     score_last = models.PositiveSmallIntegerField(null=True, blank=True)
 
@@ -38,6 +45,16 @@ class LessonProgress(models.Model):
 
 
 class LearningEvent(models.Model):
+    """Journal d'événements d'apprentissage — **table créée, jamais écrite**.
+
+    Aucune vue, aucun serializer, aucune URL ne l'alimente ni ne la lit à ce
+    jour : elle est posée pour les évolutions prévues au cadrage (badges
+    déclenchés par événements, `quiz_scored`, `streak_day`, et la persistance
+    des réponses individuelles aux questions). Contrairement à
+    `LessonProgress.score_best/score_last`, dont le transport existe déjà, ces
+    usages demanderont un endpoint d'écriture dédié.
+    """
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

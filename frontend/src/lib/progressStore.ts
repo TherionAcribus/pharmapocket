@@ -189,6 +189,10 @@ export function upsertLessonProgress(
     }
   }
 
+  // Aucun appelant ne passe encore de score : le quiz n'a pas d'UI de réponse
+  // (voir docs/progression_offline_sync.md § « Scores de quiz »). Le chemin est
+  // volontairement gardé pour que brancher le quiz ne demande qu'un appel ici,
+  // sans nouvel endpoint : le sync et le merge serveur savent déjà les traiter.
   if (updates.score_best !== undefined) {
     next.score_best = updates.score_best;
   }

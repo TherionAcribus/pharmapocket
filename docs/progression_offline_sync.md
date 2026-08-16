@@ -38,6 +38,8 @@ Notes:
 - `manually_unread` est **purement local** : le serveur ne le connait pas et
   `getPendingLessons` le retire du payload. C est une intention d affichage
   (« ne pas re-marquer cette fiche toute seule »), pas une donnee de progression.
+- `score_best` / `score_last` sont **toujours `null` en pratique** : rien ne les
+  ecrit encore (voir § « Scores de quiz »).
 
 ## API backend
 Endpoints exposes par `backend/learning/views.py`:
@@ -93,6 +95,10 @@ Le `time_ms` ne doit **jamais** etre additionne cote serveur : le client renvoya
 un total cumule, chaque sync reinjecterait le total deja stocke et le temps
 exploserait a chaque cycle (le max rend aussi l import idempotent en cas de retry).
 
+Les deux regles de merge sur les scores (`score_last`, `score_best`) ne sont
+**jamais exercees** aujourd hui, et aucun test ne les couvre : voir la section
+suivante.
+
 Serveur -> Local:
 - si `updated_at` serveur > local, le local est remplace.
 - si le local est plus recent, on garde le local et on laisse la lecon en `pending`.
@@ -121,9 +127,38 @@ Implementes dans `frontend/src/lib/progressSync.ts`:
 - `frontend/src/components/MobileScaffold.tsx`:
   - active le loop de sync si l utilisateur est connecte
 
+## Scores de quiz : transport pret, producteur absent
+`score_best` / `score_last` traversent toute la chaine — modele
+`LessonProgress`, `LessonProgressSerializer` / `LessonProgressUpdateSerializer`,
+merge serveur `_merge_progress`, store local, PATCH unitaire et import batch —
+mais **rien ne les ecrit** : aucun appel a `upsertLessonProgress` ne passe de
+score. Ils valent donc `null` partout en production.
+
+Ce n est pas un oubli de plomberie mais une feature non livree :
+- les `Question` (QCM / vrai-faux) sont modelisees, editables en CMS et **deja
+  servies au client** dans `MicroArticleDetail` (avec `choices` et
+  `correct_answers`) ;
+- mais `ReaderDetailsSheet` ne les affiche qu en lecture seule (enonce +
+  explication, sans les propositions ni interaction), et `/quiz` est un
+  placeholder « Bientot disponible ».
+
+Consequence pour qui reprendra le sujet : **le score agrege ne demande aucun
+nouvel endpoint**. Une UI de reponse qui calcule un score /100 en fin de serie
+et appelle `upsertLessonProgress(lessonId, { score_last, score_best })` suffit ;
+le sync existant fait remonter la valeur, et le merge serveur applique deja le
+max sur `score_best`.
+
+En revanche, la **persistance des reponses individuelles** n a rien : le modele
+`LearningEvent` existe (prevu au cadrage pour `lesson_viewed`, `quiz_scored`,
+`streak_day`, et le declenchement des badges) mais n est ni ecrit ni lu nulle
+part — aucune vue, aucun serializer, aucune URL. Ce volet-la demandera bien un
+endpoint d ecriture dedie.
+
 ## Limitations actuelles
 - Stockage local utilise `localStorage` (pas IndexedDB).
 - La progression n est pas utilisee pour trier/afficher dans le feed pour l instant.
+- Aucun score de quiz n est produit : `score_best` / `score_last` restent `null`
+  (§ « Scores de quiz »).
 
 ## Evolutions possibles
 1) Migrer vers IndexedDB si volume de donnees important.
