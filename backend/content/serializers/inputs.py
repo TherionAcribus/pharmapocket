@@ -20,6 +20,7 @@ from wagtail.images.fields import WagtailImageField
 
 from ..models import (
     CardType,
+    CategoryMaladies,
     Deck,
     DeckCard,
     MicroArticlePage,
@@ -548,6 +549,20 @@ class AdminTaxonomyNodeCreateSerializer(serializers.Serializer):
 # ---------------------------------------------------------------------------
 
 
+def _check_pathology_exists(value: str) -> str:
+    """Refuse un slug absent de la taxonomie maladies.
+
+    Un override n'est jamais joint en base : le client indexe les overrides par
+    le slug de la pathologie principale de la fiche (`resolveGeneratedThumbMeta`
+    côté front). Un slug inconnu produit donc une ligne créée sans erreur mais
+    qui ne s'appliquera à aucune vignette — un override orphelin, invisible et
+    indétectable depuis le back-office.
+    """
+    if not CategoryMaladies.objects.filter(slug=value).exists():
+        raise serializers.ValidationError("unknown pathology_slug")
+    return value
+
+
 class ThumbOverrideCreateSerializer(serializers.Serializer):
     """POST /admin/thumb-overrides/"""
 
@@ -568,7 +583,7 @@ class ThumbOverrideCreateSerializer(serializers.Serializer):
     def validate_pathology_slug(self, value):
         if PathologyThumbOverride.objects.filter(pathology_slug=value).exists():
             raise serializers.ValidationError("pathology_slug already exists")
-        return value
+        return _check_pathology_exists(value)
 
 
 class ThumbOverridePatchSerializer(AtLeastOneFieldMixin, serializers.Serializer):
@@ -591,12 +606,14 @@ class ThumbOverridePatchSerializer(AtLeastOneFieldMixin, serializers.Serializer)
 
     def validate_pathology_slug(self, value):
         override = self.context["override"]
-        if (
-            value != override.pathology_slug
-            and PathologyThumbOverride.objects.filter(pathology_slug=value).exists()
-        ):
+        if value == override.pathology_slug:
+            # Renvoyer le slug inchangé sans le valider : une ligne héritée qui
+            # pointe déjà dans le vide doit rester modifiable (couleurs, motif)
+            # et supprimable, sinon le back-office ne permet plus de la réparer.
+            return value
+        if PathologyThumbOverride.objects.filter(pathology_slug=value).exists():
             raise serializers.ValidationError("pathology_slug already exists")
-        return value
+        return _check_pathology_exists(value)
 
 
 # ---------------------------------------------------------------------------

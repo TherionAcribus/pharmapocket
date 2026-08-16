@@ -22,6 +22,7 @@ from wagtail.models import Page, Site
 
 from .models import (
     CardType,
+    CategoryMaladies,
     CategoryMedicament,
     CategoryPharmacologie,
     Deck,
@@ -1311,6 +1312,7 @@ class InputSerializerValidationTests(APITestCase):
     def test_thumb_override_create_validates_colors_pattern_and_unicity(self):
         url = "/api/v1/content/admin/thumb-overrides/"
         # Slug volontairement absent des overrides posés par la migration de données.
+        CategoryMaladies.add_root(name="Pathologie De Test")
         valid = {
             "pathology_slug": "Pathologie De Test",
             "bg": "#6D5BD0",
@@ -1340,6 +1342,47 @@ class InputSerializerValidationTests(APITestCase):
         self.assertEqual(resp.data["pathology_slug"], "pathologie-de-test")
 
         self.assertFieldError(self._post(url, valid), "pathology_slug", "pathology_slug already exists")
+
+    def test_thumb_override_create_refuses_a_slug_absent_from_the_taxonomy(self):
+        # Sans ce contrôle la ligne partait en base et n'était jamais appliquée :
+        # le front indexe les overrides par slug de pathologie.
+        url = "/api/v1/content/admin/thumb-overrides/"
+        payload = {
+            "pathology_slug": "grippe-bis",
+            "bg": "#6D5BD0",
+            "accent": "#D7D2FF",
+            "pattern": "waves",
+        }
+
+        self.assertFieldError(self._post(url, payload), "pathology_slug", "unknown pathology_slug")
+        self.assertFalse(PathologyThumbOverride.objects.filter(pathology_slug="grippe-bis").exists())
+
+    def test_thumb_override_patch_refuses_a_slug_absent_from_the_taxonomy(self):
+        # Le slug inchangé reste accepté : une ligne héritée pointant dans le
+        # vide doit rester réparable (couleurs, motif) depuis le back-office.
+        override = PathologyThumbOverride.objects.create(
+            pathology_slug="orpheline",
+            bg="#6D5BD0",
+            accent="#D7D2FF",
+            pattern=PathologyThumbOverride.Pattern.WAVES,
+        )
+        url = f"/api/v1/content/admin/thumb-overrides/{override.pathology_slug}/"
+
+        self.assertFieldError(
+            self._patch(url, {"pathology_slug": "inconnue"}),
+            "pathology_slug",
+            "unknown pathology_slug",
+        )
+
+        resp = self._patch(url, {"pathology_slug": "orpheline", "bg": "#000000"})
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        CategoryMaladies.add_root(name="Maladie De Test Patch")
+        resp = self._patch(url, {"pathology_slug": "maladie-de-test-patch"})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        override.refresh_from_db()
+        self.assertEqual(override.pathology_slug, "maladie-de-test-patch")
 
     def test_thumb_override_patch_updates_only_the_submitted_fields(self):
         override = PathologyThumbOverride.objects.create(

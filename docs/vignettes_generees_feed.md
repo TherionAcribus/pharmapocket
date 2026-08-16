@@ -77,7 +77,10 @@ slug : ajouter une pathologie secondaire à une carte ne la repeint pas.
 Ordre de résolution, du plus prioritaire au moins prioritaire :
 
 1. **Override par pathologie** — table `PathologyThumbOverride` (slug → bg/accent/motif),
-   éditable dans `/admin/vignettes`. Sert à traiter un cas particulier.
+   éditable dans `/admin/vignettes`. Sert à traiter un cas particulier. Le slug doit
+   exister dans `CategoryMaladies` : l'API refuse (`unknown pathology_slug`) un slug
+   hors taxonomie, qui produirait une ligne créée sans erreur mais appliquée à aucune
+   fiche (voir « Overrides orphelins » plus bas).
 2. **Domaine** — palette `DOMAIN_VISUALS` dans `GeneratedThumb.tsx`, indexée par les
    clés de `CategoryMaladies.Domain` (`infectio`, `cardio`, `endocrino`, `neuro`,
    `pneumo`, `gastro`, `dermato`, `rhumato`, `urogyneco`, `onco`, `ophtalmo`).
@@ -165,6 +168,17 @@ laisser vide pour hériter du parent. Aucune modification de code n'est nécessa
 - **Label vide** :
   - Pathologie : vérifier `categories_maladies_payload`
   - Médicament : vérifier `categories_medicament_payload`
+
+- **Overrides orphelins (slug hors taxonomie)** : il n'y a **aucune clé étrangère**
+  entre `PathologyThumbOverride.pathology_slug` et `CategoryMaladies.slug` — le
+  rapprochement se fait côté client, par égalité de slug. Un slug qui ne désigne
+  aucune pathologie donne donc un override silencieusement mort. Deux garde-fous :
+  - le serializer refuse un slug absent de `CategoryMaladies` à la création comme au
+    changement de slug (`ThumbOverrideCreateSerializer` / `ThumbOverridePatchSerializer`) ;
+    un PATCH qui laisse le slug inchangé reste accepté, pour que les lignes héritées
+    d'avant ce contrôle restent modifiables et supprimables ;
+  - `/admin/vignettes` marque ces lignes héritées d'un badge « slug inconnu », et
+    « Dupliquer » ne recopie que l'apparence (le slug est à choisir dans la taxonomie).
 
 - **Un override ne s'applique pas sur une carte à plusieurs pathologies** :
   l'override est indexé par le slug de la pathologie **principale** (règle ci-dessus,

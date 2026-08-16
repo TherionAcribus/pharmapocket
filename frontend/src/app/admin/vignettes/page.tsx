@@ -35,6 +35,17 @@ function parsePattern(value: string): PatternName {
   return normalizePattern(value) ?? "waves";
 }
 
+/** Approximation du `slugify` de Django, pour comparer une saisie libre aux slugs de la taxonomie. */
+function slugifyLoose(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function normalizeHexForColorInput(value: string): string {
   const v = value.trim();
   if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
@@ -104,12 +115,20 @@ export default function AdminVignettesPage() {
   const saving = patchMutation.isPending;
   const deleting = deleteMutation.isPending ? deleteMutation.variables ?? null : null;
 
+  const maladieSearchRef = React.useRef<HTMLInputElement | null>(null);
+
   const duplicateToCreate = (r: AdminRow) => {
-    setCreateSlug(`${r.pathology_slug}-bis`);
+    // On ne recopie que l'apparence. Un slug dérivé (`<slug>-bis`) ne
+    // correspondrait à aucune pathologie : l'override serait bien créé mais
+    // ne s'appliquerait à aucune vignette. Le slug doit donc être choisi
+    // dans la taxonomie, d'où le champ vidé et le focus sur la recherche.
+    setCreateSlug("");
     setCreateBg(r.bg);
     setCreateAccent(r.accent);
     setCreatePattern(r.pattern);
+    setMaladieQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
+    maladieSearchRef.current?.focus();
   };
 
   const maladieChoices = React.useMemo(() => {
@@ -117,6 +136,20 @@ export default function AdminVignettesPage() {
     if (!tree) return [] as MaladieChoice[];
     return flattenNodes(tree);
   }, [maladiesTree?.tree]);
+
+  const knownSlugs = React.useMemo(
+    () => new Set(maladieChoices.map((c) => c.slug.toLowerCase())),
+    [maladieChoices]
+  );
+
+  // Simple avertissement, pas un blocage : l'arbre peut ne pas être chargé et
+  // c'est le serveur qui refuse pour de bon un slug hors taxonomie.
+  const isUnknownSlug = (slug: string) => {
+    const s = slugifyLoose(slug);
+    return Boolean(s) && knownSlugs.size > 0 && !knownSlugs.has(s);
+  };
+
+  const createSlugUnknown = isUnknownSlug(createSlug);
 
   const maladieMatches = React.useMemo(() => {
     const q = maladieQuery.trim().toLowerCase();
@@ -246,6 +279,7 @@ export default function AdminVignettesPage() {
             <div className="text-xs font-semibold text-muted-foreground">Choisir une maladie existante</div>
             <div className="mt-2 grid gap-2">
               <Input
+                ref={maladieSearchRef}
                 value={maladieQuery}
                 onChange={(e) => setMaladieQuery(e.target.value)}
                 placeholder={maladiesLoading ? "Chargement…" : "Rechercher une maladie (nom ou slug)"}
@@ -275,6 +309,13 @@ export default function AdminVignettesPage() {
               ) : null}
             </div>
           </div>
+
+          {createSlugUnknown ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+              Aucune maladie ne porte ce slug : l&apos;override ne s&apos;appliquerait à aucune fiche.
+              Choisissez une maladie dans la liste ci-dessus.
+            </div>
+          ) : null}
 
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3">
@@ -313,7 +354,16 @@ export default function AdminVignettesPage() {
                     <div className="flex items-start gap-3">
                       <ThumbPreview bg={r.bg} accent={r.accent} pattern={r.pattern} />
                       <div>
-                        <div className="font-medium leading-snug">{r.pathology_slug}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium leading-snug">{r.pathology_slug}</span>
+                          {/* Lignes héritées d'avant la validation serveur : elles ne
+                              s'appliquent à rien tant que le slug reste inconnu. */}
+                          {isUnknownSlug(r.pathology_slug) ? (
+                            <span className="rounded border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+                              slug inconnu
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {r.bg} · {r.accent} · {r.pattern}
                         </div>
@@ -427,6 +477,12 @@ export default function AdminVignettesPage() {
                           ) : null}
                         </div>
                       </div>
+
+                      {isUnknownSlug(editSlug) ? (
+                        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
+                          Aucune maladie ne porte ce slug : l&apos;override ne s&apos;appliquerait à aucune fiche.
+                        </div>
+                      ) : null}
 
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-3">
