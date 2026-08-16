@@ -99,7 +99,7 @@ export default function AdminVignettesPage() {
   const error = actionError ?? (rowsError ? toErrorMessage(rowsError) : null);
 
   const { data: maladiesTree, isPending: maladiesLoading } = useTaxonomyTree("maladies");
-  const [maladieQuery, setMaladieQuery] = React.useState("");
+  const [createMaladieQuery, setCreateMaladieQuery] = React.useState("");
 
   const [createSlug, setCreateSlug] = React.useState("");
   const [createBg, setCreateBg] = React.useState("#6D5BD0");
@@ -112,6 +112,7 @@ export default function AdminVignettesPage() {
   const [editBg, setEditBg] = React.useState("");
   const [editAccent, setEditAccent] = React.useState("");
   const [editPattern, setEditPattern] = React.useState<PatternName>("waves");
+  const [editMaladieQuery, setEditMaladieQuery] = React.useState("");
   const saving = patchMutation.isPending;
   const deleting = deleteMutation.isPending ? deleteMutation.variables ?? null : null;
 
@@ -126,7 +127,7 @@ export default function AdminVignettesPage() {
     setCreateBg(r.bg);
     setCreateAccent(r.accent);
     setCreatePattern(r.pattern);
-    setMaladieQuery("");
+    setCreateMaladieQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
     maladieSearchRef.current?.focus();
   };
@@ -151,12 +152,19 @@ export default function AdminVignettesPage() {
 
   const createSlugUnknown = isUnknownSlug(createSlug);
 
-  const maladieMatches = React.useMemo(() => {
-    const q = maladieQuery.trim().toLowerCase();
+  const createMaladieMatches = React.useMemo(() => {
+    const q = createMaladieQuery.trim().toLowerCase();
     if (!q) return [] as MaladieChoice[];
     const res = maladieChoices.filter((c) => c.slug.toLowerCase().includes(q) || c.path.toLowerCase().includes(q));
     return res.slice(0, 30);
-  }, [maladieChoices, maladieQuery]);
+  }, [createMaladieQuery, maladieChoices]);
+
+  const editMaladieMatches = React.useMemo(() => {
+    const q = editMaladieQuery.trim().toLowerCase();
+    if (!q) return [] as MaladieChoice[];
+    const res = maladieChoices.filter((c) => c.slug.toLowerCase().includes(q) || c.path.toLowerCase().includes(q));
+    return res.slice(0, 30);
+  }, [editMaladieQuery, maladieChoices]);
 
   const startEdit = (r: AdminRow) => {
     setEditingSlug(r.pathology_slug);
@@ -164,6 +172,7 @@ export default function AdminVignettesPage() {
     setEditBg(r.bg);
     setEditAccent(r.accent);
     setEditPattern(r.pattern);
+    setEditMaladieQuery("");
   };
 
   const cancelEdit = () => {
@@ -172,6 +181,7 @@ export default function AdminVignettesPage() {
     setEditBg("");
     setEditAccent("");
     setEditPattern("waves");
+    setEditMaladieQuery("");
   };
 
   const onCreate = async (e: React.FormEvent) => {
@@ -290,22 +300,22 @@ export default function AdminVignettesPage() {
             <div className="mt-2 grid gap-2">
               <Input
                 ref={maladieSearchRef}
-                value={maladieQuery}
-                onChange={(e) => setMaladieQuery(e.target.value)}
+                value={createMaladieQuery}
+                onChange={(e) => setCreateMaladieQuery(e.target.value)}
                 placeholder={maladiesLoading ? "Chargement…" : "Rechercher une maladie (nom ou slug)"}
                 disabled={creating || maladiesLoading}
               />
 
-              {maladieQuery.trim() && maladieMatches.length ? (
+              {createMaladieQuery.trim() && createMaladieMatches.length ? (
                 <div className="max-h-56 overflow-auto rounded-md border">
-                  {maladieMatches.map((c) => (
+                  {createMaladieMatches.map((c) => (
                     <button
                       key={c.id}
                       type="button"
                       className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                       onClick={() => {
                         setCreateSlug(c.slug);
-                        setMaladieQuery("");
+                        setCreateMaladieQuery("");
                       }}
                       disabled={creating}
                     >
@@ -314,7 +324,7 @@ export default function AdminVignettesPage() {
                     </button>
                   ))}
                 </div>
-              ) : maladieQuery.trim() ? (
+              ) : createMaladieQuery.trim() ? (
                 <div className="text-xs text-muted-foreground">Aucun résultat.</div>
               ) : null}
             </div>
@@ -458,22 +468,22 @@ export default function AdminVignettesPage() {
                         <div className="text-xs font-semibold text-muted-foreground">Changer la maladie</div>
                         <div className="mt-2 grid gap-2">
                           <Input
-                            value={maladieQuery}
-                            onChange={(e) => setMaladieQuery(e.target.value)}
+                            value={editMaladieQuery}
+                            onChange={(e) => setEditMaladieQuery(e.target.value)}
                             placeholder={maladiesLoading ? "Chargement…" : "Rechercher une maladie (nom ou slug)"}
                             disabled={saving || maladiesLoading}
                           />
 
-                          {maladieQuery.trim() && maladieMatches.length ? (
+                          {editMaladieQuery.trim() && editMaladieMatches.length ? (
                             <div className="max-h-56 overflow-auto rounded-md border">
-                              {maladieMatches.map((c) => (
+                              {editMaladieMatches.map((c) => (
                                 <button
                                   key={c.id}
                                   type="button"
                                   className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                                   onClick={() => {
                                     setEditSlug(c.slug);
-                                    setMaladieQuery("");
+                                    setEditMaladieQuery("");
                                   }}
                                   disabled={saving}
                                 >
@@ -482,7 +492,7 @@ export default function AdminVignettesPage() {
                                 </button>
                               ))}
                             </div>
-                          ) : maladieQuery.trim() ? (
+                          ) : editMaladieQuery.trim() ? (
                             <div className="text-xs text-muted-foreground">Aucun résultat.</div>
                           ) : null}
                         </div>
