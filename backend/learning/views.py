@@ -27,10 +27,26 @@ from .serializers import (
 from .srs import next_leitner_state
 
 
+def _clamp_to_now(value: datetime | None, now: datetime) -> datetime | None:
+    """Plafonne un horodatage venu du client a l heure serveur.
+
+    `updated_at` est lu sur l horloge de l appareil : une horloge en avance
+    produirait un horodatage futur qui gagnerait toutes les resolutions de
+    conflit suivantes, gelant la ligne jusqu a ce que le temps reel rattrape.
+    On ne fait que plafonner, jamais avancer : un appareil hors ligne depuis
+    trois jours garde bien sa date passee et perd donc face a plus recent.
+    """
+
+    if value is None:
+        return None
+    return min(value, now)
+
+
 def _merge_progress(
     *,
     existing: LessonProgress | None,
     incoming: dict,
+    now: datetime,
 ) -> LessonProgress:
     """Merge une progression entrante dans l existante.
 
@@ -39,7 +55,7 @@ def _merge_progress(
     reinjecterait a chaque sync le total deja stocke cote serveur.
     """
 
-    incoming_updated_at: datetime = incoming["updated_at"]
+    incoming_updated_at: datetime = _clamp_to_now(incoming["updated_at"], now)
 
     if existing is None:
         return LessonProgress(
@@ -50,15 +66,21 @@ def _merge_progress(
             score_best=incoming.get("score_best"),
             score_last=incoming.get("score_last"),
             updated_at=incoming_updated_at,
-            last_seen_at=incoming.get("last_seen_at"),
+            last_seen_at=_clamp_to_now(incoming.get("last_seen_at"), now),
         )
 
-    if incoming_updated_at > existing.updated_at:
+    # Une ligne deja polluee par une horloge en avance (ecrite avant ce
+    # plafonnement) est ramenee a `now`, sinon elle resterait gagnante face a
+    # tout ce que les appareils enverront d ici la date future stockee.
+    existing_updated_at = min(existing.updated_at, now)
+
+    if incoming_updated_at > existing_updated_at:
         existing.seen = incoming.get("seen", existing.seen)
         existing.completed = incoming.get("completed", existing.completed)
         existing.percent = incoming.get("percent", existing.percent)
         existing.score_last = incoming.get("score_last", existing.score_last)
-        existing.last_seen_at = incoming.get("last_seen_at", existing.last_seen_at)
+        if "last_seen_at" in incoming:
+            existing.last_seen_at = _clamp_to_now(incoming["last_seen_at"], now)
 
     incoming_time_ms = incoming.get("time_ms")
     if incoming_time_ms is not None:
@@ -72,7 +94,7 @@ def _merge_progress(
             else max(existing.score_best, incoming_score_best)
         )
 
-    existing.updated_at = max(existing.updated_at, incoming_updated_at)
+    existing.updated_at = max(existing_updated_at, incoming_updated_at)
     return existing
 
 
@@ -134,13 +156,14 @@ class ProgressUpsertView(APIView):
             return Response({"detail": "Lesson not found."}, status=404)
 
         payload = serializer.validated_data
+        now = timezone.now()
 
         with transaction.atomic():
             existing = LessonProgress.objects.select_for_update().filter(
                 user=request.user, lesson_id=lesson_id
             ).first()
 
-            merged = _merge_progress(existing=existing, incoming=payload)
+            merged = _merge_progress(existing=existing, incoming=payload, now=now)
             merged.user = request.user
             merged.lesson = lesson
             merged.save()
@@ -176,6 +199,9 @@ class ProgressImportView(APIView):
 
         imported = 0
         updated = 0
+        # Un seul `now` pour tout le lot : les fiches d un meme import sont
+        # plafonnees de facon coherente entre elles.
+        now = timezone.now()
 
         with transaction.atomic():
             for lesson_id_str, incoming in lessons.items():
@@ -193,7 +219,7 @@ class ProgressImportView(APIView):
                 ).first()
 
                 before_updated_at = existing.updated_at if existing else None
-                merged = _merge_progress(existing=existing, incoming=incoming)
+                merged = _merge_progress(existing=existing, incoming=incoming, now=now)
                 merged.user = request.user
                 merged.lesson = lesson
                 merged.save()

@@ -9,6 +9,7 @@ from wagtail.models import Page, Site
 
 from content.models import Deck, DeckCard, MicroArticleIndexPage, MicroArticlePage
 from content.serializers import MicroArticleCardSerializer
+from learning.models import LessonProgress
 
 
 class SrsApiTests(APITestCase):
@@ -138,6 +139,70 @@ class SrsApiTests(APITestCase):
         # Un appareil en retard renvoie un total plus ancien : on ne regresse pas.
         self._import_progress(time_ms=60_000, updated_at=now + timedelta(minutes=1))
         self.assertEqual(self._server_time_ms(), 90_000)
+
+    def _patch_progress(self, *, updated_at, **fields):
+        return self.client.patch(
+            f"/api/v1/learning/progress/{self.card.id}/",
+            {**fields, "updated_at": updated_at.isoformat()},
+            format="json",
+            secure=True,
+        )
+
+    def test_future_client_clock_is_capped_to_server_now(self):
+        before = timezone.now()
+        resp = self._patch_progress(seen=True, updated_at=before + timedelta(hours=1))
+        self.assertEqual(resp.status_code, 200)
+
+        stored = LessonProgress.objects.get(user=self.user, lesson_id=self.card.id)
+        self.assertGreaterEqual(stored.updated_at, before)
+        self.assertLessEqual(stored.updated_at, timezone.now())
+
+    def test_future_client_clock_does_not_freeze_later_writes(self):
+        now = timezone.now()
+
+        # Appareil dont l horloge avance d une heure.
+        self._patch_progress(percent=10, completed=False, updated_at=now + timedelta(hours=1))
+        # Appareil a l heure, qui ecrit apres : il doit gagner malgre l horodatage
+        # nominalement plus ancien.
+        resp = self._patch_progress(percent=100, completed=True, updated_at=now + timedelta(seconds=1))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["percent"], 100)
+        self.assertTrue(resp.data["completed"])
+
+    def test_row_already_poisoned_by_a_future_timestamp_is_repaired(self):
+        now = timezone.now()
+        LessonProgress.objects.create(
+            user=self.user,
+            lesson_id=self.card.id,
+            seen=True,
+            percent=10,
+            updated_at=now + timedelta(days=2),
+        )
+
+        resp = self._patch_progress(percent=100, completed=True, updated_at=now)
+        self.assertEqual(resp.status_code, 200)
+
+        stored = LessonProgress.objects.get(user=self.user, lesson_id=self.card.id)
+        self.assertLessEqual(stored.updated_at, timezone.now())
+
+        # La ligne n est plus gelee : l ecriture suivante passe.
+        resp2 = self._patch_progress(percent=100, completed=True, updated_at=timezone.now())
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(resp2.data["percent"], 100)
+        self.assertTrue(resp2.data["completed"])
+
+    def test_future_last_seen_at_is_capped_too(self):
+        now = timezone.now()
+        resp = self._patch_progress(
+            seen=True,
+            last_seen_at=(now + timedelta(hours=1)).isoformat(),
+            updated_at=now,
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        stored = LessonProgress.objects.get(user=self.user, lesson_id=self.card.id)
+        self.assertLessEqual(stored.last_seen_at, timezone.now())
 
     def test_unpublished_card_cannot_be_reviewed_or_receive_progress(self):
         index = MicroArticleIndexPage.objects.first()
