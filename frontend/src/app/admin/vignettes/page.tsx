@@ -224,6 +224,8 @@ export default function AdminVignettesPage() {
 
   const { data: maladiesTree, isPending: maladiesLoading } = useTaxonomyTree("maladies");
   const [createMaladieQuery, setCreateMaladieQuery] = React.useState("");
+  const [createPickerOpen, setCreatePickerOpen] = React.useState(false);
+  const [styleSourceSlug, setStyleSourceSlug] = React.useState<string | null>(null);
   const [coverageQuery, setCoverageQuery] = React.useState("");
 
   const [createSlug, setCreateSlug] = React.useState("");
@@ -243,18 +245,18 @@ export default function AdminVignettesPage() {
 
   const maladieSearchRef = React.useRef<HTMLInputElement | null>(null);
 
-  const duplicateToCreate = (r: AdminRow) => {
-    // On ne recopie que l'apparence. Un slug dérivé (`<slug>-bis`) ne
-    // correspondrait à aucune pathologie : l'override serait bien créé mais
-    // ne s'appliquerait à aucune vignette. Le slug doit donc être choisi
-    // dans la taxonomie, d'où le champ vidé et le focus sur la recherche.
+  const applyStyleToAnotherPathology = (r: AdminRow) => {
     setCreateSlug("");
     setCreateBg(r.bg);
     setCreateAccent(r.accent);
     setCreatePattern(r.pattern);
     setCreateMaladieQuery("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    maladieSearchRef.current?.focus();
+    setStyleSourceSlug(r.pathology_slug);
+    setCreatePickerOpen(true);
+    requestAnimationFrame(() => {
+      maladieSearchRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      maladieSearchRef.current?.focus();
+    });
   };
 
   const prepareCreateForPathology = (pathology: MaladieChoice) => {
@@ -264,6 +266,8 @@ export default function AdminVignettesPage() {
     setCreateAccent(visual.accent);
     setCreatePattern(visual.pattern);
     setCreateMaladieQuery("");
+    setCreatePickerOpen(false);
+    setStyleSourceSlug(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -276,6 +280,11 @@ export default function AdminVignettesPage() {
   const knownSlugs = React.useMemo(
     () => new Set(maladieChoices.map((c) => c.slug.toLowerCase())),
     [maladieChoices]
+  );
+
+  const overriddenSlugs = React.useMemo(
+    () => new Set(rows.map((r) => r.pathology_slug.toLowerCase())),
+    [rows]
   );
 
   const coverageItems = React.useMemo<CoverageItem[]>(() => {
@@ -325,10 +334,15 @@ export default function AdminVignettesPage() {
 
   const createMaladieMatches = React.useMemo(() => {
     const q = createMaladieQuery.trim().toLowerCase();
-    if (!q) return [] as MaladieChoice[];
-    const res = maladieChoices.filter((c) => c.slug.toLowerCase().includes(q) || c.path.toLowerCase().includes(q));
+    if (!q && !createPickerOpen) return [] as MaladieChoice[];
+    const sourceSlug = styleSourceSlug?.toLowerCase() ?? null;
+    const res = maladieChoices.filter((c) => {
+      const slug = c.slug.toLowerCase();
+      if (slug === sourceSlug || overriddenSlugs.has(slug)) return false;
+      return !q || slug.includes(q) || c.path.toLowerCase().includes(q);
+    });
     return res.slice(0, 30);
-  }, [createMaladieQuery, maladieChoices]);
+  }, [createMaladieQuery, createPickerOpen, maladieChoices, overriddenSlugs, styleSourceSlug]);
 
   const editMaladieMatches = React.useMemo(() => {
     const q = editMaladieQuery.trim().toLowerCase();
@@ -369,6 +383,8 @@ export default function AdminVignettesPage() {
         pattern: createPattern,
       });
       setCreateSlug("");
+      setCreatePickerOpen(false);
+      setStyleSourceSlug(null);
     } catch (err: unknown) {
       setActionError(toErrorMessage(err));
     }
@@ -418,7 +434,9 @@ export default function AdminVignettesPage() {
       {checking ? <div className="text-sm text-muted-foreground">Vérification…</div> : null}
 
       <div className="rounded-xl border bg-card p-4 space-y-3">
-        <div className="text-sm font-semibold">Créer un override</div>
+        <div className="text-sm font-semibold">
+          {styleSourceSlug ? `Appliquer le style de « ${styleSourceSlug} »` : "Créer un override"}
+        </div>
         <form className="grid gap-2" onSubmit={onCreate}>
           <div className="grid gap-2 sm:grid-cols-3">
             <Input
@@ -462,17 +480,40 @@ export default function AdminVignettesPage() {
           <ContrastNotice bg={createBg.trim()} accent={createAccent.trim()} />
 
           <div className="rounded-lg border bg-background p-3">
-            <div className="text-xs font-semibold text-muted-foreground">Choisir une maladie existante</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-muted-foreground">
+                {styleSourceSlug ? "Choisir une autre maladie sans override" : "Choisir une maladie existante"}
+              </div>
+              {styleSourceSlug ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setStyleSourceSlug(null);
+                    setCreatePickerOpen(false);
+                    setCreateMaladieQuery("");
+                  }}
+                  disabled={creating}
+                >
+                  Annuler
+                </Button>
+              ) : null}
+            </div>
             <div className="mt-2 grid gap-2">
               <Input
                 ref={maladieSearchRef}
                 value={createMaladieQuery}
-                onChange={(e) => setCreateMaladieQuery(e.target.value)}
+                onFocus={() => setCreatePickerOpen(true)}
+                onChange={(e) => {
+                  setCreateMaladieQuery(e.target.value);
+                  setCreatePickerOpen(true);
+                }}
                 placeholder={maladiesLoading ? "Chargement…" : "Rechercher une maladie (nom ou slug)"}
                 disabled={creating || maladiesLoading}
               />
 
-              {createMaladieQuery.trim() && createMaladieMatches.length ? (
+              {createPickerOpen && createMaladieMatches.length ? (
                 <div className="max-h-56 overflow-auto rounded-md border">
                   {createMaladieMatches.map((c) => (
                     <button
@@ -482,6 +523,7 @@ export default function AdminVignettesPage() {
                       onClick={() => {
                         setCreateSlug(c.slug);
                         setCreateMaladieQuery("");
+                        setCreatePickerOpen(false);
                       }}
                       disabled={creating}
                     >
@@ -490,8 +532,12 @@ export default function AdminVignettesPage() {
                     </button>
                   ))}
                 </div>
-              ) : createMaladieQuery.trim() ? (
-                <div className="text-xs text-muted-foreground">Aucun résultat.</div>
+              ) : createPickerOpen ? (
+                <div className="text-xs text-muted-foreground">
+                  {styleSourceSlug
+                    ? "Aucune autre maladie sans override n’est disponible."
+                    : "Aucune maladie disponible sans override ne correspond à cette recherche."}
+                </div>
               ) : null}
             </div>
           </div>
@@ -510,7 +556,13 @@ export default function AdminVignettesPage() {
             </div>
 
             <Button type="submit" disabled={creating || !createSlug.trim()}>
-              {creating ? "Création…" : "Créer"}
+              {creating
+                ? styleSourceSlug
+                  ? "Application…"
+                  : "Création…"
+                : styleSourceSlug
+                  ? "Appliquer le style"
+                  : "Créer"}
             </Button>
           </div>
         </form>
@@ -614,10 +666,10 @@ export default function AdminVignettesPage() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => duplicateToCreate(r)}
-                            disabled={saving || deleting != null}
+                            onClick={() => applyStyleToAnotherPathology(r)}
+                            disabled={isEditing || saving || deleting != null}
                           >
-                            Dupliquer
+                            Appliquer ce style à une autre maladie
                           </Button>
                           <Button
                             type="button"
