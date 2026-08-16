@@ -6,6 +6,7 @@ from io import BytesIO
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.db.models.query import QuerySet
@@ -1469,6 +1470,31 @@ class InputSerializerValidationTests(APITestCase):
         self.assertFieldError(resp, "pathology_slug", "pathology_slug already exists")
         override.refresh_from_db()
         self.assertEqual(override.pathology_slug, "grippe-course")
+
+    def test_thumb_override_model_validates_the_colors(self):
+        # Le contrôle hex du serializer ne couvre que l'API : une édition depuis
+        # l'admin (ou un `loaddata`) passe par `full_clean` et doit être arrêtée là.
+        override = PathologyThumbOverride(
+            pathology_slug="grippe-clean",
+            bg="rgb(1,2,3)",
+            accent="#D7D2FF",
+            pattern=PathologyThumbOverride.Pattern.WAVES,
+        )
+
+        with self.assertRaises(DjangoValidationError) as ctx:
+            override.full_clean()
+        self.assertIn("bg", ctx.exception.error_dict)
+
+        override.bg = "#6D5BD0"
+        override.accent = "#GGG"
+        with self.assertRaises(DjangoValidationError) as ctx:
+            override.full_clean()
+        self.assertIn("accent", ctx.exception.error_dict)
+
+        # Les trois longueurs acceptées côté API le restent côté modèle.
+        for accent in ("#FFF", "#D7D2FF", "#D7D2FF80"):
+            override.accent = accent
+            override.full_clean()
 
     # --- Sujets --------------------------------------------------------------
 

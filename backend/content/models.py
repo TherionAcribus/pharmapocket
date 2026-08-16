@@ -1,7 +1,12 @@
 from anyascii import anyascii
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
+from django.core.validators import (
+    MaxLengthValidator,
+    MaxValueValidator,
+    MinValueValidator,
+    RegexValidator,
+)
 from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
@@ -29,6 +34,18 @@ from .forms import CategoryNodeForm
 from .serializers import MicroArticleCardField
 
 
+# Doublon volontaire de `HexColorField` (couche API) : le serializer ne protège que
+# les écritures passant par `/api/thumb-overrides`, alors qu'une édition depuis
+# l'admin Django/Wagtail, un `loaddata` ou un shell écrit directement en base. La
+# grammaire acceptée est la même que côté API (`#RGB`, `#RRGGBB`, `#RRGGBBAA`), à
+# ceci près que les espaces autour ne sont pas tolérés : le serializer les retire
+# avant l'enregistrement, donc une valeur stockée n'en comporte jamais.
+validate_hex_color = RegexValidator(
+    regex=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+    message="Couleur hexadécimale attendue (ex: #6D5BD0).",
+)
+
+
 class PathologyThumbOverride(models.Model):
     class Pattern(models.TextChoices):
         WAVES = "waves", "waves"
@@ -43,8 +60,8 @@ class PathologyThumbOverride(models.Model):
         TRIANGLES = "triangles", "triangles"
 
     pathology_slug = models.SlugField(max_length=140, unique=True)
-    bg = models.CharField(max_length=20)
-    accent = models.CharField(max_length=20)
+    bg = models.CharField(max_length=20, validators=[validate_hex_color])
+    accent = models.CharField(max_length=20, validators=[validate_hex_color])
     pattern = models.CharField(max_length=20, choices=Pattern.choices)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
