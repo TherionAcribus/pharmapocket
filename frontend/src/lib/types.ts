@@ -1677,6 +1677,7 @@ export interface components {
             id: number;
             name: string;
             slug: string;
+            domain?: string;
             parent_id: number | null;
             readonly children: components["schemas"]["TaxonomyNode"][];
         };

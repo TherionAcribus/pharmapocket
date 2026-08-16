@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
+import { resolveVisualCode, type VisualCode } from "@/components/GeneratedThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -69,13 +70,27 @@ type MaladieChoice = {
   slug: string;
   name: string;
   path: string;
+  domain?: string;
+};
+
+type CoverageItem = {
+  key: string;
+  pathology: MaladieChoice | null;
+  override: AdminRow | null;
+  visual: VisualCode;
 };
 
 function flattenNodes(nodes: TaxonomyNode[], prefix: string[] = []): MaladieChoice[] {
   const out: MaladieChoice[] = [];
   for (const n of nodes) {
     const nextPrefix = [...prefix, n.name];
-    out.push({ id: n.id, slug: n.slug, name: n.name, path: nextPrefix.join(" / ") });
+    out.push({
+      id: n.id,
+      slug: n.slug,
+      name: n.name,
+      path: nextPrefix.join(" / "),
+      domain: n.domain,
+    });
     if (n.children?.length) out.push(...flattenNodes(n.children, nextPrefix));
   }
   return out;
@@ -100,6 +115,7 @@ export default function AdminVignettesPage() {
 
   const { data: maladiesTree, isPending: maladiesLoading } = useTaxonomyTree("maladies");
   const [createMaladieQuery, setCreateMaladieQuery] = React.useState("");
+  const [coverageQuery, setCoverageQuery] = React.useState("");
 
   const [createSlug, setCreateSlug] = React.useState("");
   const [createBg, setCreateBg] = React.useState("#6D5BD0");
@@ -132,6 +148,16 @@ export default function AdminVignettesPage() {
     maladieSearchRef.current?.focus();
   };
 
+  const prepareCreateForPathology = (pathology: MaladieChoice) => {
+    const visual = resolveVisualCode(pathology);
+    setCreateSlug(pathology.slug);
+    setCreateBg(visual.bg);
+    setCreateAccent(visual.accent);
+    setCreatePattern(visual.pattern);
+    setCreateMaladieQuery("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const maladieChoices = React.useMemo(() => {
     const tree = maladiesTree?.tree;
     if (!tree) return [] as MaladieChoice[];
@@ -141,6 +167,42 @@ export default function AdminVignettesPage() {
   const knownSlugs = React.useMemo(
     () => new Set(maladieChoices.map((c) => c.slug.toLowerCase())),
     [maladieChoices]
+  );
+
+  const coverageItems = React.useMemo<CoverageItem[]>(() => {
+    const overridesBySlug = new Map(rows.map((r) => [r.pathology_slug.toLowerCase(), r]));
+    const taxonomyItems = maladieChoices.map((pathology) => {
+      const override = overridesBySlug.get(pathology.slug.toLowerCase()) ?? null;
+      return {
+        key: `pathology-${pathology.id}`,
+        pathology,
+        override,
+        visual: override ?? resolveVisualCode(pathology),
+      };
+    });
+    const orphanItems = rows
+      .filter((r) => !knownSlugs.has(r.pathology_slug.toLowerCase()))
+      .map((override) => ({
+        key: `override-${override.id}`,
+        pathology: null,
+        override,
+        visual: override,
+      }));
+    return [...taxonomyItems, ...orphanItems];
+  }, [knownSlugs, maladieChoices, rows]);
+
+  const filteredCoverageItems = React.useMemo(() => {
+    const q = coverageQuery.trim().toLowerCase();
+    if (!q) return coverageItems;
+    return coverageItems.filter(({ pathology, override }) => {
+      const slug = pathology?.slug ?? override?.pathology_slug ?? "";
+      return slug.toLowerCase().includes(q) || pathology?.path.toLowerCase().includes(q);
+    });
+  }, [coverageItems, coverageQuery]);
+
+  const coveredPathologiesCount = React.useMemo(
+    () => coverageItems.filter((item) => item.pathology && item.override).length,
+    [coverageItems]
   );
 
   // Simple avertissement, pas un blocage : l'arbre peut ne pas être chargé et
@@ -352,76 +414,119 @@ export default function AdminVignettesPage() {
 
       <div className="rounded-xl border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-semibold">Overrides existants</div>
+          <div>
+            <div className="text-sm font-semibold">Couverture des pathologies</div>
+            <div className="text-xs text-muted-foreground">
+              {coveredPathologiesCount} override{coveredPathologiesCount > 1 ? "s" : ""} · {maladieChoices.length - coveredPathologiesCount} rendu{maladieChoices.length - coveredPathologiesCount > 1 ? "s" : ""} par défaut
+            </div>
+          </div>
           <Button type="button" variant="outline" onClick={() => void refetch()} disabled={loading}>
             {loading ? "Actualisation…" : "Actualiser"}
           </Button>
         </div>
 
+        <Input
+          value={coverageQuery}
+          onChange={(e) => setCoverageQuery(e.target.value)}
+          placeholder="Rechercher dans toutes les pathologies"
+          disabled={maladiesLoading}
+          aria-label="Rechercher dans la couverture des pathologies"
+        />
+
         {error ? (
           <div className="rounded-md border bg-destructive/5 p-2 text-sm text-destructive">{error}</div>
         ) : null}
 
-        {!rows.length ? (
-          <div className="text-sm text-muted-foreground">Aucun override.</div>
+        {maladiesLoading && !maladieChoices.length ? (
+          <div className="text-sm text-muted-foreground">Chargement des pathologies…</div>
+        ) : !coverageItems.length ? (
+          <div className="text-sm text-muted-foreground">Aucune pathologie.</div>
+        ) : !filteredCoverageItems.length ? (
+          <div className="text-sm text-muted-foreground">Aucune pathologie ne correspond à cette recherche.</div>
         ) : (
           <div className="grid gap-2">
-            {rows.map((r) => {
-              const isEditing = editingSlug === r.pathology_slug;
+            {filteredCoverageItems.map(({ key, pathology, override: r, visual }) => {
+              const slug = pathology?.slug ?? r?.pathology_slug ?? "";
+              const isEditing = Boolean(r && editingSlug === r.pathology_slug);
               return (
-                <div key={r.id} className="rounded-lg border bg-background p-3">
-                  <div className="flex items-start justify-between gap-3">
+                <div key={key} className="rounded-lg border bg-background p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-3">
-                      <ThumbPreview bg={r.bg} accent={r.accent} pattern={r.pattern} />
+                      <ThumbPreview bg={visual.bg} accent={visual.accent} pattern={visual.pattern} />
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium leading-snug">{r.pathology_slug}</span>
-                          {/* Lignes héritées d'avant la validation serveur : elles ne
-                              s'appliquent à rien tant que le slug reste inconnu. */}
-                          {isUnknownSlug(r.pathology_slug) ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium leading-snug">{pathology?.name ?? slug}</span>
+                          <span
+                            className={cn(
+                              "rounded border px-1.5 py-0.5 text-[10px] font-medium",
+                              r
+                                ? "border-primary/30 bg-primary/5 text-primary"
+                                : "border-muted-foreground/30 text-muted-foreground"
+                            )}
+                          >
+                            {r ? "override" : "défaut"}
+                          </span>
+                          {!pathology ? (
                             <span className="rounded border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
-                              slug inconnu
+                              hors taxonomie
                             </span>
                           ) : null}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {r.bg} · {r.accent} · {r.pattern}
+                          {slug}{pathology ? ` · ${pathology.path}` : " · override sans pathologie correspondante"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {visual.bg} · {visual.accent} · {visual.pattern}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => (isEditing ? cancelEdit() : startEdit(r))}
-                        disabled={saving || deleting != null}
-                      >
-                        {isEditing ? "Annuler" : "Modifier"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => duplicateToCreate(r)}
-                        disabled={saving || deleting != null}
-                      >
-                        Dupliquer
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => void onDelete(r.pathology_slug)}
-                        disabled={saving || deleting === r.pathology_slug}
-                      >
-                        {deleting === r.pathology_slug ? "Suppression…" : "Supprimer"}
-                      </Button>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      {r ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => (isEditing ? cancelEdit() : startEdit(r))}
+                            disabled={saving || deleting != null}
+                          >
+                            {isEditing ? "Annuler" : "Modifier"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => duplicateToCreate(r)}
+                            disabled={saving || deleting != null}
+                          >
+                            Dupliquer
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => void onDelete(r.pathology_slug)}
+                            disabled={saving || deleting === r.pathology_slug}
+                          >
+                            {deleting === r.pathology_slug ? "Suppression…" : "Supprimer"}
+                          </Button>
+                        </>
+                      ) : pathology ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => prepareCreateForPathology(pathology)}
+                          disabled={creating}
+                        >
+                          Personnaliser
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
 
-                  {isEditing ? (
+                  {isEditing && r ? (
                     <div className="mt-3 grid gap-2">
                       <div className="grid gap-2 sm:grid-cols-4">
                         <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value)} disabled={saving} />

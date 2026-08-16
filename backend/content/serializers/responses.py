@@ -63,6 +63,7 @@ class TaxonomyNodeSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     slug = serializers.CharField()
+    domain = serializers.CharField(required=False, allow_blank=True)
     parent_id = serializers.IntegerField(allow_null=True)
     children = serializers.SerializerMethodField()
 

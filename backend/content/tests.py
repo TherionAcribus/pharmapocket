@@ -224,6 +224,21 @@ class PublicApiSmokeTests(APITestCase):
         self.assertIn("tree", resp.data)
         self.assertTrue(resp.data["tree"], "Expected non-empty taxonomy tree")
 
+    def test_maladies_taxonomy_tree_exposes_resolved_domains(self):
+        root = CategoryMaladies.add_root(
+            name="Couverture cardiovasculaire",
+            domain=CategoryMaladies.Domain.CARDIO,
+        )
+        child = root.add_child(name="Pathologie de couverture")
+
+        resp = self.client.get("/api/v1/taxonomies/maladies/tree/", secure=True)
+
+        self.assertEqual(resp.status_code, 200)
+        root_payload = next(node for node in resp.data["tree"] if node["id"] == root.id)
+        child_payload = next(node for node in root_payload["children"] if node["id"] == child.id)
+        self.assertEqual(root_payload["domain"], CategoryMaladies.Domain.CARDIO)
+        self.assertEqual(child_payload["domain"], CategoryMaladies.Domain.CARDIO)
+
     def test_taxonomy_resolve_smoke(self):
         root_slug = slugify("Diabète")
         child_slug = slugify("Biguanides")

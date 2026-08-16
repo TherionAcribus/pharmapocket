@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from taggit.models import Tag
 
+from .domains import resolved_domain_map
 from .models import CategoryMaladies, CategoryMedicament, CategoryPharmacologie, CategoryTheme
 from .serializers import (
     TagPayloadSerializer,
@@ -47,6 +48,7 @@ class TaxonomyTreeView(APIView):
         path_to_id: dict[str, int] = {}
         by_id: dict[int, dict] = {}
         children: dict[int | None, list[dict]] = defaultdict(list)
+        domains = resolved_domain_map() if taxonomy == "maladies" else None
 
         for n in nodes:
             parent_id = None
@@ -63,6 +65,8 @@ class TaxonomyTreeView(APIView):
                 "parent_id": parent_id,
                 "children": [],
             }
+            if domains is not None:
+                item["domain"] = domains.get(n.id, "")
             by_id[n.id] = item
             children[parent_id].append(item)
 

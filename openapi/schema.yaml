@@ -3781,6 +3781,8 @@ components:
           type: string
         slug:
           type: string
+        domain:
+          type: string
         parent_id:
           type: integer
           nullable: true
