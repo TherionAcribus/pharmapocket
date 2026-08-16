@@ -47,7 +47,6 @@ import { isApiError } from "@/lib/api/client";
 import {
   fetchLanding,
   fetchMicroArticleReadStates,
-  fetchMicroArticleSavedStatus,
   fetchThumbOverridesPublic,
   saveMicroArticle,
   unsaveMicroArticle,
@@ -102,7 +101,6 @@ export const queryKeys = {
   officialPack: (packId: number) => ["official-pack", packId] as const,
 
   feed: (source: FeedSource, query: FeedQuery) => ["feed", source, normalizeFeedQuery(query)] as const,
-  savedStatus: (slug: string) => ["saved-status", slug] as const,
   readStates: (slugs: string[]) => ["read-states", [...slugs].sort().join(",")] as const,
 
   taxonomyTree: (taxonomy: Taxonomy) => ["taxonomy-tree", taxonomy] as const,
@@ -276,14 +274,11 @@ export function useReadStates(slugs: string[], enabled: boolean) {
   });
 }
 
-export function useSavedStatus(slug: string, enabled: boolean) {
-  return useQuery({
-    queryKey: queryKeys.savedStatus(slug),
-    queryFn: () => fetchMicroArticleSavedStatus(slug),
-    enabled,
-  });
-}
-
+/**
+ * L'état « sauvegardée » d'une fiche vient du détail (`is_saved`), pas d'une
+ * requête dédiée : l'appelant est donc seul maître de son affichage optimiste.
+ * Sauvegarder écrit dans le deck par défaut, d'où l'invalidation des decks.
+ */
 export function useToggleSaved() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -292,9 +287,7 @@ export function useToggleSaved() {
       else await unsaveMicroArticle(slug);
       return { slug, saved };
     },
-    onSuccess: ({ slug, saved }) => {
-      queryClient.setQueryData(queryKeys.savedStatus(slug), { saved });
-    },
+    onSuccess: () => invalidateDecks(queryClient),
   });
 }
 

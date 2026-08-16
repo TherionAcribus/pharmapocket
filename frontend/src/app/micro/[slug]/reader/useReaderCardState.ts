@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { useSavedStatus, useToggleSaved } from "@/lib/queries";
+import { useToggleSaved } from "@/lib/queries";
 import {
   addLessonTime,
   getLocalReadState,
@@ -145,6 +145,10 @@ export type CardActions = {
 /**
  * Sauvegarde et état de lecture.
  *
+ * `data` est la seule entrée serveur : le détail porte déjà `is_saved` et
+ * `is_read` (la page les demande avec la session), donc aucune requête par
+ * carte ne vient les redemander. L'état local ne sert qu'à l'optimisme.
+ *
  * La sauvegarde est optimiste : l'étoile bascule tout de suite et repart en
  * arrière si le serveur refuse. L'état « lu » n'a en revanche pas de requête à
  * refuser : il s'écrit dans le store local (source unique côté client, remontée
@@ -175,13 +179,6 @@ export function useCardActions({
     setIsRead(getLocalReadState(data.id) ?? Boolean(data.is_read));
     setManuallyUnread(isManuallyUnread(data.id));
   }, [data.slug, data.id, data.is_read]);
-
-  const { data: savedStatus } = useSavedStatus(data.slug, isLoggedIn);
-
-  React.useEffect(() => {
-    if (!savedStatus) return;
-    setSaved(Boolean(savedStatus.saved));
-  }, [savedStatus]);
 
   // Lire la fiche vaut lecture — pas l'ouvrir. Une seule écriture : le store
   // local, que le sync remonte ensuite dans `LessonProgress`, l'unique source

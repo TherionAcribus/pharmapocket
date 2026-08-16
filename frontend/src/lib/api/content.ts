@@ -1,9 +1,20 @@
 import { apiGet, apiJson, jsonBody } from "@/lib/api/client";
 import type { LandingPayload, MicroArticleDetail, MicroArticleListItem } from "@/lib/types";
 
-export async function fetchMicroArticle(slug: string): Promise<MicroArticleDetail> {
+/**
+ * Détail d'une fiche.
+ *
+ * `init` sert au rendu serveur : un composant serveur n'a pas de cookies à
+ * joindre automatiquement, il doit relayer la session lui-même pour que l'API
+ * renvoie les champs personnalisés (`is_saved`, `is_read`).
+ */
+export async function fetchMicroArticle(
+  slug: string,
+  init?: RequestInit
+): Promise<MicroArticleDetail> {
   return apiGet<MicroArticleDetail>(
-    `/api/v1/content/microarticles/${encodeURIComponent(slug)}/`
+    `/api/v1/content/microarticles/${encodeURIComponent(slug)}/`,
+    init
   );
 }
 
@@ -13,10 +24,6 @@ export async function fetchSavedMicroArticles(): Promise<MicroArticleListItem[]>
 
 export async function saveMicroArticle(slug: string): Promise<{ saved: boolean }> {
   return apiJson<{ saved: boolean }>(`/api/v1/content/saved/`, jsonBody("POST", { slug }));
-}
-
-export async function fetchMicroArticleSavedStatus(slug: string): Promise<{ saved: boolean }> {
-  return apiGet<{ saved: boolean }>(`/api/v1/content/saved/${encodeURIComponent(slug)}/`);
 }
 
 export async function unsaveMicroArticle(slug: string): Promise<void> {
