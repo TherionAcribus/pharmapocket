@@ -99,11 +99,6 @@ class ReadStateMapSerializer(serializers.Serializer):
     items = serializers.DictField(child=serializers.BooleanField())
 
 
-class ReadStateSerializer(serializers.Serializer):
-    slug = serializers.CharField()
-    is_read = serializers.BooleanField()
-
-
 class DeckSummarySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()

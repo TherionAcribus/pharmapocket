@@ -184,7 +184,7 @@ def _list_messages(message: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Feed : sauvegardes et état de lecture
+# Feed : sauvegardes
 # ---------------------------------------------------------------------------
 
 
@@ -194,18 +194,6 @@ class SavedMicroArticleCreateSerializer(serializers.Serializer):
     slug = MicroArticleSlugField(
         source="page",
         error_messages=_required_messages("slug is required"),
-    )
-
-
-class MicroArticleReadStateSerializer(serializers.Serializer):
-    """POST /read-state/ — `validated_data["page"]` est la fiche résolue."""
-
-    slug = MicroArticleSlugField(
-        source="page",
-        error_messages=_required_messages("slug is required"),
-    )
-    is_read = serializers.BooleanField(
-        error_messages=_required_messages("is_read must be a boolean"),
     )
 
 

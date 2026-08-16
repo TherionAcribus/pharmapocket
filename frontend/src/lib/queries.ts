@@ -50,7 +50,6 @@ import {
   fetchMicroArticleSavedStatus,
   fetchThumbOverridesPublic,
   saveMicroArticle,
-  setMicroArticleReadState,
   unsaveMicroArticle,
 } from "@/lib/api/content";
 import {
@@ -274,17 +273,6 @@ export function useReadStates(slugs: string[], enabled: boolean) {
     queryKey: queryKeys.readStates(slugs),
     queryFn: () => fetchMicroArticleReadStates(slugs),
     enabled: enabled && slugs.length > 0,
-  });
-}
-
-export function useSetReadState() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ slug, isRead }: { slug: string; isRead: boolean }) =>
-      setMicroArticleReadState(slug, isRead),
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ["read-states"] });
-    },
   });
 }
 

@@ -16,7 +16,7 @@ import {
   useReadStates,
   useStartOfficialPack,
 } from "@/lib/queries";
-import { getLessonProgress } from "@/lib/progressStore";
+import { getLocalReadState } from "@/lib/progressStore";
 
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
 const RETURN_TO_STORAGE_KEY = "pp_reader:returnTo";
@@ -99,13 +99,15 @@ export default function PackDetailPage() {
   const { data: readStates } = useReadStates(deckSlugs, isLoggedIn);
   const readMap = readStates?.items ?? {};
 
-  const localReadIds = React.useMemo(() => {
-    const ids = new Set<number>();
+  // La map serveur peut avoir un cycle de sync de retard : le store local, qui
+  // est ce que le lecteur écrit, l'emporte sur les fiches qu'il connaît.
+  const localReadById = React.useMemo(() => {
+    const byId = new Map<number, boolean>();
     for (const c of pack?.cards ?? []) {
-      const p = getLessonProgress(c.id);
-      if (p?.seen || p?.completed) ids.add(c.id);
+      const local = getLocalReadState(c.id);
+      if (local !== null) byId.set(c.id, local);
     }
-    return ids;
+    return byId;
   }, [pack?.cards]);
 
   const resumeIndex = React.useMemo(() => {
@@ -307,7 +309,7 @@ export default function PackDetailPage() {
                     deckSlugs={deckSlugs}
                     deckIndex={idx}
                     deckId={pack.id}
-                    isRead={Boolean(readMap[c.slug]) || localReadIds.has(c.id)}
+                    isRead={localReadById.get(c.id) ?? Boolean(readMap[c.slug])}
                   />
                 ))}
               </div>

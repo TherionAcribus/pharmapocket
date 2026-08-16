@@ -129,6 +129,21 @@ export function getLessonProgress(lessonId: number): LocalLessonProgress | null 
   return state.lessons[String(lessonId)] ?? null;
 }
 
+/**
+ * État « lu » connu localement, ou `null` si la fiche n'a jamais été ouverte
+ * sur cet appareil.
+ *
+ * « Lu » = `completed` et rien d'autre : c'est la même donnée que
+ * `LessonProgress.completed` côté serveur, dont `/content/read-state/` n'est
+ * qu'une projection. Le local prime sur la réponse serveur tant que le sync
+ * n'a pas tourné, sinon un « marquer non lu » se verrait annulé à l'écran.
+ */
+export function getLocalReadState(lessonId: number): boolean | null {
+  const progress = getLessonProgress(lessonId);
+  if (!progress) return null;
+  return progress.completed;
+}
+
 export function upsertLessonProgress(
   lessonId: number,
   updates: Partial<LocalLessonProgress> & { time_ms_delta?: number }

@@ -1027,6 +1027,12 @@ paths:
   /api/v1/content/read-state/:
     get:
       operationId: content_read_state_list
+      description: |-
+        Projection en lecture seule de `LessonProgress.completed`, indexée par slug.
+
+        La progression (`/api/v1/learning/progress/`) est la seule source de vérité :
+        cette vue existe uniquement parce que le feed raisonne en slugs et non en
+        `lesson_id`. Les écritures passent par le sync de progression.
       parameters:
       - in: query
         name: slugs
@@ -1044,31 +1050,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReadStateMap'
-          description: ''
-    post:
-      operationId: content_read_state_update
-      tags:
-      - content
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MicroArticleReadState'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/MicroArticleReadState'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/MicroArticleReadState'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReadState'
           description: ''
   /api/v1/content/saved/:
     get:
@@ -2891,17 +2872,6 @@ components:
       - tags
       - takeaway
       - title
-    MicroArticleReadState:
-      type: object
-      description: POST /read-state/ — `validated_data["page"]` est la fiche résolue.
-      properties:
-        slug:
-          type: string
-        is_read:
-          type: boolean
-      required:
-      - is_read
-      - slug
     MicroDetail:
       type: object
       properties:
@@ -3428,16 +3398,6 @@ components:
       - id
       - prompt
       - type
-    ReadState:
-      type: object
-      properties:
-        slug:
-          type: string
-        is_read:
-          type: boolean
-      required:
-      - is_read
-      - slug
     ReadStateMap:
       type: object
       properties:

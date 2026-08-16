@@ -853,31 +853,6 @@ class MicroArticlePage(Page):
         return super().save(*args, **kwargs)
 
 
-class SavedMicroArticle(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="saved_microarticles",
-    )
-    microarticle = models.ForeignKey(
-        "content.MicroArticlePage",
-        on_delete=models.CASCADE,
-        related_name="saved_by",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "microarticle"],
-                name="uniq_saved_microarticle_user_microarticle",
-            )
-        ]
-        indexes = [
-            models.Index(fields=["user", "created_at"]),
-        ]
-
-
 class Deck(ClusterableModel):
     class DeckType(models.TextChoices):
         USER = "user", "User"
@@ -1145,33 +1120,6 @@ class UserDeckProgress(models.Model):
         indexes = [
             models.Index(fields=["user", "deck"]),
             models.Index(fields=["user", "last_seen_at"]),
-        ]
-
-
-class MicroArticleReadState(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="microarticle_read_states",
-    )
-    microarticle = models.ForeignKey(
-        "content.MicroArticlePage",
-        on_delete=models.CASCADE,
-        related_name="read_states",
-    )
-    is_read = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "microarticle"],
-                name="uniq_microarticle_read_state_user_microarticle",
-            )
-        ]
-        indexes = [
-            models.Index(fields=["user", "updated_at"]),
         ]
 
 

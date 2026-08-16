@@ -17,7 +17,6 @@ type ReaderHeaderProps = {
   isLoggedIn: boolean;
   saved: boolean;
   isRead: boolean;
-  isReadLoading: boolean;
   hasDetails: boolean;
   message: string | null;
   onBack: () => void;
@@ -38,7 +37,6 @@ export function ReaderHeader({
   isLoggedIn,
   saved,
   isRead,
-  isReadLoading,
   hasDetails,
   message,
   onBack,
@@ -123,7 +121,6 @@ export function ReaderHeader({
           className={!isLoggedIn ? "opacity-40" : ""}
           title={isRead ? "Marquer comme non lue" : "Marquer comme lue"}
           onClick={onToggleRead}
-          disabled={isReadLoading}
         >
           {isRead ? <BookIcon className="size-5" /> : <BookOpenIcon className="size-5" />}
         </Button>

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
 from django.db import transaction
 from django.utils import timezone
@@ -32,8 +31,14 @@ def _merge_progress(
     *,
     existing: LessonProgress | None,
     incoming: dict,
-    time_merge: Literal["max", "sum"],
 ) -> LessonProgress:
+    """Merge une progression entrante dans l existante.
+
+    Le client envoie toujours un `time_ms` cumule (il accumule les deltas
+    localement), donc le merge prend le max et jamais la somme : additionner
+    reinjecterait a chaque sync le total deja stocke cote serveur.
+    """
+
     incoming_updated_at: datetime = incoming["updated_at"]
 
     if existing is None:
@@ -57,10 +62,7 @@ def _merge_progress(
 
     incoming_time_ms = incoming.get("time_ms")
     if incoming_time_ms is not None:
-        if time_merge == "sum":
-            existing.time_ms = existing.time_ms + incoming_time_ms
-        else:
-            existing.time_ms = max(existing.time_ms, incoming_time_ms)
+        existing.time_ms = max(existing.time_ms, incoming_time_ms)
 
     incoming_score_best = incoming.get("score_best")
     if incoming_score_best is not None:
@@ -138,7 +140,7 @@ class ProgressUpsertView(APIView):
                 user=request.user, lesson_id=lesson_id
             ).first()
 
-            merged = _merge_progress(existing=existing, incoming=payload, time_merge="max")
+            merged = _merge_progress(existing=existing, incoming=payload)
             merged.user = request.user
             merged.lesson = lesson
             merged.save()
@@ -191,7 +193,7 @@ class ProgressImportView(APIView):
                 ).first()
 
                 before_updated_at = existing.updated_at if existing else None
-                merged = _merge_progress(existing=existing, incoming=incoming, time_merge="sum")
+                merged = _merge_progress(existing=existing, incoming=incoming)
                 merged.user = request.user
                 merged.lesson = lesson
                 merged.save()

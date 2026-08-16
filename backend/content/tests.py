@@ -11,7 +11,9 @@ from django.db import connection
 from django.db.models.query import QuerySet
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from django.utils.text import slugify
+from learning.models import LessonProgress
 from PIL import Image
 from rest_framework.test import APITestCase
 from taggit.models import Tag
@@ -27,7 +29,6 @@ from .models import (
     PathologyThumbOverride,
     MicroArticleIndexPage,
     MicroArticlePage,
-    MicroArticleReadState,
     Subject,
     SubjectCard,
     UserDeckProgress,
@@ -155,7 +156,14 @@ class PublicApiSmokeTests(APITestCase):
             password="pharmapocket-test-pwd",
         )
         page = MicroArticlePage.objects.get(slug="metformine")
-        MicroArticleReadState.objects.create(user=user, microarticle=page, is_read=True)
+        LessonProgress.objects.create(
+            user=user,
+            lesson=page,
+            seen=True,
+            completed=True,
+            percent=100,
+            updated_at=timezone.now(),
+        )
         self.client.force_authenticate(user)
 
         resp = self.client.get("/api/v1/content/microarticles/metformine/", secure=True)
@@ -1245,21 +1253,37 @@ class InputSerializerValidationTests(APITestCase):
             self._post("/api/v1/content/saved/", {"slug": self.card.slug}).status_code, 200
         )
 
-    def test_read_state_post_requires_a_boolean(self):
-        url = "/api/v1/content/read-state/"
-
+    def test_read_state_requires_slugs(self):
         self.assertFieldError(
-            self._post(url, {"slug": self.card.slug}), "is_read", "is_read must be a boolean"
-        )
-        self.assertFieldError(
-            self._post(url, {"slug": self.card.slug, "is_read": "peut-etre"}),
-            "is_read",
-            "is_read must be a boolean",
+            self.client.get("/api/v1/content/read-state/", secure=True),
+            "slugs",
+            "slugs is required (comma-separated)",
         )
 
-        resp = self._post(url, {"slug": self.card.slug, "is_read": True})
+    def test_read_state_is_derived_from_lesson_progress(self):
+        other = self._add_page("Non lue", "non-lue")
+        progress = LessonProgress.objects.create(
+            user=self.staff,
+            lesson=self.card,
+            seen=True,
+            completed=True,
+            percent=100,
+            updated_at=timezone.now(),
+        )
+
+        url = f"/api/v1/content/read-state/?slugs={self.card.slug},{other.slug}"
+
+        resp = self.client.get(url, secure=True)
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertTrue(resp.data["is_read"])
+        self.assertEqual(resp.data["items"], {self.card.slug: True, other.slug: False})
+
+        # Repasser la lecon en « non terminee » suffit a repasser la fiche en non lue :
+        # il n'y a plus d'etat de lecture stocke a part.
+        progress.completed = False
+        progress.save(update_fields=["completed"])
+
+        resp = self.client.get(url, secure=True)
+        self.assertEqual(resp.data["items"], {self.card.slug: False, other.slug: False})
 
     # --- Overrides de vignettes ---------------------------------------------
 

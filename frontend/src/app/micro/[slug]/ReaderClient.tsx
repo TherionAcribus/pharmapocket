@@ -46,7 +46,7 @@ export default function ReaderClient({ data }: { data: MicroArticleDetail }) {
   useLessonProgressTracking(data.id, isLoggedIn);
 
   const sections = useSeeMoreSections(data);
-  const { saved, isRead, isReadLoading, toggleSaved, toggleRead } = useCardActions({
+  const { saved, isRead, toggleSaved, toggleRead } = useCardActions({
     data,
     isLoggedIn,
     showMessage,
@@ -115,13 +115,12 @@ export default function ReaderClient({ data }: { data: MicroArticleDetail }) {
         isLoggedIn={isLoggedIn}
         saved={saved}
         isRead={isRead}
-        isReadLoading={isReadLoading}
         hasDetails={sections.hasDetails}
         message={message}
         onBack={onBack}
         onToggleTextSize={() => setLargeText((v) => !v)}
         onToggleSaved={() => void toggleSaved("button")}
-        onToggleRead={() => void toggleRead()}
+        onToggleRead={toggleRead}
         onOpenDeckPicker={openDeckPicker}
         onOpenDetails={() => setOpenDetails(true)}
       />

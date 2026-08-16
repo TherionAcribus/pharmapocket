@@ -504,9 +504,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Projection en lecture seule de `LessonProgress.completed`, indexée par slug.
+         *
+         *     La progression (`/api/v1/learning/progress/`) est la seule source de vérité :
+         *     cette vue existe uniquement parce que le feed raisonne en slugs et non en
+         *     `lesson_id`. Les écritures passent par le sync de progression.
+         */
         get: operations["content_read_state_list"];
         put?: never;
-        post: operations["content_read_state_update"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1282,11 +1289,6 @@ export interface components {
             card_type?: components["schemas"]["CardType"];
             subject?: components["schemas"]["SubjectSummary"] | null;
         };
-        /** @description POST /read-state/ — `validated_data["page"]` est la fiche résolue. */
-        MicroArticleReadState: {
-            slug: string;
-            is_read: boolean;
-        };
         MicroDetail: {
             id: number;
             slug: string;
@@ -1514,10 +1516,6 @@ export interface components {
             explanation?: string;
             difficulty?: number;
             references?: unknown;
-        };
-        ReadState: {
-            slug: string;
-            is_read: boolean;
         };
         ReadStateMap: {
             items: {
@@ -1759,7 +1757,6 @@ export type LessonProgress = components['schemas']['LessonProgress'];
 export type LessonProgressUpdate = components['schemas']['LessonProgressUpdate'];
 export type MicroArticleDetail = components['schemas']['MicroArticleDetail'];
 export type MicroArticleListItem = components['schemas']['MicroArticleListItem'];
-export type MicroArticleReadState = components['schemas']['MicroArticleReadState'];
 export type MicroDetail = components['schemas']['MicroDetail'];
 export type ModeLastEnum = components['schemas']['ModeLastEnum'];
 export type NullEnum = components['schemas']['NullEnum'];
@@ -1785,7 +1782,6 @@ export type Progress = components['schemas']['Progress'];
 export type ProgressImport = components['schemas']['ProgressImport'];
 export type ProgressImportResponse = components['schemas']['ProgressImportResponse'];
 export type QuestionPayload = components['schemas']['QuestionPayload'];
-export type ReadState = components['schemas']['ReadState'];
 export type ReadStateMap = components['schemas']['ReadStateMap'];
 export type RecapPoint = components['schemas']['RecapPoint'];
 export type SrsNext = components['schemas']['SRSNext'];
@@ -2832,31 +2828,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadStateMap"];
-                };
-            };
-        };
-    };
-    content_read_state_update: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MicroArticleReadState"];
-                "application/x-www-form-urlencoded": components["schemas"]["MicroArticleReadState"];
-                "multipart/form-data": components["schemas"]["MicroArticleReadState"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReadState"];
                 };
             };
         };

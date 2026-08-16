@@ -8,6 +8,7 @@ import { MicroCard } from "@/components/MicroCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useFeed, useMe, useReadStates, type FeedSource } from "@/lib/queries";
+import { getLocalReadState } from "@/lib/progressStore";
 import type { FeedQuery } from "@/lib/api/feed";
 
 export function FeedClient({
@@ -74,6 +75,11 @@ export function FeedClient({
   const { data: me } = useMe();
   const { data: readStates } = useReadStates(deckSlugs, Boolean(me));
   const readMap = readStates?.items ?? {};
+
+  // La map serveur peut avoir un cycle de sync de retard : le store local, qui
+  // est ce que le lecteur écrit, l'emporte sur les fiches qu'il connaît.
+  const isItemRead = (item: { id: number; slug: string }) =>
+    getLocalReadState(item.id) ?? Boolean(readMap[item.slug]);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -180,7 +186,7 @@ export function FeedClient({
               item={item}
               deckSlugs={deckSlugs}
               deckIndex={index}
-              isRead={Boolean(readMap[item.slug])}
+              isRead={isItemRead(item)}
             />
           ))}
         </div>

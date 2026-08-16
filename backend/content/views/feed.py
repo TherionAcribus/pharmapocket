@@ -12,13 +12,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
+from learning.models import LessonProgress
+
 from ..html import sanitize_rich_text
 from ..models import (
     Deck,
     DeckCard,
     LandingPage,
     MicroArticlePage,
-    MicroArticleReadState,
     Source,
 )
 from ..pagination import MicroArticleCursorPagination
@@ -29,13 +30,9 @@ from ..serializers import (
     MicroArticleDetailSerializer,
     MicroArticleListSerializer,
     ReadStateMapSerializer,
-    ReadStateSerializer,
     SavedStateSerializer,
 )
-from ..serializers.inputs import (
-    MicroArticleReadStateSerializer,
-    SavedMicroArticleCreateSerializer,
-)
+from ..serializers.inputs import SavedMicroArticleCreateSerializer
 from .helpers import (
     _apply_tree_filter,
     _get_or_create_default_deck,
@@ -305,11 +302,12 @@ class MicroArticleDetailView(RetrieveAPIView):
                     deck=default_deck,
                     microarticle_id=page.id,
                 ).exists()
-            read_state = MicroArticleReadState.objects.filter(
+            # « Lu » est une projection de la progression : cf. MicroArticleReadStateView.
+            data["is_read"] = LessonProgress.objects.filter(
                 user=request.user,
-                microarticle_id=page.id,
-            ).first()
-            data["is_read"] = bool(read_state and read_state.is_read)
+                lesson_id=page.id,
+                completed=True,
+            ).exists()
 
         serializer = self.get_serializer(data)
         return Response(serializer.data)
@@ -387,6 +385,13 @@ class SavedMicroArticleDetailView(APIView):
 
 
 class MicroArticleReadStateView(APIView):
+    """Projection en lecture seule de `LessonProgress.completed`, indexée par slug.
+
+    La progression (`/api/v1/learning/progress/`) est la seule source de vérité :
+    cette vue existe uniquement parce que le feed raisonne en slugs et non en
+    `lesson_id`. Les écritures passent par le sync de progression.
+    """
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
@@ -415,40 +420,18 @@ class MicroArticleReadStateView(APIView):
         if not slug_by_id:
             return Response({"items": {}})
 
-        rows = MicroArticleReadState.objects.filter(
+        rows = LessonProgress.objects.filter(
             user=request.user,
-            microarticle_id__in=list(slug_by_id.keys()),
-        ).values_list("microarticle_id", "is_read")
+            lesson_id__in=list(slug_by_id.keys()),
+        ).values_list("lesson_id", "completed")
 
-        items = {slug_by_id[mid]: bool(is_read) for (mid, is_read) in rows if mid in slug_by_id}
+        items = {slug_by_id[lid]: bool(completed) for (lid, completed) in rows if lid in slug_by_id}
         # Default to false for missing state
         for slug in slugs:
             if slug not in items:
                 items[slug] = False
 
         return Response({"items": items})
-
-    @extend_schema(
-        operation_id="content_read_state_update",
-        request=MicroArticleReadStateSerializer,
-        responses=ReadStateSerializer,
-    )
-    def post(self, request):
-        serializer = MicroArticleReadStateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        page = serializer.validated_data["page"]
-        is_read = serializer.validated_data["is_read"]
-
-        obj, _ = MicroArticleReadState.objects.get_or_create(
-            user=request.user,
-            microarticle_id=page.id,
-            defaults={"is_read": is_read},
-        )
-        if obj.is_read != is_read:
-            obj.is_read = is_read
-            obj.save(update_fields=["is_read", "updated_at"])
-
-        return Response({"slug": page.slug, "is_read": bool(obj.is_read)})
 
 
 class SourceSearchSerializer(serializers.Serializer):

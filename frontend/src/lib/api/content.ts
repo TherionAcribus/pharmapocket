@@ -25,6 +25,8 @@ export async function unsaveMicroArticle(slug: string): Promise<void> {
   });
 }
 
+/** Projection serveur de `LessonProgress.completed`, indexée par slug.
+ *  Lecture seule : l'état « lu » s'écrit via le store de progression. */
 export async function fetchMicroArticleReadStates(
   slugs: string[]
 ): Promise<{ items: Record<string, boolean> }> {
@@ -35,16 +37,6 @@ export async function fetchMicroArticleReadStates(
     .join(",");
   return apiGet<{ items: Record<string, boolean> }>(
     `/api/v1/content/read-state/?slugs=${value}`
-  );
-}
-
-export async function setMicroArticleReadState(
-  slug: string,
-  is_read: boolean
-): Promise<{ slug: string; is_read: boolean }> {
-  return apiJson<{ slug: string; is_read: boolean }>(
-    `/api/v1/content/read-state/`,
-    jsonBody("POST", { slug, is_read })
   );
 }
 

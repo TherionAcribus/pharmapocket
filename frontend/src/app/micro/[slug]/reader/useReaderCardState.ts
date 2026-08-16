@@ -2,8 +2,13 @@
 
 import * as React from "react";
 
-import { useSavedStatus, useSetReadState, useToggleSaved } from "@/lib/queries";
-import { addLessonTime, markLessonSeen, setLessonCompletion } from "@/lib/progressStore";
+import { useSavedStatus, useToggleSaved } from "@/lib/queries";
+import {
+  addLessonTime,
+  getLocalReadState,
+  markLessonSeen,
+  setLessonCompletion,
+} from "@/lib/progressStore";
 import {
   ensureProgressSyncLoop,
   scheduleProgressSync,
@@ -36,14 +41,17 @@ export function useLessonProgressTracking(cardId: number, isLoggedIn: boolean) {
 export type CardActions = {
   saved: boolean;
   isRead: boolean;
-  isReadLoading: boolean;
   toggleSaved: (source: "button" | "double_tap") => Promise<void>;
-  toggleRead: () => Promise<void>;
+  toggleRead: () => void;
 };
 
 /**
- * Sauvegarde et état de lecture, en optimiste : l'icône bascule tout de suite
- * et repart en arrière si le serveur refuse.
+ * Sauvegarde et état de lecture.
+ *
+ * La sauvegarde est optimiste : l'étoile bascule tout de suite et repart en
+ * arrière si le serveur refuse. L'état « lu » n'a en revanche pas de requête à
+ * refuser : il s'écrit dans le store local (source unique côté client, remontée
+ * dans `LessonProgress` par le sync), donc il ne repart jamais en arrière.
  */
 export function useCardActions({
   data,
@@ -56,18 +64,18 @@ export function useCardActions({
 }): CardActions {
   const [saved, setSaved] = React.useState(false);
   const [isRead, setIsRead] = React.useState(false);
-  const [isReadLoading, setIsReadLoading] = React.useState(false);
 
   const toggleSavedMutation = useToggleSaved();
-  const setReadStateMutation = useSetReadState();
 
   React.useEffect(() => {
     setSaved(Boolean(data.is_saved));
   }, [data.slug, data.is_saved]);
 
+  // `data.is_read` vient du serveur, qui peut être en retard d'un cycle de sync :
+  // le store local fait foi dès qu'il connaît la fiche.
   React.useEffect(() => {
-    setIsRead(Boolean(data.is_read));
-  }, [data.slug, data.is_read]);
+    setIsRead(getLocalReadState(data.id) ?? Boolean(data.is_read));
+  }, [data.slug, data.id, data.is_read]);
 
   const { data: savedStatus } = useSavedStatus(data.slug, isLoggedIn);
 
@@ -76,18 +84,14 @@ export function useCardActions({
     setSaved(Boolean(savedStatus.saved));
   }, [savedStatus]);
 
-  // Ouvrir la fiche vaut lecture : on l'affiche tout de suite et on prévient
-  // le serveur en arrière-plan.
+  // Ouvrir la fiche vaut lecture. Une seule écriture : le store local, que le
+  // sync remonte ensuite dans `LessonProgress` — l'unique source de vérité.
   React.useEffect(() => {
     if (!isLoggedIn) return;
     setIsRead(true);
     setLessonCompletion(data.id, true);
     scheduleProgressSync("auto_read");
-    setReadStateMutation.mutate({ slug: data.slug, isRead: true });
-    // `setReadStateMutation` est recréé à chaque rendu : l'inclure relancerait
-    // la requête en boucle.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn, data.slug, data.id]);
+  }, [isLoggedIn, data.id]);
 
   const toggleSaved = async (source: "button" | "double_tap") => {
     if (!isLoggedIn) {
@@ -109,28 +113,20 @@ export function useCardActions({
     }
   };
 
-  const toggleRead = async () => {
+  // Écriture locale immédiate, jamais annulée : le sync est chargé de rattraper
+  // le serveur (et retente tant que la leçon reste dans `pending`).
+  const toggleRead = () => {
     if (!isLoggedIn) {
       showMessage("Connecte-toi pour marquer lu / non lu.");
       return;
     }
 
-    if (isReadLoading) return;
     const next = !isRead;
     setIsRead(next);
     setLessonCompletion(data.id, next);
     scheduleProgressSync("toggle_read");
-    setIsReadLoading(true);
-    try {
-      await setReadStateMutation.mutateAsync({ slug: data.slug, isRead: next });
-      showMessage(next ? "Carte marquée comme lue." : "Carte marquée comme non lue.");
-    } catch {
-      setIsRead(!next);
-      showMessage("Impossible de mettre à jour l'état lu.");
-    } finally {
-      setIsReadLoading(false);
-    }
+    showMessage(next ? "Carte marquée comme lue." : "Carte marquée comme non lue.");
   };
 
-  return { saved, isRead, isReadLoading, toggleSaved, toggleRead };
+  return { saved, isRead, toggleSaved, toggleRead };
 }

@@ -91,6 +91,54 @@ class SrsApiTests(APITestCase):
         self.assertEqual(resp3.status_code, 200)
         self.assertIsNotNone(resp3.data.get("card"))
 
+    def _import_progress(self, *, time_ms: int, updated_at):
+        return self.client.post(
+            "/api/v1/learning/progress/import/",
+            {
+                "device_id": "dev-1",
+                "lessons": {
+                    str(self.card.id): {
+                        "seen": True,
+                        "time_ms": time_ms,
+                        "updated_at": updated_at.isoformat(),
+                    }
+                },
+            },
+            format="json",
+            secure=True,
+        )
+
+    def _server_time_ms(self) -> int:
+        resp = self.client.get("/api/v1/learning/progress/", secure=True)
+        self.assertEqual(resp.status_code, 200)
+        row = next(r for r in resp.data if r["lesson_id"] == self.card.id)
+        return row["time_ms"]
+
+    def test_import_does_not_double_count_cumulative_time(self):
+        """Le client envoie un time_ms cumule : les imports successifs ne doivent pas s additionner."""
+        now = timezone.now()
+
+        self.assertEqual(self._import_progress(time_ms=60_000, updated_at=now).status_code, 200)
+        self.assertEqual(self._server_time_ms(), 60_000)
+
+        # Nouvelle session de 30s : le client renvoie le total cumule, pas le delta.
+        resp = self._import_progress(time_ms=90_000, updated_at=now + timedelta(minutes=1))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._server_time_ms(), 90_000)
+
+    def test_import_is_idempotent_on_time_ms(self):
+        now = timezone.now()
+        self._import_progress(time_ms=60_000, updated_at=now)
+        self._import_progress(time_ms=60_000, updated_at=now)
+        self.assertEqual(self._server_time_ms(), 60_000)
+
+    def test_import_keeps_highest_time_ms_when_a_device_lags(self):
+        now = timezone.now()
+        self._import_progress(time_ms=90_000, updated_at=now)
+        # Un appareil en retard renvoie un total plus ancien : on ne regresse pas.
+        self._import_progress(time_ms=60_000, updated_at=now + timedelta(minutes=1))
+        self.assertEqual(self._server_time_ms(), 90_000)
+
     def test_unpublished_card_cannot_be_reviewed_or_receive_progress(self):
         index = MicroArticleIndexPage.objects.first()
         assert index is not None

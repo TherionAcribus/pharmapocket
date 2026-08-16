@@ -39,15 +39,39 @@ Notes:
 Endpoints exposes par `backend/learning/views.py`:
 - `GET /api/v1/learning/progress/` : recupere toute la progression de l utilisateur
 - `PATCH /api/v1/learning/progress/{lesson_id}/` : upsert d une lecon
-- `POST /api/v1/learning/progress/import/` : import en batch (merge "sum" pour time_ms)
+- `POST /api/v1/learning/progress/import/` : import en batch
+
+## Etat « lu » : une seule source de verite
+`LessonProgress.completed` **est** l etat « lu ». Il n existe plus de modele
+`MicroArticleReadState` (supprime par `content.0027`, apres backfill par
+`learning.0004`) ni de `POST /api/v1/content/read-state/`.
+
+- `GET /api/v1/content/read-state/?slugs=...` est une **projection en lecture
+  seule** de `LessonProgress.completed`, indexee par slug : le feed raisonne en
+  slugs, la progression en `lesson_id`. Meme chose pour `is_read` dans le detail
+  d une fiche.
+- Cote client, la seule ecriture est `setLessonCompletion` dans le store local ;
+  c est le sync qui remonte la valeur au serveur, et qui retente tant que la
+  lecon reste dans `pending`. Marquer lu/non lu n est donc jamais annule par un
+  echec reseau.
+- A l affichage (feed, pack, lecteur), le local prime sur la reponse serveur
+  quand il connait la fiche (`getLocalReadState`) : la map serveur peut avoir un
+  cycle de sync de retard, et sans cette regle un « marquer non lu » se verrait
+  reannule a l ecran.
 
 ## Regles de merge
 Local -> Serveur:
 - le client envoie uniquement les lecons en `pending`.
-- le serveur merge:
+- le client envoie toujours un `time_ms` **cumule** (jamais un delta) : il accumule
+  les deltas localement dans `upsertLessonProgress`.
+- le serveur merge (meme logique pour le PATCH unitaire et pour l import batch):
   - `updated_at` le plus recent gagne sur `seen/completed/percent/score_last/last_seen_at`
-  - `time_ms` merge par somme (import)
+  - `time_ms` prend le max
   - `score_best` prend le max
+
+Le `time_ms` ne doit **jamais** etre additionne cote serveur : le client renvoyant
+un total cumule, chaque sync reinjecterait le total deja stocke et le temps
+exploserait a chaque cycle (le max rend aussi l import idempotent en cas de retry).
 
 Serveur -> Local:
 - si `updated_at` serveur > local, le local est remplace.
@@ -67,10 +91,10 @@ Implementes dans `frontend/src/lib/progressSync.ts`:
 - `frontend/src/lib/progressSync.ts`:
   - sync batch via `importLessonProgress`
   - refresh via `fetchLessonProgress`
-- `frontend/src/app/micro/[slug]/ReaderClient.tsx`:
+- `frontend/src/app/micro/[slug]/reader/useReaderCardState.ts`:
   - mark seen a l ouverture
   - time_ms a la fermeture
-  - completion quand la carte est marquee lue
+  - completion a l ouverture (ouvrir vaut lecture) et sur le bouton lu/non lu
 - `frontend/src/components/MobileScaffold.tsx`:
   - active le loop de sync si l utilisateur est connecte
 
