@@ -27,6 +27,10 @@ L’illustration (`cover_image_url`) est conservée pour l’écran de lecture/d
 - **Mapping API /discover feed** : `frontend/src/lib/api.ts`
   - `fetchDiscoverFeed()` mappe les champs `categories_*` renvoyés par `/api/v1/feed/`
 
+- **Chargement des overrides** : `frontend/src/lib/thumbOverridesQuery.ts`
+  - clé de cache, fraîcheur et fonction de lecture, partagées entre le serveur et
+    le client (voir « Comment les overrides arrivent jusqu'à la vignette »)
+
 - **Header (vue lecture)** : `frontend/src/app/micro/[slug]/ReaderClient.tsx`
   - badge thématisé dans le header (même logique que la vignette) via `resolveGeneratedThumbMeta` + `ThemeIcon`
 
@@ -160,6 +164,39 @@ laisser vide pour hériter du parent. Aucune modification de code n'est nécessa
 
 ---
 
+## Comment les overrides arrivent jusqu'à la vignette
+
+Les couleurs personnalisées sont **préchargées pendant le rendu serveur**, pas
+demandées au montage des vignettes. La chaîne :
+
+1. `app/layout.tsx` (composant serveur, traversé par toutes les routes) appelle
+   `fetchThumbOverridesForSsr()`. La réponse est mise en cache par Next pendant
+   60 s : l'attente n'est payée qu'une fois par période, pas à chaque visiteur.
+2. Le layout passe la liste à `QueryProvider`, qui **sème le cache TanStack à sa
+   création**, avant le premier rendu — sous la clé `["thumb-overrides"]`,
+   exactement celle que lira `useThumbOverridesQuery`.
+3. `useThumbOverrides` trouve donc les données déjà présentes : elle ne déclenche
+   aucune requête (fraîcheur de 10 min) et la vignette est peinte directement de
+   sa couleur définitive, aussi bien dans le HTML serveur qu'à l'hydratation.
+
+Pourquoi ce détour plutôt qu'un simple `useQuery` : la requête ne partait
+qu'au montage de la **première vignette**, donc nécessairement après le
+chargement de la liste qui la contient. Chaque vignette affichait la palette
+générée depuis le domaine puis sautait sur sa couleur personnalisée à l'arrivée
+de la réponse — une course perdue d'avance, qu'aucun `staleTime` ne pouvait
+gagner puisque le cache est vide au premier chargement de l'onglet.
+
+Conséquences à connaître :
+
+- une modification faite dans `/admin/vignettes` met **jusqu'à 60 s** à
+  apparaître sur un chargement de page neuf (cache Next). Dans l'onglet de
+  l'admin, elle est immédiate : les mutations invalident la requête ;
+- si le préchargement serveur échoue (API injoignable au moment du rendu), rien
+  ne casse : un `console.warn` est tracé côté serveur, le cache n'est pas semé et
+  le client refait la requête lui-même — avec le flash d'origine.
+
+---
+
 ## Dépannage (symptômes fréquents)
 - **Toujours la même icône** :
   - vérifier que `categories_theme_payload` est bien rempli dans la réponse API
@@ -179,6 +216,16 @@ laisser vide pour hériter du parent. Aucune modification de code n'est nécessa
     d'avant ce contrôle restent modifiables et supprimables ;
   - `/admin/vignettes` marque ces lignes héritées d'un badge « slug inconnu », et
     « Dupliquer » ne recopie que l'apparence (le slug est à choisir dans la taxonomie).
+
+- **Un override modifié n'apparaît pas tout de suite** (hors onglet admin) :
+  cache Next de 60 s sur le préchargement serveur, voir la section précédente.
+  Un rechargement passé ce délai suffit ; inutile de vider le cache navigateur.
+
+- **Les vignettes sautent d'une couleur à l'autre au chargement** : le
+  préchargement serveur n'a pas eu lieu. Vérifier le `console.warn` de
+  `fetchThumbOverridesForSsr` dans les logs Next (API injoignable depuis le
+  serveur Next, pas depuis le navigateur — les deux n'ont pas forcément la même
+  URL de base ni la même résolution DNS, cf. `getApiBaseUrl`).
 
 - **Un override ne s'applique pas sur une carte à plusieurs pathologies** :
   l'override est indexé par le slug de la pathologie **principale** (règle ci-dessus,

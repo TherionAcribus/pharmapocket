@@ -69,7 +69,12 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
     ...init,
     headers,
     credentials: "include",
-    cache: "no-store",
+    // `no-store` par défaut : la quasi-totalité des lectures dépendent de la
+    // session (`is_saved`, `is_read`, decks…) et ne doivent jamais être servies
+    // au visiteur suivant. Un appelant peut demander explicitement une autre
+    // politique pour une ressource publique et partageable — c'est le cas du
+    // préchargement serveur des overrides de vignettes.
+    cache: init?.cache ?? "no-store",
   });
 }
 

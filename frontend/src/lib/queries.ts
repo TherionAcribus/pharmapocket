@@ -47,7 +47,6 @@ import { isApiError } from "@/lib/api/client";
 import {
   fetchLanding,
   fetchMicroArticleReadStates,
-  fetchThumbOverridesPublic,
   saveMicroArticle,
   unsaveMicroArticle,
 } from "@/lib/api/content";
@@ -70,6 +69,7 @@ import {
 import { fetchDiscoverFeed, fetchFeed, type FeedQuery } from "@/lib/api/feed";
 import { fetchSrsNext, postSrsReview, type SrsNextQuery } from "@/lib/api/srs";
 import { fetchTags, fetchTaxonomyTree, type TaxonomyName } from "@/lib/api/taxonomies";
+import { thumbOverridesQueryKey, thumbOverridesQueryOptions } from "@/lib/thumbOverridesQuery";
 import type {
   AccountSummary,
   CurrentUser,
@@ -90,7 +90,7 @@ export const queryKeys = {
   account: ["account"] as const,
   preferences: ["preferences"] as const,
   landing: ["landing"] as const,
-  thumbOverrides: ["thumb-overrides"] as const,
+  thumbOverrides: thumbOverridesQueryKey,
 
   decks: ["decks"] as const,
   deckCards: (deckId: number, search?: string) =>
@@ -227,13 +227,13 @@ export function useLanding() {
   return useQuery({ queryKey: queryKeys.landing, queryFn: fetchLanding });
 }
 
+/**
+ * Clé, fonction de lecture et fraîcheur viennent du descripteur partagé : le
+ * layout serveur sème ce même cache au chargement (voir `QueryProvider`), ce
+ * qui n'a de sens que si les deux côtés désignent exactement la même entrée.
+ */
 export function useThumbOverridesQuery() {
-  return useQuery({
-    queryKey: queryKeys.thumbOverrides,
-    queryFn: fetchThumbOverridesPublic,
-    // Données quasi statiques, relues par beaucoup de vignettes à la fois.
-    staleTime: 10 * 60_000,
-  });
+  return useQuery(thumbOverridesQueryOptions);
 }
 
 export function useTaxonomyTree(taxonomy: Taxonomy, enabled = true) {

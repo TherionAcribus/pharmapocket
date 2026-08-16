@@ -91,6 +91,13 @@ export type ThumbOverridePublic = {
   pattern: ThumbPattern;
 };
 
-export async function fetchThumbOverridesPublic(): Promise<ThumbOverridePublic[]> {
-  return apiGet<ThumbOverridePublic[]>("/api/v1/content/thumb-overrides/");
+/**
+ * `init` sert au préchargement serveur (voir `lib/thumbOverridesQuery.ts`) :
+ * la ressource est publique et identique pour tous, donc cacheable, ce que le
+ * `no-store` par défaut du transport interdirait.
+ */
+export async function fetchThumbOverridesPublic(
+  init?: RequestInit
+): Promise<ThumbOverridePublic[]> {
+  return apiGet<ThumbOverridePublic[]>("/api/v1/content/thumb-overrides/", init);
 }
