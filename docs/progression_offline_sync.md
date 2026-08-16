@@ -22,7 +22,8 @@ des donnees vers le backend quand l utilisateur est connecte.
       "score_best": null,
       "score_last": null,
       "updated_at": "2026-01-12T10:20:30.000Z",
-      "last_seen_at": "2026-01-12T10:20:30.000Z"
+      "last_seen_at": "2026-01-12T10:20:30.000Z",
+      "manually_unread": false
     }
   },
   "pending": ["123"],
@@ -34,6 +35,9 @@ Notes:
 - `pending` contient les lecons qui doivent etre synchronisees.
 - `updated_at` est utilise pour les merges (comparaison de dates).
 - `time_ms` est accumule localement avec un cap par session.
+- `manually_unread` est **purement local** : le serveur ne le connait pas et
+  `getPendingLessons` le retire du payload. C est une intention d affichage
+  (« ne pas re-marquer cette fiche toute seule »), pas une donnee de progression.
 
 ## API backend
 Endpoints exposes par `backend/learning/views.py`:
@@ -59,6 +63,18 @@ Endpoints exposes par `backend/learning/views.py`:
   cycle de sync de retard, et sans cette regle un « marquer non lu » se verrait
   reannule a l ecran.
 
+### Auto-lecture (lecteur)
+Ouvrir une fiche ne suffit pas a la marquer lue : `useAutoRead`
+(`frontend/src/app/micro/[slug]/reader/useReaderCardState.ts`) attend
+**5 s passees a l ecran** (le compte est suspendu quand l onglet est masque) ou
+un **defilement jusqu a 60 % de la page**, le premier des deux. Sans ce delai,
+un aller-retour dans le deck ou un simple remontage du composant marquait la
+fiche lue.
+
+Un « non lu » explicite (bouton lu / non lu) pose `manually_unread` et desarme
+definitivement l auto-lecture pour cette fiche : elle ne repassera « lue » que
+si l utilisateur la marque lui-meme. Un « lu » explicite leve le verrou.
+
 ## Regles de merge
 Local -> Serveur:
 - le client envoie uniquement les lecons en `pending`.
@@ -76,6 +92,9 @@ exploserait a chaque cycle (le max rend aussi l import idempotent en cas de retr
 Serveur -> Local:
 - si `updated_at` serveur > local, le local est remplace.
 - si le local est plus recent, on garde le local et on laisse la lecon en `pending`.
+- `manually_unread` survit au remplacement (le serveur ne l envoie pas) sauf si la
+  ligne serveur est `completed: true` : la fiche a alors ete marquee lue quelque
+  part, le verrou n a plus lieu d etre.
 
 ## Declencheurs de sync
 Implementes dans `frontend/src/lib/progressSync.ts`:

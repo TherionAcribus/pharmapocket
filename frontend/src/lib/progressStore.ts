@@ -1,6 +1,7 @@
 import type { LessonProgress, LessonProgressUpdate } from "@/lib/types";
 
-type LocalLessonProgress = LessonProgressUpdate & {
+/** Champs partagés avec le serveur : c'est exactement ce que le sync envoie. */
+type SyncedLessonProgress = LessonProgressUpdate & {
   seen: boolean;
   completed: boolean;
   percent: number;
@@ -8,6 +9,15 @@ type LocalLessonProgress = LessonProgressUpdate & {
   score_best: number | null;
   score_last: number | null;
   last_seen_at: string | null;
+};
+
+/**
+ * `manually_unread` n'existe que côté client : c'est une intention d'affichage
+ * (« je ne veux pas que cette fiche se re-marque toute seule »), pas une donnée
+ * de progression. Elle est retirée du payload par `getPendingLessons`.
+ */
+type LocalLessonProgress = SyncedLessonProgress & {
+  manually_unread: boolean;
 };
 
 type LocalProgressState = {
@@ -71,6 +81,7 @@ function normalizeLesson(raw: Partial<LocalLessonProgress> | null | undefined): 
     score_last: raw?.score_last ?? null,
     updated_at: raw?.updated_at || nowIso(),
     last_seen_at: raw?.last_seen_at ?? null,
+    manually_unread: Boolean(raw?.manually_unread),
   };
 }
 
@@ -190,6 +201,10 @@ export function upsertLessonProgress(
     next.last_seen_at = updates.last_seen_at;
   }
 
+  if (typeof updates.manually_unread === "boolean") {
+    next.manually_unread = updates.manually_unread;
+  }
+
   next.updated_at = updates.updated_at || now;
 
   state.lessons[id] = next;
@@ -207,7 +222,19 @@ export function markLessonSeen(lessonId: number): LocalLessonProgress {
   });
 }
 
-export function setLessonCompletion(lessonId: number, completed: boolean): LocalLessonProgress {
+/**
+ * Écrit l'état « lu » d'une fiche.
+ *
+ * `explicit` distingue le geste de l'utilisateur (bouton lu / non lu) de
+ * l'auto-lecture. Un « non lu » explicite pose `manually_unread`, qui interdit
+ * ensuite à l'auto-lecture de re-marquer la fiche ; seul un « lu » explicite
+ * lève ce verrou.
+ */
+export function setLessonCompletion(
+  lessonId: number,
+  completed: boolean,
+  { explicit = false }: { explicit?: boolean } = {}
+): LocalLessonProgress {
   const now = nowIso();
   return upsertLessonProgress(lessonId, {
     seen: true,
@@ -215,7 +242,13 @@ export function setLessonCompletion(lessonId: number, completed: boolean): Local
     percent: completed ? 100 : 0,
     last_seen_at: now,
     updated_at: now,
+    ...(explicit ? { manually_unread: !completed } : {}),
   });
+}
+
+/** `true` si l'utilisateur a explicitement dé-marqué cette fiche. */
+export function isManuallyUnread(lessonId: number): boolean {
+  return Boolean(getLessonProgress(lessonId)?.manually_unread);
 }
 
 export function addLessonTime(
@@ -233,17 +266,33 @@ export function addLessonTime(
   });
 }
 
-export function getPendingLessons(): Record<string, LocalLessonProgress> {
+/** Retire les champs purement locaux : c'est le contrat envoyé au serveur. */
+function toSyncedLesson(progress: LocalLessonProgress): SyncedLessonProgress {
+  return {
+    seen: progress.seen,
+    completed: progress.completed,
+    percent: progress.percent,
+    time_ms: progress.time_ms,
+    score_best: progress.score_best,
+    score_last: progress.score_last,
+    updated_at: progress.updated_at,
+    last_seen_at: progress.last_seen_at,
+  };
+}
+
+/** Progressions à pousser, sans les champs purement locaux. */
+export function getPendingLessons(): Record<string, SyncedLessonProgress> {
   const state = readState();
-  const out: Record<string, LocalLessonProgress> = {};
+  const out: Record<string, SyncedLessonProgress> = {};
   for (const id of state.pending) {
     const progress = state.lessons[id];
-    if (progress) out[id] = progress;
+    if (!progress) continue;
+    out[id] = toSyncedLesson(progress);
   }
   return out;
 }
 
-export function clearPendingIfUnchanged(sent: Record<string, LocalLessonProgress>): void {
+export function clearPendingIfUnchanged(sent: Record<string, SyncedLessonProgress>): void {
   const state = readState();
   const pending = new Set(state.pending);
   let changed = false;
@@ -285,6 +334,10 @@ export function mergeServerLessons(rows: LessonProgress[]): void {
         score_last: row.score_last,
         updated_at: row.updated_at,
         last_seen_at: row.last_seen_at,
+        // Le serveur ne connaît pas ce champ : on garde le verrou local tant
+        // que la fiche n'est pas repassée « lue » (auquel cas il n'a plus lieu
+        // d'être, ici comme sur l'appareil qui l'a marquée).
+        manually_unread: row.completed ? false : local?.manually_unread,
       });
       changed = true;
       if (state.pending.includes(id)) {
@@ -306,7 +359,7 @@ export function setLastSyncAt(value: string | null): void {
 
 export function exportProgressPayload(): {
   device_id: string;
-  lessons: Record<string, LocalLessonProgress>;
+  lessons: Record<string, SyncedLessonProgress>;
 } {
   const state = readState();
   return { device_id: state.device_id, lessons: getPendingLessons() };

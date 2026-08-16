@@ -6,6 +6,7 @@ import { useSavedStatus, useToggleSaved } from "@/lib/queries";
 import {
   addLessonTime,
   getLocalReadState,
+  isManuallyUnread,
   markLessonSeen,
   setLessonCompletion,
 } from "@/lib/progressStore";
@@ -38,6 +39,102 @@ export function useLessonProgressTracking(cardId: number, isLoggedIn: boolean) {
   }, [cardId, isLoggedIn]);
 }
 
+/** Temps passé sur la fiche, onglet visible, avant qu'elle compte comme lue. */
+const AUTO_READ_DELAY_MS = 5000;
+
+/** Part de la page atteinte au défilement qui vaut lecture, sans attendre. */
+const AUTO_READ_SCROLL_RATIO = 0.6;
+
+/**
+ * Marque la fiche lue quand elle a vraiment été lue : soit `AUTO_READ_DELAY_MS`
+ * passées à l'écran (le compte s'arrête quand l'onglet passe en arrière-plan),
+ * soit un défilement jusqu'à `AUTO_READ_SCROLL_RATIO` de la page.
+ *
+ * Le simple montage ne suffit pas : un aller-retour dans le deck, un remontage
+ * ou un préchargement ne doivent pas marquer une fiche à peine entrevue.
+ * `enabled` est faux dès que la question ne se pose plus (visiteur déconnecté,
+ * fiche déjà lue, fiche dé-marquée à la main).
+ */
+function useAutoRead({
+  cardId,
+  enabled,
+  onRead,
+}: {
+  cardId: number;
+  enabled: boolean;
+  onRead: () => void;
+}) {
+  // Le callback change à chaque rendu ; on le lit via une ref pour ne pas
+  // réarmer le minuteur (et donc repartir de zéro) à chaque rendu du lecteur.
+  const onReadRef = React.useRef(onRead);
+  React.useEffect(() => {
+    onReadRef.current = onRead;
+  });
+
+  React.useEffect(() => {
+    if (!enabled) return;
+    if (typeof window === "undefined") return;
+
+    let remainingMs = AUTO_READ_DELAY_MS;
+    let startedAt = Date.now();
+    let timer: number | null = null;
+    let done = false;
+
+    const clearTimer = () => {
+      if (timer === null) return;
+      window.clearTimeout(timer);
+      timer = null;
+    };
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimer();
+      setLessonCompletion(cardId, true);
+      scheduleProgressSync("auto_read");
+      onReadRef.current();
+    };
+
+    const startTimer = () => {
+      if (done || timer !== null) return;
+      startedAt = Date.now();
+      timer = window.setTimeout(finish, remainingMs);
+    };
+
+    const pauseTimer = () => {
+      if (timer === null) return;
+      clearTimer();
+      remainingMs = Math.max(0, remainingMs - (Date.now() - startedAt));
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") startTimer();
+      else pauseTimer();
+    };
+
+    const onScroll = () => {
+      if (done) return;
+      const scrolled = window.scrollY;
+      // Sans ce garde-fou, une fiche trop courte pour défiler satisfait le
+      // ratio dès le premier événement et on retombe sur le « lu » immédiat.
+      if (scrolled <= 0) return;
+      const total = document.documentElement.scrollHeight;
+      if (total <= 0) return;
+      if ((scrolled + window.innerHeight) / total >= AUTO_READ_SCROLL_RATIO) finish();
+    };
+
+    if (document.visibilityState === "visible") startTimer();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      clearTimer();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [cardId, enabled]);
+}
+
 export type CardActions = {
   saved: boolean;
   isRead: boolean;
@@ -64,6 +161,7 @@ export function useCardActions({
 }): CardActions {
   const [saved, setSaved] = React.useState(false);
   const [isRead, setIsRead] = React.useState(false);
+  const [manuallyUnread, setManuallyUnread] = React.useState(false);
 
   const toggleSavedMutation = useToggleSaved();
 
@@ -75,6 +173,7 @@ export function useCardActions({
   // le store local fait foi dès qu'il connaît la fiche.
   React.useEffect(() => {
     setIsRead(getLocalReadState(data.id) ?? Boolean(data.is_read));
+    setManuallyUnread(isManuallyUnread(data.id));
   }, [data.slug, data.id, data.is_read]);
 
   const { data: savedStatus } = useSavedStatus(data.slug, isLoggedIn);
@@ -84,14 +183,15 @@ export function useCardActions({
     setSaved(Boolean(savedStatus.saved));
   }, [savedStatus]);
 
-  // Ouvrir la fiche vaut lecture. Une seule écriture : le store local, que le
-  // sync remonte ensuite dans `LessonProgress` — l'unique source de vérité.
-  React.useEffect(() => {
-    if (!isLoggedIn) return;
-    setIsRead(true);
-    setLessonCompletion(data.id, true);
-    scheduleProgressSync("auto_read");
-  }, [isLoggedIn, data.id]);
+  // Lire la fiche vaut lecture — pas l'ouvrir. Une seule écriture : le store
+  // local, que le sync remonte ensuite dans `LessonProgress`, l'unique source
+  // de vérité. Un « non lu » explicite désarme définitivement l'automatisme
+  // pour cette fiche, jusqu'à ce que l'utilisateur la remarque lue lui-même.
+  useAutoRead({
+    cardId: data.id,
+    enabled: isLoggedIn && !isRead && !manuallyUnread,
+    onRead: () => setIsRead(true),
+  });
 
   const toggleSaved = async (source: "button" | "double_tap") => {
     if (!isLoggedIn) {
@@ -123,7 +223,8 @@ export function useCardActions({
 
     const next = !isRead;
     setIsRead(next);
-    setLessonCompletion(data.id, next);
+    setManuallyUnread(!next);
+    setLessonCompletion(data.id, next, { explicit: true });
     scheduleProgressSync("toggle_read");
     showMessage(next ? "Carte marquée comme lue." : "Carte marquée comme non lue.");
   };
