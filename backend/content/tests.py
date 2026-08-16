@@ -1458,6 +1458,8 @@ class InputSerializerValidationTests(APITestCase):
             "pathology_slug",
             "unknown pathology_slug",
         )
+        override.refresh_from_db()
+        self.assertEqual(override.pathology_slug, "orpheline")
 
         resp = self._patch(url, {"pathology_slug": "orpheline", "bg": "#000000"})
         self.assertEqual(resp.status_code, 200, resp.data)

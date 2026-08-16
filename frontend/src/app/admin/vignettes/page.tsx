@@ -332,6 +332,17 @@ export default function AdminVignettesPage() {
 
   const createSlugUnknown = isUnknownSlug(createSlug);
 
+  const normalizedEditSlug = slugifyLoose(editSlug);
+  const editSlugChanged = Boolean(editingSlug) && normalizedEditSlug !== editingSlug?.toLowerCase();
+  const editPathology = React.useMemo(
+    () => maladieChoices.find((choice) => choice.slug.toLowerCase() === normalizedEditSlug) ?? null,
+    [maladieChoices, normalizedEditSlug]
+  );
+  const editSlugUnknown = isUnknownSlug(editSlug);
+  const editSlugAlreadyUsed = editSlugChanged && overriddenSlugs.has(normalizedEditSlug);
+  const editSlugInvalid = editSlugChanged && (editSlugUnknown || editSlugAlreadyUsed);
+  const editingOrphanUnchanged = !editSlugChanged && editSlugUnknown;
+
   const createMaladieMatches = React.useMemo(() => {
     const q = createMaladieQuery.trim().toLowerCase();
     if (!q && !createPickerOpen) return [] as MaladieChoice[];
@@ -347,9 +358,14 @@ export default function AdminVignettesPage() {
   const editMaladieMatches = React.useMemo(() => {
     const q = editMaladieQuery.trim().toLowerCase();
     if (!q) return [] as MaladieChoice[];
-    const res = maladieChoices.filter((c) => c.slug.toLowerCase().includes(q) || c.path.toLowerCase().includes(q));
+    const sourceSlug = editingSlug?.toLowerCase() ?? null;
+    const res = maladieChoices.filter((c) => {
+      const slug = c.slug.toLowerCase();
+      if (slug === sourceSlug || overriddenSlugs.has(slug)) return false;
+      return slug.includes(q) || c.path.toLowerCase().includes(q);
+    });
     return res.slice(0, 30);
-  }, [editMaladieQuery, maladieChoices]);
+  }, [editMaladieQuery, editingSlug, maladieChoices, overriddenSlugs]);
 
   const startEdit = (r: AdminRow) => {
     setEditingSlug(r.pathology_slug);
@@ -391,7 +407,7 @@ export default function AdminVignettesPage() {
   };
 
   const onSaveEdit = async () => {
-    if (!editingSlug) return;
+    if (!editingSlug || maladiesLoading || editSlugInvalid) return;
     setActionError(null);
     try {
       await patchMutation.mutateAsync({
@@ -698,7 +714,19 @@ export default function AdminVignettesPage() {
                   {isEditing && r ? (
                     <div className="mt-3 grid gap-2">
                       <div className="grid gap-2 sm:grid-cols-3">
-                        <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value)} disabled={saving} />
+                        <Input
+                          id="edit-pathology-slug"
+                          value={editSlug}
+                          onChange={(e) => setEditSlug(e.target.value)}
+                          disabled={saving}
+                          aria-label="Slug de la maladie"
+                          aria-invalid={editSlugInvalid}
+                          aria-describedby={
+                            editSlugInvalid || editingOrphanUnchanged || (editSlugChanged && editPathology)
+                              ? "edit-slug-feedback"
+                              : undefined
+                          }
+                        />
                         <div className="flex items-center gap-2">
                           <input
                             type="color"
@@ -762,14 +790,46 @@ export default function AdminVignettesPage() {
                               ))}
                             </div>
                           ) : editMaladieQuery.trim() ? (
-                            <div className="text-xs text-muted-foreground">Aucun résultat.</div>
+                            <div className="text-xs text-muted-foreground">
+                              Aucune autre maladie disponible sans override ne correspond à cette recherche.
+                            </div>
                           ) : null}
                         </div>
                       </div>
 
-                      {isUnknownSlug(editSlug) ? (
-                        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">
-                          Aucune maladie ne porte ce slug : l&apos;override ne s&apos;appliquerait à aucune fiche.
+                      {editSlugAlreadyUsed ? (
+                        <div
+                          id="edit-slug-feedback"
+                          className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive"
+                          role="alert"
+                        >
+                          Cette maladie possède déjà un override. Modifiez directement son style dans la liste.
+                        </div>
+                      ) : editSlugChanged && editSlugUnknown ? (
+                        <div
+                          id="edit-slug-feedback"
+                          className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive"
+                          role="alert"
+                        >
+                          Aucune maladie ne porte ce slug. Le renommage est bloqué : choisissez une maladie dans le
+                          sélecteur ci-dessus.
+                        </div>
+                      ) : editingOrphanUnchanged ? (
+                        <div
+                          id="edit-slug-feedback"
+                          className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs text-amber-800 dark:text-amber-300"
+                          role="status"
+                        >
+                          Ce slug est déjà hors taxonomie. Vous pouvez corriger son style ou le rattacher à une maladie
+                          avec le sélecteur ci-dessus.
+                        </div>
+                      ) : editSlugChanged && editPathology ? (
+                        <div
+                          id="edit-slug-feedback"
+                          className="rounded-md border border-emerald-600/30 bg-emerald-600/5 p-2 text-xs text-emerald-800 dark:text-emerald-300"
+                          role="status"
+                        >
+                          Après enregistrement, cet override sera rattaché à « {editPathology.path} ».
                         </div>
                       ) : null}
 
@@ -779,7 +839,11 @@ export default function AdminVignettesPage() {
                           <div className="text-xs text-muted-foreground">Aperçu</div>
                         </div>
 
-                        <Button type="button" onClick={() => void onSaveEdit()} disabled={saving || !editSlug.trim()}>
+                        <Button
+                          type="button"
+                          onClick={() => void onSaveEdit()}
+                          disabled={saving || maladiesLoading || !editSlug.trim() || editSlugInvalid}
+                        >
                           {saving ? "Enregistrement…" : "Enregistrer"}
                         </Button>
                       </div>
