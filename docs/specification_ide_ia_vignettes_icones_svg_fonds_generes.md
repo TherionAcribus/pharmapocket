@@ -90,16 +90,11 @@
 - HTA : bg #D64545, accent #FFD0D0, motif “lignes verticales espacées”
 
 ### 4.3 Fallback si pathologie inconnue
-- Utiliser la couleur par **domaine** :
-  - infectio → #6D5BD0
-  - cardio → #D64545
-  - endocrino → #2D74DA
-  - other → #444B59
-- Motif par domaine (simple) :
-  - infectio → ondes
-  - cardio → lignes verticales
-  - endocrino → points
-  - other → diagonales
+- Utiliser la couleur par **domaine**, porté par l'arbre de taxonomie « maladies »
+  (champ `CategoryMaladies.domain`, hérité des ancêtres) et non deviné depuis le slug.
+- Les 11 domaines et leur palette sont listés dans
+  [vignettes_generees_feed.md](vignettes_generees_feed.md) ; `other` (#444B59) sert
+  aux catégories sans domaine.
 
 ---
 
@@ -162,7 +157,8 @@
 
 ## 8) “À faire ensuite” (évolutif)
 - Étendre la table `pathology_map` à 20–30 pathologies prioritaires.
-- Ajouter un mapping “domaine → palette” si le contenu se développe.
+- ~~Ajouter un mapping “domaine → palette” si le contenu se développe.~~ Fait :
+  le domaine vit dans la taxonomie backend et la palette couvre 11 domaines.
 - Prévoir une UI de debug interne : afficher la clé + couleurs + motif + icônes.
 
 ---

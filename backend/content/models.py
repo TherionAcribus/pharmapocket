@@ -388,6 +388,41 @@ class CategoryTheme(BaseCategory):
 
 @register_snippet
 class CategoryMaladies(BaseCategory):
+    class Domain(models.TextChoices):
+        """Grand domaine thérapeutique, qui pilote la palette des vignettes.
+
+        Laisser vide sur un nœud pour hériter du domaine de son ancêtre le plus
+        proche qui en porte un : en pratique on renseigne les racines de l'arbre
+        et les pathologies filles suivent. Voir content.domains.
+        """
+
+        INFECTIO = "infectio", "Infectiologie"
+        CARDIO = "cardio", "Cardiologie / vasculaire"
+        ENDOCRINO = "endocrino", "Endocrinologie / métabolisme"
+        NEURO = "neuro", "Neurologie / psychiatrie"
+        PNEUMO = "pneumo", "Pneumologie / ORL"
+        GASTRO = "gastro", "Gastro-entérologie / hépatologie"
+        DERMATO = "dermato", "Dermatologie"
+        RHUMATO = "rhumato", "Rhumatologie / douleur"
+        UROGYNECO = "urogyneco", "Urologie / gynécologie"
+        ONCO = "onco", "Oncologie / hématologie"
+        OPHTALMO = "ophtalmo", "Ophtalmologie / stomatologie"
+        OTHER = "other", "Autre"
+
+    domain = models.CharField(
+        max_length=20,
+        choices=Domain.choices,
+        blank=True,
+        default="",
+        verbose_name="Domaine",
+        help_text=(
+            "Pilote la couleur et le motif de la vignette générée. "
+            "Laisser vide pour hériter du parent."
+        ),
+    )
+
+    panels = BaseCategory.panels + [FieldPanel("domain")]
+
     class Meta:
         verbose_name_plural = "Catégories maladies"
 

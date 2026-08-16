@@ -184,6 +184,12 @@ doit plus être utilisé).
 - `GET /api/v1/taxonomies/<taxonomy>/resolve/?path=diabete/biguanides` — résolution d'un chemin
 - `GET /api/v1/tags/?q=...&limit=...` (limite par défaut 200, max 500)
 
+Les nœuds de `maladies` portent en plus un **domaine thérapeutique**
+(`CategoryMaladies.domain`), hérité de l'ancêtre le plus proche quand il est laissé
+vide, et exposé dans `categories_maladies_payload[].domain`. Il pilote la palette des
+vignettes générées — voir
+[docs/vignettes_generees_feed.md](docs/vignettes_generees_feed.md).
+
 ### Feed & détail micro-article (app `product`)
 
 - `GET /api/v1/feed/` — pagination curseur (`?cursor=...`)

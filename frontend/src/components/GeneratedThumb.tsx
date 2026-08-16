@@ -24,29 +24,60 @@ function hashString(input: string): number {
   return h >>> 0;
 }
 
-function inferDomainFromPathologySlug(slug: string | null | undefined): "infectio" | "cardio" | "endocrino" | "other" {
-  const s = (slug ?? "").toLowerCase();
-  if (!s) return "other";
+/**
+ * Domaines thérapeutiques, alignés sur `CategoryMaladies.Domain` côté backend.
+ *
+ * Le domaine n'est plus deviné à partir du slug : il est porté par l'arbre de
+ * taxonomie « maladies » et sérialisé dans `CategoryPayload.domain` (héritage
+ * depuis les ancêtres inclus). Une catégorie sans domaine retombe sur `other`.
+ */
+export type Domain =
+  | "infectio"
+  | "cardio"
+  | "endocrino"
+  | "neuro"
+  | "pneumo"
+  | "gastro"
+  | "dermato"
+  | "rhumato"
+  | "urogyneco"
+  | "onco"
+  | "ophtalmo"
+  | "other";
 
-  if (s.includes("grippe") || s.includes("zona") || s.includes("covid") || s.includes("infection")) return "infectio";
-  if (s === "hta" || s.includes("hypertension") || s.includes("card") || s.includes("coeur")) return "cardio";
-  if (s.includes("diab") || s.includes("thyro") || s.includes("endocr")) return "endocrino";
-  return "other";
+type DomainVisual = Omit<VisualCode, "pattern"> & { patterns: PatternName[] };
+
+const DOMAIN_VISUALS: Record<Domain, DomainVisual> = {
+  infectio: { bg: "#6D5BD0", accent: "#D7D2FF", patterns: ["waves", "chevrons", "grid"] },
+  cardio: { bg: "#D64545", accent: "#FFD0D0", patterns: ["vlines", "diagonals", "crosshatch"] },
+  endocrino: { bg: "#2D74DA", accent: "#CFE3FF", patterns: ["dots", "rings", "triangles"] },
+  neuro: { bg: "#9B45A8", accent: "#F2D2F7", patterns: ["waves", "rings", "pluses"] },
+  pneumo: { bg: "#17879B", accent: "#C8ECF2", patterns: ["chevrons", "waves", "vlines"] },
+  gastro: { bg: "#C2661F", accent: "#FFDCC0", patterns: ["diagonals", "crosshatch", "dots"] },
+  dermato: { bg: "#C43D6E", accent: "#FFD2E1", patterns: ["dots", "triangles", "pluses"] },
+  rhumato: { bg: "#6F8F2A", accent: "#E2F0BE", patterns: ["crosshatch", "grid", "diagonals"] },
+  urogyneco: { bg: "#17886B", accent: "#C6EEDD", patterns: ["rings", "waves", "grid"] },
+  onco: { bg: "#5C4B8A", accent: "#DCD5F0", patterns: ["triangles", "chevrons", "crosshatch"] },
+  ophtalmo: { bg: "#3B6EA5", accent: "#D5E5F5", patterns: ["rings", "dots", "grid"] },
+  other: { bg: "#444B59", accent: "#DDE1EA", patterns: ["diagonals", "dots", "pluses", "grid"] },
+};
+
+function normalizeDomain(value: string | null | undefined): Domain {
+  const v = (value ?? "").trim().toLowerCase();
+  // `hasOwn` et pas `in` : `in` remonte la chaîne de prototypes, donc un domaine
+  // nommé "constructor" ou "toString" passerait pour une clé valide.
+  return Object.hasOwn(DOMAIN_VISUALS, v) ? (v as Domain) : "other";
 }
 
-function resolveVisualCode(pathologySlug?: string | null): VisualCode {
-  const slug = (pathologySlug ?? "").toLowerCase();
-
-  const domain = inferDomainFromPathologySlug(slug);
-  const byDomain: Record<ReturnType<typeof inferDomainFromPathologySlug>, Omit<VisualCode, "pattern"> & { patterns: PatternName[] }> = {
-    infectio: { bg: "#6D5BD0", accent: "#D7D2FF", patterns: ["waves", "chevrons", "grid"] },
-    cardio: { bg: "#D64545", accent: "#FFD0D0", patterns: ["vlines", "diagonals", "crosshatch"] },
-    endocrino: { bg: "#2D74DA", accent: "#CFE3FF", patterns: ["dots", "rings", "triangles"] },
-    other: { bg: "#444B59", accent: "#DDE1EA", patterns: ["diagonals", "dots", "pluses", "grid"] },
-  };
+/**
+ * Le domaine choisit la palette ; le slug ne sert plus qu'à varier le motif de
+ * façon déterministe entre deux pathologies d'un même domaine.
+ */
+function resolveVisualCode(pathology?: Pick<CategoryPayload, "slug" | "domain"> | null): VisualCode {
+  const slug = (pathology?.slug ?? "").toLowerCase();
+  const base = DOMAIN_VISUALS[normalizeDomain(pathology?.domain)];
 
   const seed = hashString(slug || "other");
-  const base = byDomain[domain];
   const pattern = base.patterns[seed % base.patterns.length];
   return { bg: base.bg, accent: base.accent, pattern };
 }
@@ -140,7 +171,7 @@ export function resolveGeneratedThumbMeta(source: ThumbMetaSource): {
   const medicament = pickFirst(source.categories_medicament_payload);
   const themeCategory = pickFirst(source.categories_theme_payload);
   const theme = resolveTheme(source);
-  const visual = resolveVisualCode(pathology?.slug ?? null);
+  const visual = resolveVisualCode(pathology);
 
   const labelRaw =
     theme === "pathologie"

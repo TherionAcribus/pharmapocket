@@ -36,11 +36,12 @@ L’illustration (`cover_image_url`) est conservée pour l’écran de lecture/d
 ### Champs attendus côté frontend
 La vignette se base principalement sur :
 - `categories_theme_payload?: Array<{id,name,slug}>`
-- `categories_maladies_payload?: Array<{id,name,slug}>`
+- `categories_maladies_payload?: Array<{id,name,slug,domain}>`
 - `categories_medicament_payload?: Array<{id,name,slug}>`
 
 Notes :
 - Les champs historiques (`categories_pharmacologie_payload`, `categories_classes_payload`) existent encore en option côté types, mais la vignette générée utilise **thème/maladies/médicament**.
+- `domain` n'est renseigné que sur la taxonomie **maladies** : c'est le domaine thérapeutique résolu (voir plus bas).
 
 ### Source backend (référence)
 - Liste microarticles : `backend/content/views.py` (expose `categories_theme_payload`, `categories_maladies_payload`, `categories_medicament_payload`)
@@ -51,14 +52,37 @@ Notes :
 ## Règles de rendu
 
 ### 1) Couleur + motif (fond)
-- Basé sur la **pathologie** (`categories_maladies_payload[0]`) quand présente.
-- Mappings “forts” (exemples initiaux) :
-  - `grippe` → bg `#6D5BD0` / accent `#D7D2FF` / motif `waves`
-  - `zona` → bg `#7A3E9D` / accent `#E6C8F7` / motif `chevrons`
-  - `diabete` → bg `#2D74DA` / accent `#CFE3FF` / motif `dots`
-  - `hta` → bg `#D64545` / accent `#FFD0D0` / motif `vlines`
+La couleur vient du **domaine thérapeutique** de la pathologie
+(`categories_maladies_payload[0].domain`), le motif est tiré de façon
+déterministe depuis le slug pour distinguer deux pathologies d'un même domaine.
 
-- Fallback : si pathologie inconnue, on choisit un “domaine” via heuristique sur le slug (infectio/cardio/endocrino/other), puis un motif déterministe.
+Ordre de résolution, du plus prioritaire au moins prioritaire :
+
+1. **Override par pathologie** — table `PathologyThumbOverride` (slug → bg/accent/motif),
+   éditable dans `/admin/vignettes`. Sert à traiter un cas particulier.
+2. **Domaine** — palette `DOMAIN_VISUALS` dans `GeneratedThumb.tsx`, indexée par les
+   clés de `CategoryMaladies.Domain` (`infectio`, `cardio`, `endocrino`, `neuro`,
+   `pneumo`, `gastro`, `dermato`, `rhumato`, `urogyneco`, `onco`, `ophtalmo`).
+3. **`other`** — gris ardoise, quand la catégorie n'a ni domaine propre ni ancêtre
+   qui en porte un.
+
+#### D'où vient le domaine
+C'est une donnée éditoriale, pas une devinette : le champ `domain` est porté par
+les nœuds de l'arbre `CategoryMaladies` et se saisit dans Wagtail
+(`Catégories maladies`). **Laisser le champ vide fait hériter du domaine de
+l'ancêtre le plus proche** : en pratique on renseigne les racines
+(« Infectiologie », « Cardiologie »…) et les pathologies filles suivent.
+
+La résolution de l'héritage vit dans `backend/content/domains.py`. Elle lit
+l'arbre entier en une requête et met le résultat en cache jusqu'à la prochaine
+écriture sur la taxonomie (invalidation par signal, `backend/content/signals.py`),
+ce qui évite un `get_ancestors()` par catégorie sérialisée dans le feed.
+
+> Historique : le domaine était auparavant deviné côté client par
+> `inferDomainFromPathologySlug`, qui ne connaissait que quelques mots-clés et
+> rangeait tout le reste en gris. Cette heuristique a été élargie puis rejouée
+> **une seule fois** dans la migration `0030_backfill_categorymaladies_domain`
+> pour amorcer l'arbre ; elle ne tourne plus à l'exécution.
 
 ### 2) Icône centrale (déterminée par le Thème)
 La source de vérité est :
@@ -89,6 +113,17 @@ Le label est tronqué pour rester lisible en 64px.
 
 ## Personnaliser / étendre
 
+### Rattacher une pathologie à un domaine
+Dans Wagtail, `Catégories maladies` → ouvrir le nœud → champ **Domaine**. Le
+laisser vide pour hériter du parent. Aucune modification de code n'est nécessaire.
+
+### Ajouter un nouveau domaine
+1. Ajouter la valeur à `CategoryMaladies.Domain` (`backend/content/models.py`) et
+   générer la migration.
+2. Ajouter la même clé au type `Domain` et à `DOMAIN_VISUALS` dans
+   `frontend/src/components/GeneratedThumb.tsx` (bg, accent, motifs).
+3. Régénérer le contrat : `spectacular` puis `npm run types:generate`.
+
 ### Ajouter un nouveau thème
 1. Créer/ajouter la catégorie dans `CategoryTheme` (backend).
 2. Vérifier que le feed/liste renvoie bien `categories_theme_payload`.
@@ -113,6 +148,8 @@ Le label est tronqué pour rester lisible en 64px.
   - Pathologie : vérifier `categories_maladies_payload`
   - Médicament : vérifier `categories_medicament_payload`
 
-- **Couleurs inattendues** :
-  - vérifier le `slug` de la maladie (ex: `diabete` vs `diabète`)
-  - compléter le mapping hardcodé dans `resolveVisualCode()`
+- **Couleurs inattendues / tout en gris** :
+  - vérifier que la catégorie maladie (ou l'un de ses ancêtres) a bien un **Domaine**
+    renseigné dans Wagtail — sans domaine, la vignette retombe sur `other` (gris)
+  - vérifier que la réponse API contient bien `domain` dans `categories_maladies_payload`
+  - vérifier qu'aucun `PathologyThumbOverride` ne s'applique au slug (il gagne sur le domaine)

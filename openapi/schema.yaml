@@ -2178,6 +2178,8 @@ components:
           type: string
         slug:
           type: string
+        domain:
+          type: string
       required:
       - id
       - name

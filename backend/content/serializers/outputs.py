@@ -3,6 +3,7 @@
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_serializer
 
+from ..domains import resolved_domain_map
 from ..html import sanitize_rich_text
 
 
@@ -126,11 +127,15 @@ class MicroArticleCardSerializer(serializers.Serializer):
         return list(getattr(field, "stream_data", []))
 
     @staticmethod
-    def _taxonomy_payload(queryset) -> list[dict]:
-        return [
+    def _taxonomy_payload(queryset, *, domains: dict[int, str] | None = None) -> list[dict]:
+        items = [
             {"id": item.id, "name": item.name, "slug": item.slug}
             for item in queryset.all()
         ]
+        if domains is not None:
+            for item in items:
+                item["domain"] = domains.get(item["id"], "")
+        return items
 
     def get_answer_express(self, page) -> str:
         return sanitize_rich_text(page.answer_express)
@@ -199,7 +204,7 @@ class MicroArticleCardSerializer(serializers.Serializer):
         return self._taxonomy_payload(page.categories_theme)
 
     def get_categories_maladies_payload(self, page) -> list[dict]:
-        return self._taxonomy_payload(page.categories_maladies)
+        return self._taxonomy_payload(page.categories_maladies, domains=resolved_domain_map())
 
     def get_categories_medicament_payload(self, page) -> list[dict]:
         return self._taxonomy_payload(page.categories_medicament)
@@ -295,6 +300,9 @@ class CategoryPayloadSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     slug = serializers.CharField()
+    # Uniquement sur la taxonomie "maladies" : domaine thérapeutique résolu
+    # (héritage compris), qui pilote la palette de la vignette générée.
+    domain = serializers.CharField(required=False, allow_blank=True)
 
 
 class SubjectSummarySerializer(serializers.Serializer):

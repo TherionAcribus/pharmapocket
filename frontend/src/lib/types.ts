@@ -1054,6 +1054,7 @@ export interface components {
             id: number;
             name: string;
             slug: string;
+            domain?: string;
         };
         CopyDeckResponse: {
             deck_id: number;
