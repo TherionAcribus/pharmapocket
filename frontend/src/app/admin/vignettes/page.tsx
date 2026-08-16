@@ -214,6 +214,16 @@ export default function AdminVignettesPage() {
 
   const onDelete = async (slug: string) => {
     if (!slug) return;
+
+    // La suppression n'est pas annulable et la ligne ne porte aucun état à
+    // restaurer : il faut la recréer à la main (couleurs + motif). D'où la
+    // confirmation, avec le slug rappelé — les boutons d'une ligne à l'autre
+    // sont identiques et rien ne distingue visuellement la ligne visée.
+    const ok = window.confirm(
+      `Supprimer l'override de « ${slug} » ? Cette action est irréversible : la vignette repassera aux couleurs générées par défaut.`
+    );
+    if (!ok) return;
+
     setActionError(null);
     try {
       await deleteMutation.mutateAsync(slug);
