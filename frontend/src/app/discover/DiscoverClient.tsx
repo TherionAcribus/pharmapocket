@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { ExploreTabs } from "@/components/ExploreTabs";
 import { FeedClient } from "@/components/FeedClient";
 import { FilterSheet } from "@/components/FilterSheet";
 import { MobileScaffold } from "@/components/MobileScaffold";
@@ -14,6 +15,8 @@ export default function DiscoverClient() {
       headerRight={<FilterSheet basePath="/discover" />}
       contentClassName="space-y-4"
     >
+      <ExploreTabs />
+
       <div className="grid gap-3">
         <div className="rounded-xl border bg-card p-4">
           <div className="text-sm font-semibold">Reprendre</div>

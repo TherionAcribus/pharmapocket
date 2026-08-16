@@ -1,5 +1,6 @@
 "use client";
 
+import { ExploreTabs } from "@/components/ExploreTabs";
 import { FeedClient } from "@/components/FeedClient";
 import { FilterSheet } from "@/components/FilterSheet";
 import { MobileScaffold } from "@/components/MobileScaffold";
@@ -11,6 +12,7 @@ export default function LibraryClient() {
       headerRight={<FilterSheet basePath="/library" />}
       contentClassName="space-y-4"
     >
+      <ExploreTabs />
       <FeedClient basePath="/library" embedded />
     </MobileScaffold>
   );

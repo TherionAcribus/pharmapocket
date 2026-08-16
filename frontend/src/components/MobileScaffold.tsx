@@ -4,12 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BookOpen as BookOpenIcon,
   Brain as BrainIcon,
   Clock as ClockIcon,
+  Compass as CompassIcon,
   Home as HomeIcon,
   Image as ImageIcon,
-  LayoutGrid as LayoutGridIcon,
   Layers as LayersIcon,
   Package as PackageIcon,
   LogIn as LogInIcon,
@@ -30,6 +29,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { EXPLORE_HOME, exploreSections, isExplorePath } from "@/components/ExploreTabs";
 import { authLogout } from "@/lib/api/auth";
 import { resetSessionCache, useMe, useTaxonomyTree } from "@/lib/queries";
 import { ensureProgressSyncLoop, setProgressSyncEnabled } from "@/lib/progressSync";
@@ -40,13 +40,27 @@ type TabItem = {
   href: string;
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
+  /** Autres routes qui doivent allumer cet onglet. */
+  isActive?: (pathname: string) => boolean;
 };
 
+/**
+ * Barre du bas : 5 onglets max. « Explorer » regroupe les trois façons de
+ * trouver du contenu (dose du jour, bibliothèque, packs), qui se partagent une
+ * sous-navigation (voir `ExploreTabs`). Admin reste dans le menu burger.
+ */
 const tabs: TabItem[] = [
   { href: "/", label: "Accueil", Icon: HomeIcon },
-  { href: "/discover", label: "Dose du jour", Icon: LayoutGridIcon },
-  { href: "/library", label: "Bibliothèque", Icon: BookOpenIcon },
-  { href: "/packs", label: "Packs", Icon: PackageIcon },
+  { href: EXPLORE_HOME, label: "Explorer", Icon: CompassIcon, isActive: isExplorePath },
+  { href: "/cards", label: "Mes cartes", Icon: LayersIcon },
+  { href: "/review", label: "À revoir", Icon: ClockIcon },
+  { href: "/quiz", label: "Quiz", Icon: BrainIcon },
+];
+
+/** Menu burger : la liste complète, sous-sections d'Explorer comprises. */
+const menuLinks: TabItem[] = [
+  { href: "/", label: "Accueil", Icon: HomeIcon },
+  ...exploreSections,
   { href: "/cards", label: "Mes cartes", Icon: LayersIcon },
   { href: "/review", label: "À revoir", Icon: ClockIcon },
   { href: "/quiz", label: "Quiz", Icon: BrainIcon },
@@ -54,9 +68,9 @@ const tabs: TabItem[] = [
 
 type Taxonomy = "pharmacologie" | "maladies" | "classes";
 
-function isActivePath(pathname: string, href: string) {
-  if (href === "/discover") return pathname.startsWith("/discover");
-  return pathname === href || pathname.startsWith(`${href}/`);
+function isActivePath(pathname: string, tab: TabItem) {
+  if (tab.isActive) return tab.isActive(pathname);
+  return pathname === tab.href || pathname.startsWith(`${tab.href}/`);
 }
 
 function TaxonomyTreeNav({
@@ -116,14 +130,6 @@ export function MobileScaffold({
   const currentUserEmail = me?.email || null;
   const currentUserIsStaff = Boolean(me?.is_staff);
 
-  const navTabs = React.useMemo<TabItem[]>(
-    () =>
-      currentUserIsStaff
-        ? [...tabs, { href: "/admin", label: "Admin", Icon: SettingsIcon }]
-        : tabs,
-    [currentUserIsStaff]
-  );
-
   React.useEffect(() => {
     ensureProgressSyncLoop();
     setProgressSyncEnabled(Boolean(currentUserEmail));
@@ -160,30 +166,17 @@ export function MobileScaffold({
                 <Separator />
                 <ScrollArea className="h-[calc(100dvh-4rem)] px-2">
                   <div className="space-y-1 p-2">
-                    <SheetClose asChild>
-                      <Link
-                        href="/"
-                        className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent",
-                          pathname === "/" ? "bg-accent" : ""
-                        )}
-                      >
-                        <HomeIcon className="size-4" />
-                        <span className="truncate">Accueil</span>
-                      </Link>
-                    </SheetClose>
-
-                    {tabs.slice(1).map(({ href, label, Icon }) => (
-                      <SheetClose key={href} asChild>
+                    {menuLinks.map((item) => (
+                      <SheetClose key={item.href} asChild>
                         <Link
-                          href={href}
+                          href={item.href}
                           className={cn(
                             "flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent",
-                            isActivePath(pathname, href) ? "bg-accent" : ""
+                            isActivePath(pathname, item) ? "bg-accent" : ""
                           )}
                         >
-                          <Icon className="size-4" />
-                          <span className="truncate">{label}</span>
+                          <item.Icon className="size-4" />
+                          <span className="truncate">{item.label}</span>
                         </Link>
                       </SheetClose>
                     ))}
@@ -195,7 +188,9 @@ export function MobileScaffold({
                             href="/admin"
                             className={cn(
                               "flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent",
-                              isActivePath(pathname, "/admin") ? "bg-accent" : ""
+                              pathname === "/admin" || pathname.startsWith("/admin/")
+                                ? "bg-accent"
+                                : ""
                             )}
                           >
                             <SettingsIcon className="size-4" />
@@ -368,22 +363,25 @@ export function MobileScaffold({
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/90 backdrop-blur">
+      <nav
+        aria-label="Navigation principale"
+        className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+      >
         <div className="mx-auto flex h-14 w-full max-w-3xl">
-          {navTabs.map(({ href, label, Icon }) => {
-            const active = isActivePath(pathname, href);
+          {tabs.map((tab) => {
+            const active = isActivePath(pathname, tab);
             return (
               <Link
-                key={href}
-                href={href}
+                key={tab.href}
+                href={tab.href}
                 className={cn(
-                  "flex flex-1 flex-col items-center justify-center gap-1 text-[11px]",
+                  "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-xs",
                   active ? "text-foreground" : "text-muted-foreground"
                 )}
                 aria-current={active ? "page" : undefined}
               >
-                <Icon className="size-5" />
-                <span className="truncate">{label}</span>
+                <tab.Icon className="size-5 shrink-0" />
+                <span className="max-w-full truncate">{tab.label}</span>
               </Link>
             );
           })}

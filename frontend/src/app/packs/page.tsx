@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 
+import { ExploreTabs } from "@/components/ExploreTabs";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { useMe, useOfficialPacks } from "@/lib/queries";
@@ -23,6 +24,8 @@ export default function PacksPage() {
 
   return (
     <MobileScaffold title="Packs" contentClassName="space-y-4">
+      <ExploreTabs />
+
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs text-muted-foreground">
           {isLoggedIn ? "Connecté" : "Mode invité"}
