@@ -258,14 +258,15 @@ export function GeneratedThumb({
   const { theme, visual, labelRaw, label } = resolveGeneratedThumbMetaWithOverrides(item, overrides);
 
   return (
+    // Vignette purement décorative, masquée en entier : elle ne fait que
+    // reformuler ce que la carte dit déjà en texte (titre, badge de type, points
+    // clés). Le SVG ne porte donc ni `role="img"` ni `aria-label` — sous un
+    // parent `aria-hidden` le sous-arbre entier sort de l'arbre d'accessibilité
+    // et le label ne serait jamais lu, tout en laissant croire le contraire.
+    // Là où le libellé de catégorie porte une information à annoncer, il est
+    // rendu en vrai texte (badge d'en-tête de `ReaderCard`), pas ici.
     <div className={className ?? "relative h-full w-full"} aria-hidden="true">
-      <svg
-        viewBox="0 0 64 64"
-        className="absolute inset-0 h-full w-full"
-        role="img"
-        aria-label={labelRaw ? `Illustration ${labelRaw}` : "Illustration"}
-        xmlns="http://www.w3.org/2000/svg"
-      >
+      <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
         <rect x="0" y="0" width="64" height="64" fill={visual.bg} />
         <ThumbPatternOverlay pattern={visual.pattern} accent={visual.accent} />
         <rect x="0" y="0" width="64" height="64" fill="#000" opacity="0.06" />
