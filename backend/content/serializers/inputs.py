@@ -197,6 +197,30 @@ class SavedMicroArticleCreateSerializer(serializers.Serializer):
     )
 
 
+# Le feed accumule les slugs au fil du défilement infini : la liste est bornée
+# ici pour qu'une requête reste un `IN (...)` raisonnable. Le client découpe en
+# lots de cette taille plutôt que d'envoyer une liste sans fin.
+READ_STATE_MAX_SLUGS = 500
+
+
+class ReadStateQuerySerializer(serializers.Serializer):
+    """POST /read-state/ — `validated_data["slugs"]` est nettoyé et dédoublonné."""
+
+    slugs = FlatListField(
+        child=serializers.CharField(),
+        item_message="slugs must be a list of slugs",
+        error_messages=_list_messages("slugs is required (list of slugs)"),
+    )
+
+    def validate_slugs(self, value):
+        slugs = list(dict.fromkeys(s.strip() for s in value if s.strip()))
+        if len(slugs) > READ_STATE_MAX_SLUGS:
+            raise serializers.ValidationError(
+                f"slugs must contain at most {READ_STATE_MAX_SLUGS} items"
+            )
+        return slugs
+
+
 # ---------------------------------------------------------------------------
 # Decks utilisateur et packs officiels
 # ---------------------------------------------------------------------------

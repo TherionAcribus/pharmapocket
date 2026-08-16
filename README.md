@@ -213,7 +213,7 @@ Utilisateur connecté :
 
 - `GET|POST /api/v1/content/saved/` — micro-articles sauvegardés
 - `GET|DELETE /api/v1/content/saved/<slug>/`
-- `GET /api/v1/content/read-state/?slugs=a,b,c` · `POST /api/v1/content/read-state/`
+- `POST /api/v1/content/read-state/` — projection lecture seule de `LessonProgress.completed`, corps `{"slugs": [...]}` (max 500)
 - `GET /api/v1/content/sources/search/?q=...`
 - Decks :
   - `GET /api/v1/content/decks/?type=...` · `POST /api/v1/content/decks/`

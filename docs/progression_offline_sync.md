@@ -48,12 +48,16 @@ Endpoints exposes par `backend/learning/views.py`:
 ## Etat « lu » : une seule source de verite
 `LessonProgress.completed` **est** l etat « lu ». Il n existe plus de modele
 `MicroArticleReadState` (supprime par `content.0027`, apres backfill par
-`learning.0004`) ni de `POST /api/v1/content/read-state/`.
+`learning.0004`) ni d ecriture dediee de l etat de lecture.
 
-- `GET /api/v1/content/read-state/?slugs=...` est une **projection en lecture
-  seule** de `LessonProgress.completed`, indexee par slug : le feed raisonne en
-  slugs, la progression en `lesson_id`. Meme chose pour `is_read` dans le detail
-  d une fiche.
+- `POST /api/v1/content/read-state/` (corps `{"slugs": [...]}`) est une
+  **projection en lecture seule** de `LessonProgress.completed`, indexee par
+  slug : le feed raisonne en slugs, la progression en `lesson_id`. Meme chose
+  pour `is_read` dans le detail d une fiche. Le verbe POST ne trahit aucune
+  ecriture : le feed accumule les slugs au fil du defilement infini et la query
+  string finirait par depasser la limite de longueur d URL. Le lot est borne a
+  `READ_STATE_MAX_SLUGS` (500) cote serveur, et `fetchMicroArticleReadStates`
+  decoupe au-dela avant de refusionner les reponses.
 - Cote client, la seule ecriture est `setLessonCompletion` dans le store local ;
   c est le sync qui remonte la valeur au serveur, et qui retente tant que la
   lecon reste dans `pending`. Marquer lu/non lu n est donc jamais annule par un

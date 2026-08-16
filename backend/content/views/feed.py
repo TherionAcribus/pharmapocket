@@ -10,7 +10,7 @@ from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import extend_schema
 
 from learning.models import LessonProgress
 
@@ -31,7 +31,7 @@ from ..serializers import (
     ReadStateMapSerializer,
     SavedStateSerializer,
 )
-from ..serializers.inputs import SavedMicroArticleCreateSerializer
+from ..serializers.inputs import ReadStateQuerySerializer, SavedMicroArticleCreateSerializer
 from .helpers import (
     _apply_tree_filter,
     _get_default_deck,
@@ -367,46 +367,40 @@ class MicroArticleReadStateView(APIView):
     La progression (`/api/v1/learning/progress/`) est la seule source de vérité :
     cette vue existe uniquement parce que le feed raisonne en slugs et non en
     `lesson_id`. Les écritures passent par le sync de progression.
+
+    POST malgré la lecture seule : le feed accumule les slugs au fil du
+    défilement infini et une liste en query string finit par dépasser la limite
+    de longueur d'URL des serveurs et proxys. Le corps de requête n'a pas cette
+    limite, et la taille du lot reste bornée par `READ_STATE_MAX_SLUGS`.
     """
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
         operation_id="content_read_state_list",
-        parameters=[
-            OpenApiParameter(
-                name="slugs",
-                type=str,
-                required=True,
-                description="Slugs séparés par des virgules.",
-            )
-        ],
+        request=ReadStateQuerySerializer,
         responses=ReadStateMapSerializer,
     )
-    def get(self, request):
-        slugs_param = request.query_params.get("slugs")
-        if not slugs_param or not isinstance(slugs_param, str):
-            raise DRFValidationError({"slugs": ["slugs is required (comma-separated)"]})
-
-        slugs = [s.strip() for s in slugs_param.split(",") if s.strip()]
+    def post(self, request):
+        serializer = ReadStateQuerySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        slugs = serializer.validated_data["slugs"]
         if not slugs:
             return Response({"items": {}})
 
         pages = MicroArticlePage.objects.live().public().filter(slug__in=slugs)
         slug_by_id = {p.id: p.slug for p in pages}
-        if not slug_by_id:
-            return Response({"items": {}})
 
-        rows = LessonProgress.objects.filter(
+        completed_ids = LessonProgress.objects.filter(
             user=request.user,
-            lesson_id__in=list(slug_by_id.keys()),
-        ).values_list("lesson_id", "completed")
+            lesson_id__in=list(slug_by_id),
+            completed=True,
+        ).values_list("lesson_id", flat=True)
 
-        items = {slug_by_id[lid]: bool(completed) for (lid, completed) in rows if lid in slug_by_id}
-        # Default to false for missing state
-        for slug in slugs:
-            if slug not in items:
-                items[slug] = False
+        # Un slug inconnu, non publié ou sans progression vaut « non lu ».
+        items = {slug: False for slug in slugs}
+        for lesson_id in completed_ids:
+            items[slug_by_id[lesson_id]] = True
 
         return Response({"items": items})
 

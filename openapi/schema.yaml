@@ -1025,7 +1025,7 @@ paths:
                 $ref: '#/components/schemas/MicroArticleDetail'
           description: ''
   /api/v1/content/read-state/:
-    get:
+    post:
       operationId: content_read_state_list
       description: |-
         Projection en lecture seule de `LessonProgress.completed`, indexée par slug.
@@ -1033,15 +1033,25 @@ paths:
         La progression (`/api/v1/learning/progress/`) est la seule source de vérité :
         cette vue existe uniquement parce que le feed raisonne en slugs et non en
         `lesson_id`. Les écritures passent par le sync de progression.
-      parameters:
-      - in: query
-        name: slugs
-        schema:
-          type: string
-        description: Slugs séparés par des virgules.
-        required: true
+
+        POST malgré la lecture seule : le feed accumule les slugs au fil du
+        défilement infini et une liste en query string finit par dépasser la limite
+        de longueur d'URL des serveurs et proxys. Le corps de requête n'a pas cette
+        limite, et la taille du lot reste bornée par `READ_STATE_MAX_SLUGS`.
       tags:
       - content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadStateQuery'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReadStateQuery'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReadStateQuery'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -3407,6 +3417,16 @@ components:
             type: boolean
       required:
       - items
+    ReadStateQuery:
+      type: object
+      description: POST /read-state/ — `validated_data["slugs"]` est nettoyé et dédoublonné.
+      properties:
+        slugs:
+          type: array
+          items:
+            type: string
+      required:
+      - slugs
     RecapPoint:
       type: object
       properties:

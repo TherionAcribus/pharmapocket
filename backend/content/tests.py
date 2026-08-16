@@ -35,6 +35,7 @@ from .models import (
 )
 from .permissions import IsStaff
 from .serializers import MicroArticleCardSerializer
+from .serializers.inputs import READ_STATE_MAX_SLUGS
 from .views import (
     _get_or_create_default_deck,
     AdminImageUploadView,
@@ -1255,9 +1256,26 @@ class InputSerializerValidationTests(APITestCase):
 
     def test_read_state_requires_slugs(self):
         self.assertFieldError(
-            self.client.get("/api/v1/content/read-state/", secure=True),
+            self._post("/api/v1/content/read-state/", {}),
             "slugs",
-            "slugs is required (comma-separated)",
+            "slugs is required (list of slugs)",
+        )
+        self.assertFieldError(
+            self._post("/api/v1/content/read-state/", {"slugs": self.card.slug}),
+            "slugs",
+            "slugs is required (list of slugs)",
+        )
+
+    def test_read_state_rejects_an_oversized_batch(self):
+        # Le corps de requete leve la limite de longueur d'URL, pas celle du
+        # `IN (...)` : le client doit decouper en lots.
+        resp = self._post(
+            "/api/v1/content/read-state/",
+            {"slugs": [f"fiche-{i}" for i in range(READ_STATE_MAX_SLUGS + 1)]},
+        )
+
+        self.assertFieldError(
+            resp, "slugs", f"slugs must contain at most {READ_STATE_MAX_SLUGS} items"
         )
 
     def test_read_state_is_derived_from_lesson_progress(self):
@@ -1271,19 +1289,22 @@ class InputSerializerValidationTests(APITestCase):
             updated_at=timezone.now(),
         )
 
-        url = f"/api/v1/content/read-state/?slugs={self.card.slug},{other.slug}"
+        body = {"slugs": [self.card.slug, other.slug, "fiche-inconnue"]}
 
-        resp = self.client.get(url, secure=True)
+        resp = self._post("/api/v1/content/read-state/", body)
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual(resp.data["items"], {self.card.slug: True, other.slug: False})
+        self.assertEqual(
+            resp.data["items"],
+            {self.card.slug: True, other.slug: False, "fiche-inconnue": False},
+        )
 
         # Repasser la lecon en « non terminee » suffit a repasser la fiche en non lue :
         # il n'y a plus d'etat de lecture stocke a part.
         progress.completed = False
         progress.save(update_fields=["completed"])
 
-        resp = self.client.get(url, secure=True)
-        self.assertEqual(resp.data["items"], {self.card.slug: False, other.slug: False})
+        resp = self._post("/api/v1/content/read-state/", body)
+        self.assertEqual(resp.data["items"][self.card.slug], False)
 
     # --- Overrides de vignettes ---------------------------------------------
 

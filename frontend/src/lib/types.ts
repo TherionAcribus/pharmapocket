@@ -504,16 +504,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
         /**
          * @description Projection en lecture seule de `LessonProgress.completed`, indexée par slug.
          *
          *     La progression (`/api/v1/learning/progress/`) est la seule source de vérité :
          *     cette vue existe uniquement parce que le feed raisonne en slugs et non en
          *     `lesson_id`. Les écritures passent par le sync de progression.
+         *
+         *     POST malgré la lecture seule : le feed accumule les slugs au fil du
+         *     défilement infini et une liste en query string finit par dépasser la limite
+         *     de longueur d'URL des serveurs et proxys. Le corps de requête n'a pas cette
+         *     limite, et la taille du lot reste bornée par `READ_STATE_MAX_SLUGS`.
          */
-        get: operations["content_read_state_list"];
-        put?: never;
-        post?: never;
+        post: operations["content_read_state_list"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1522,6 +1527,10 @@ export interface components {
                 [key: string]: boolean;
             };
         };
+        /** @description POST /read-state/ — `validated_data["slugs"]` est nettoyé et dédoublonné. */
+        ReadStateQuery: {
+            slugs: string[];
+        };
         RecapPoint: {
             id: number;
             text: string;
@@ -1783,6 +1792,7 @@ export type ProgressImport = components['schemas']['ProgressImport'];
 export type ProgressImportResponse = components['schemas']['ProgressImportResponse'];
 export type QuestionPayload = components['schemas']['QuestionPayload'];
 export type ReadStateMap = components['schemas']['ReadStateMap'];
+export type ReadStateQuery = components['schemas']['ReadStateQuery'];
 export type RecapPoint = components['schemas']['RecapPoint'];
 export type SrsNext = components['schemas']['SRSNext'];
 export type SrsReview = components['schemas']['SRSReview'];
@@ -2812,15 +2822,18 @@ export interface operations {
     };
     content_read_state_list: {
         parameters: {
-            query: {
-                /** @description Slugs séparés par des virgules. */
-                slugs: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadStateQuery"];
+                "application/x-www-form-urlencoded": components["schemas"]["ReadStateQuery"];
+                "multipart/form-data": components["schemas"]["ReadStateQuery"];
+            };
+        };
         responses: {
             200: {
                 headers: {

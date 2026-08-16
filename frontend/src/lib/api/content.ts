@@ -32,19 +32,38 @@ export async function unsaveMicroArticle(slug: string): Promise<void> {
   });
 }
 
+/** Taille de lot acceptée par `POST /read-state/` : au-delà, l'API renvoie 400. */
+const READ_STATE_MAX_SLUGS = 500;
+
 /** Projection serveur de `LessonProgress.completed`, indexée par slug.
- *  Lecture seule : l'état « lu » s'écrit via le store de progression. */
+ *
+ *  Lecture seule malgré le POST : le feed accumule les slugs au fil du
+ *  défilement infini, et les passer en query string finit par dépasser la
+ *  limite de longueur d'URL. Au-delà d'un lot, la liste est découpée puis les
+ *  réponses sont refusionnées. */
 export async function fetchMicroArticleReadStates(
   slugs: string[]
 ): Promise<{ items: Record<string, boolean> }> {
-  const value = slugs
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => encodeURIComponent(s))
-    .join(",");
-  return apiGet<{ items: Record<string, boolean> }>(
-    `/api/v1/content/read-state/?slugs=${value}`
+  // Dédoublonner avant de découper : sinon un doublon consomme une place du lot.
+  const cleaned = [...new Set(slugs.map((s) => s.trim()).filter(Boolean))];
+
+  const batches: string[][] = [];
+  for (let i = 0; i < cleaned.length; i += READ_STATE_MAX_SLUGS) {
+    batches.push(cleaned.slice(i, i + READ_STATE_MAX_SLUGS));
+  }
+  if (batches.length === 0) return { items: {} };
+
+  const responses = await Promise.all(
+    batches.map((batch) =>
+      apiJson<{ items: Record<string, boolean> }>(
+        "/api/v1/content/read-state/",
+        jsonBody("POST", { slugs: batch })
+      )
+    )
   );
+  const items: Record<string, boolean> = {};
+  for (const response of responses) Object.assign(items, response.items);
+  return { items };
 }
 
 export async function fetchLanding(): Promise<LandingPayload> {
