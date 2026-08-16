@@ -1,5 +1,6 @@
 """Overrides de vignettes par pathologie : lecture publique et CRUD staff."""
 
+from django.db import IntegrityError, transaction
 from rest_framework.permissions import AllowAny
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
@@ -9,6 +10,13 @@ from ..models import PathologyThumbOverride
 from ..permissions import IsStaff
 from ..serializers import AdminThumbOverrideSerializer, ThumbOverridePublicSerializer
 from ..serializers.inputs import ThumbOverrideCreateSerializer, ThumbOverridePatchSerializer
+
+
+# Le contrôle d'unicité du serializer (SELECT) et l'écriture (INSERT/UPDATE) ne
+# sont pas atomiques : entre les deux, une requête concurrente peut poser le même
+# `pathology_slug`. La contrainte unique tranche alors en base et l'IntegrityError
+# remonterait en 500 ; on la rattrape pour rendre le même 400 que le serializer.
+_SLUG_TAKEN = {"pathology_slug": ["pathology_slug already exists"]}
 
 
 def _thumb_override_payload(obj: PathologyThumbOverride) -> dict:
@@ -63,7 +71,14 @@ class AdminThumbOverrideListCreateView(APIView):
         serializer = ThumbOverrideCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        obj = PathologyThumbOverride.objects.create(**serializer.validated_data)
+        try:
+            # `atomic()` isole l'échec : sans lui l'IntegrityError laisserait la
+            # transaction courante cassée et toute requête suivante échouerait.
+            with transaction.atomic():
+                obj = PathologyThumbOverride.objects.create(**serializer.validated_data)
+        except IntegrityError:
+            return Response(_SLUG_TAKEN, status=400)
+
         return Response(_thumb_override_payload(obj), status=201)
 
 
@@ -95,7 +110,13 @@ class AdminThumbOverrideDetailView(APIView):
 
         for field, value in serializer.validated_data.items():
             setattr(obj, field, value)
-        obj.save(update_fields=[*serializer.validated_data, "updated_at"])
+        try:
+            with transaction.atomic():
+                obj.save(update_fields=[*serializer.validated_data, "updated_at"])
+        except IntegrityError:
+            # Même course sur un renommage : le slug visé a pu être pris entre-temps.
+            return Response(_SLUG_TAKEN, status=400)
+
         return Response(_thumb_override_payload(obj))
 
     @extend_schema(operation_id="admin_thumb_override_delete", responses={204: None})

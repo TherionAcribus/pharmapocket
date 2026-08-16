@@ -36,7 +36,12 @@ from .models import (
 )
 from .permissions import IsStaff
 from .serializers import MicroArticleCardSerializer
-from .serializers.inputs import READ_STATE_MAX_SLUGS
+from .serializers.inputs import (
+    READ_STATE_MAX_SLUGS,
+    SubjectCreateSerializer,
+    ThumbOverrideCreateSerializer,
+    ThumbOverridePatchSerializer,
+)
 from .views import (
     _get_or_create_default_deck,
     AdminImageUploadView,
@@ -1403,6 +1408,68 @@ class InputSerializerValidationTests(APITestCase):
         self.assertEqual(override.accent, "#D7D2FF")
         self.assertEqual(override.pathology_slug, "grippe-patch")
 
+    def _race_on(self, serializer_class, method_name, then_create_slug: str):
+        """Glisse une création concurrente entre la validation et l'écriture.
+
+        Le serializer vérifie l'unicité par un SELECT et la vue écrit ensuite :
+        les deux ne sont pas atomiques. On rejoue l'entrelacement en insérant la
+        ligne concurrente à la fin de la validation.
+        """
+        original = getattr(serializer_class, method_name)
+
+        def racing(serializer_self, value):
+            validated = original(serializer_self, value)
+            PathologyThumbOverride.objects.create(
+                pathology_slug=then_create_slug,
+                bg="#000000",
+                accent="#FFFFFF",
+                pattern=PathologyThumbOverride.Pattern.DOTS,
+            )
+            return validated
+
+        return mock.patch.object(serializer_class, method_name, racing)
+
+    def test_thumb_override_create_answers_400_on_a_concurrent_insert(self):
+        # Sans rattrapage de l'IntegrityError, la contrainte unique remontait en 500.
+        CategoryMaladies.add_root(name="Pathologie Concurrente")
+        url = "/api/v1/content/admin/thumb-overrides/"
+        payload = {
+            "pathology_slug": "pathologie-concurrente",
+            "bg": "#6D5BD0",
+            "accent": "#D7D2FF",
+            "pattern": "waves",
+        }
+
+        with self._race_on(
+            ThumbOverrideCreateSerializer, "validate_pathology_slug", "pathologie-concurrente"
+        ):
+            resp = self._post(url, payload)
+
+        self.assertFieldError(resp, "pathology_slug", "pathology_slug already exists")
+        self.assertEqual(
+            PathologyThumbOverride.objects.filter(pathology_slug="pathologie-concurrente").count(), 1
+        )
+
+    def test_thumb_override_patch_answers_400_on_a_concurrent_rename(self):
+        # Même course sur un renommage : le slug visé peut être pris entre-temps.
+        CategoryMaladies.add_root(name="Pathologie Visee")
+        override = PathologyThumbOverride.objects.create(
+            pathology_slug="grippe-course",
+            bg="#6D5BD0",
+            accent="#D7D2FF",
+            pattern=PathologyThumbOverride.Pattern.WAVES,
+        )
+        url = f"/api/v1/content/admin/thumb-overrides/{override.pathology_slug}/"
+
+        with self._race_on(
+            ThumbOverridePatchSerializer, "validate_pathology_slug", "pathologie-visee"
+        ):
+            resp = self._patch(url, {"pathology_slug": "pathologie-visee"})
+
+        self.assertFieldError(resp, "pathology_slug", "pathology_slug already exists")
+        override.refresh_from_db()
+        self.assertEqual(override.pathology_slug, "grippe-course")
+
     # --- Sujets --------------------------------------------------------------
 
     def test_subject_create_derives_the_slug_and_refuses_duplicates(self):
@@ -1422,6 +1489,23 @@ class InputSerializerValidationTests(APITestCase):
         )
         # Un nom qui ne produit aucun slug : 400 plutôt qu'une ligne au slug vide.
         self.assertFieldError(self._post(url, {"name": "###"}), "slug", "Invalid slug")
+
+    def test_subject_create_answers_400_on_a_concurrent_insert(self):
+        # Le SELECT d'unicité du serializer et l'INSERT de la vue ne sont pas
+        # atomiques : sans rattrapage, la contrainte unique remontait en 500.
+        url = "/api/v1/content/subjects/"
+        original = SubjectCreateSerializer.validate
+
+        def racing(serializer_self, attrs):
+            validated = original(serializer_self, attrs)
+            Subject.objects.create(name="Doublon concurrent", slug=validated["slug"])
+            return validated
+
+        with mock.patch.object(SubjectCreateSerializer, "validate", racing):
+            resp = self._post(url, {"name": "Sujet concurrent"})
+
+        self.assertFieldError(resp, "slug", "slug already exists")
+        self.assertEqual(Subject.objects.filter(slug="sujet-concurrent").count(), 1)
 
     def test_subject_patch_requires_a_known_field(self):
         subject = Subject.objects.create(name="Sujet patch", slug="sujet-patch")

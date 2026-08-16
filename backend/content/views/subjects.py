@@ -1,6 +1,6 @@
 """API des sujets : liste/détail publics, gestion des cartes réservée au staff."""
 
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.db.models import Count, Exists, OuterRef, Q
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.permissions import AllowAny
@@ -24,6 +24,12 @@ from ..serializers.inputs import (
     SubjectPatchSerializer,
 )
 from .helpers import _subject_detail_cards, _subject_recap_card
+
+# Le contrôle d'unicité du serializer (SELECT) et l'écriture (INSERT/UPDATE) ne
+# sont pas atomiques : entre les deux, une requête concurrente peut poser le même
+# slug. La contrainte unique tranche alors en base et l'IntegrityError remonterait
+# en 500 ; on la rattrape pour rendre le même 400 que le serializer.
+_SLUG_TAKEN = {"slug": ["slug already exists"]}
 
 
 class SubjectListCreateView(APIView):
@@ -82,7 +88,14 @@ class SubjectListCreateView(APIView):
         serializer = SubjectCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        subject = Subject.objects.create(**serializer.validated_data)
+        try:
+            # `atomic()` isole l'échec : sans lui l'IntegrityError laisserait la
+            # transaction courante cassée et toute requête suivante échouerait.
+            with transaction.atomic():
+                subject = Subject.objects.create(**serializer.validated_data)
+        except IntegrityError:
+            return Response(_SLUG_TAKEN, status=400)
+
         return Response(
             {
                 "id": subject.id,
@@ -139,7 +152,13 @@ class SubjectDetailView(APIView):
 
         for field, value in serializer.validated_data.items():
             setattr(subject, field, value)
-        subject.save(update_fields=[*serializer.validated_data, "updated_at"])
+        try:
+            with transaction.atomic():
+                subject.save(update_fields=[*serializer.validated_data, "updated_at"])
+        except IntegrityError:
+            # Même course sur un renommage : le slug visé a pu être pris entre-temps.
+            return Response(_SLUG_TAKEN, status=400)
+
         return Response(
             {
                 "id": subject.id,
