@@ -33,8 +33,10 @@ from .feed import (
 # volontairement absents de `__all__` (importer depuis `.helpers` désormais).
 from .helpers import (  # noqa: F401
     _apply_tree_filter,
+    _get_default_deck,
     _get_or_create_default_deck,
     _get_subject_for_card,
+    _is_card_in_default_deck,
     _parse_int,
     _reference_payload,
     _sanitize_stream_value,

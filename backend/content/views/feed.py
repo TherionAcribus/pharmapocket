@@ -16,7 +16,6 @@ from learning.models import LessonProgress
 
 from ..html import sanitize_rich_text
 from ..models import (
-    Deck,
     DeckCard,
     LandingPage,
     MicroArticlePage,
@@ -35,8 +34,10 @@ from ..serializers import (
 from ..serializers.inputs import SavedMicroArticleCreateSerializer
 from .helpers import (
     _apply_tree_filter,
+    _get_default_deck,
     _get_or_create_default_deck,
     _get_subject_for_card,
+    _is_card_in_default_deck,
     _parse_int,
     _reference_payload,
     _sanitize_stream_value,
@@ -290,18 +291,7 @@ class MicroArticleDetailView(RetrieveAPIView):
         }
 
         if request.user.is_authenticated:
-            default_deck = Deck.objects.filter(
-                user=request.user,
-                type=Deck.DeckType.USER,
-                is_default=True,
-            ).first()
-            if default_deck is None:
-                data["is_saved"] = False
-            else:
-                data["is_saved"] = DeckCard.objects.filter(
-                    deck=default_deck,
-                    microarticle_id=page.id,
-                ).exists()
+            data["is_saved"] = _is_card_in_default_deck(request.user, page.id)
             # « Lu » est une projection de la progression : cf. MicroArticleReadStateView.
             data["is_read"] = LessonProgress.objects.filter(
                 user=request.user,
@@ -358,27 +348,14 @@ class SavedMicroArticleDetailView(APIView):
         page = MicroArticlePage.objects.live().public().filter(slug=slug).first()
         if page is None:
             return Response({"saved": False})
-        default_deck = Deck.objects.filter(
-            user=request.user,
-            type=Deck.DeckType.USER,
-            is_default=True,
-        ).first()
-        if default_deck is None:
-            return Response({"saved": False})
-        return Response(
-            {"saved": DeckCard.objects.filter(deck=default_deck, microarticle_id=page.id).exists()}
-        )
+        return Response({"saved": _is_card_in_default_deck(request.user, page.id)})
 
     @extend_schema(operation_id="content_saved_delete", responses={204: None})
     def delete(self, request, slug: str):
         page = MicroArticlePage.objects.live().public().filter(slug=slug).first()
         if page is None:
             return Response(status=204)
-        default_deck = Deck.objects.filter(
-            user=request.user,
-            type=Deck.DeckType.USER,
-            is_default=True,
-        ).first()
+        default_deck = _get_default_deck(request.user)
         if default_deck is not None:
             DeckCard.objects.filter(deck=default_deck, microarticle_id=page.id).delete()
         return Response(status=204)

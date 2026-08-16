@@ -18,6 +18,7 @@ from ..models import (
     CategoryPharmacologie,
     CategoryTheme,
     Deck,
+    DeckCard,
     MicroArticlePage,
     Source,
     Subject,
@@ -38,13 +39,26 @@ def _stream_items(field) -> list:
             return []
 
 
+def _get_default_deck(user) -> Deck | None:
+    """Retourne le deck par défaut de l'utilisateur, sans jamais le créer.
+
+    À utiliser sur les chemins en lecture seule (GET) : une absence de deck y
+    signifie simplement « rien de sauvegardé », pas besoin d'écrire en base.
+    Les chemins qui doivent écrire utilisent `_get_or_create_default_deck`.
+    """
+    return Deck.objects.filter(user=user, type=Deck.DeckType.USER, is_default=True).first()
+
+
+def _is_card_in_default_deck(user, microarticle_id: int) -> bool:
+    """Indique si la fiche est présente dans le deck par défaut (étoile « sauvegardée »)."""
+    deck = _get_default_deck(user)
+    if deck is None:
+        return False
+    return DeckCard.objects.filter(deck=deck, microarticle_id=microarticle_id).exists()
+
+
 def _get_or_create_default_deck(user) -> Deck:
-    default_lookup = {
-        "user": user,
-        "type": Deck.DeckType.USER,
-        "is_default": True,
-    }
-    deck = Deck.objects.filter(**default_lookup).first()
+    deck = _get_default_deck(user)
     if deck is not None:
         return deck
 
@@ -57,7 +71,7 @@ def _get_or_create_default_deck(user) -> Deck:
                 existing.save(update_fields=["is_default", "sort_order", "updated_at"])
         except IntegrityError:
             # Une requête concurrente a pu créer/promouvoir le deck par défaut.
-            deck = Deck.objects.filter(**default_lookup).first()
+            deck = _get_default_deck(user)
             if deck is not None:
                 return deck
             raise
@@ -75,7 +89,7 @@ def _get_or_create_default_deck(user) -> Deck:
             )
     except IntegrityError:
         # La contrainte d'unicité départage les créations concurrentes.
-        deck = Deck.objects.filter(**default_lookup).first()
+        deck = _get_default_deck(user)
         if deck is not None:
             return deck
         raise
