@@ -18,13 +18,29 @@ function landingTargetToPath(target: string | null | undefined): string {
 
 export default function Home() {
   const router = useRouter();
-  const { data: me } = useMe();
+  const { data: me, isPending: sessionPending } = useMe();
   const { data, isPending: loading } = useLanding();
 
+  const redirecting = Boolean(me?.landing_redirect_enabled);
+  const redirectTarget = me?.landing_redirect_target;
+
   React.useEffect(() => {
-    if (!me?.landing_redirect_enabled) return;
-    router.replace(landingTargetToPath(me.landing_redirect_target));
-  }, [me, router]);
+    if (!redirecting) return;
+    router.replace(landingTargetToPath(redirectTarget));
+  }, [redirecting, redirectTarget, router]);
+
+  // La session vit dans un cookie de l'API (autre origine) : ni le serveur Next
+  // ni un middleware ne peuvent décider de la redirection avant le rendu. On
+  // retient donc la landing tant que `me` est en vol — et on continue de la
+  // retenir pendant la navigation, `router.replace` n'étant pas immédiat —
+  // sinon l'utilisateur redirigé verrait la page d'accueil clignoter au passage.
+  if (sessionPending || redirecting) {
+    return (
+      <MobileScaffold title="Accueil" contentClassName="space-y-4">
+        <div className="text-sm text-muted-foreground">Chargement…</div>
+      </MobileScaffold>
+    );
+  }
 
   const showContent = !loading && data;
   const showFallback = !loading && !data;
