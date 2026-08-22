@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { authLogin, authResendVerifyEmail, ensureCsrf, fetchMe } from "@/lib/api/auth";
+import { authLogin, ensureCsrf, fetchMe } from "@/lib/api/auth";
 import { isApiError } from "@/lib/api/client";
 import { BAD_CREDENTIALS_MESSAGE, authErrorMessage } from "@/lib/authErrors";
 import { sanitizeNextPath, signupHref } from "@/lib/authRedirect";
@@ -67,6 +67,19 @@ function parseAllauthAuthenticationResponseFromError(e: unknown):
   return { flows };
 }
 
+/** Le login a abouti côté identifiants, mais l'email reste à confirmer. */
+function isEmailVerificationPending(e: unknown): boolean {
+  const auth = parseAllauthAuthenticationResponseFromError(e);
+  return Boolean(auth?.flows?.some((f) => f?.id === "verify_email" && Boolean(f?.is_pending)));
+}
+
+// Le renvoi de l'email de confirmation passe par une nouvelle tentative de
+// login : avec `ACCOUNT_EMAIL_VERIFICATION = "mandatory"`, allauth renvoie le
+// message depuis `EmailVerificationStage`. Le backend n'en envoie qu'un par
+// tranche de `ACCOUNT_RATE_LIMITS["confirm_email"]` (1/180s/key) : on désarme
+// le bouton d'autant pour ne pas promettre un email que personne n'enverra.
+const RESEND_COOLDOWN_SECONDS = 180;
+
 function landingTargetToPath(target: string | null | undefined): string {
   if (target === "discover") return "/discover";
   if (target === "cards") return "/cards";
@@ -101,16 +114,32 @@ export default function LoginClient() {
   const [error, setError] = React.useState<string | null>(null);
   const [emailVerificationPending, setEmailVerificationPending] = React.useState(false);
   const [resendDone, setResendDone] = React.useState(false);
+  const [resendCooldown, setResendCooldown] = React.useState(0);
 
   React.useEffect(() => {
     void ensureCsrf();
   }, []);
+
+  // Décompte du réarmement du bouton de renvoi.
+  React.useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
 
   // Déjà connecté : cette page n'a rien à proposer.
   React.useEffect(() => {
     if (!me) return;
     router.replace(destinationFor(me));
   }, [me, destinationFor, router]);
+
+  // Session ouverte : tout ce qui a été mis en cache l'a été en tant qu'anonyme.
+  const enterSession = React.useCallback(async () => {
+    await resetSessionCache(queryClient);
+    const loggedIn = await fetchMe();
+    queryClient.setQueryData(queryKeys.me, loggedIn);
+    router.push(destinationFor(loggedIn));
+  }, [destinationFor, queryClient, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,21 +150,36 @@ export default function LoginClient() {
     try {
       await ensureCsrf();
       await authLogin({ identifier, password });
-
-      // Tout ce qui a été mis en cache l'a été en tant qu'anonyme.
-      await resetSessionCache(queryClient);
-      const loggedIn = await fetchMe();
-      queryClient.setQueryData(queryKeys.me, loggedIn);
-
-      router.push(destinationFor(loggedIn));
+      await enterSession();
     } catch (err: unknown) {
-      const auth = parseAllauthAuthenticationResponseFromError(err);
-      const pendingEmail = Boolean(
-        auth?.flows?.some((f) => f?.id === "verify_email" && Boolean(f?.is_pending))
-      );
-      if (pendingEmail) {
+      if (isEmailVerificationPending(err)) {
+        // Atteindre cet état a déjà déclenché l'envoi d'un email : le bouton de
+        // renvoi part donc en cooldown, il n'y a rien à renvoyer avant.
         setEmailVerificationPending(true);
+        setResendDone(true);
+        setResendCooldown(RESEND_COOLDOWN_SECONDS);
         setError(null);
+      } else {
+        setError(authErrorMessage(err, BAD_CREDENTIALS_MESSAGE));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onResend = async () => {
+    setLoading(true);
+    setError(null);
+    setResendDone(false);
+    try {
+      await ensureCsrf();
+      await authLogin({ identifier, password });
+      // Vérifiée entre-temps (autre onglet, lien cliqué) : le login passe.
+      await enterSession();
+    } catch (err: unknown) {
+      if (isEmailVerificationPending(err)) {
+        setResendDone(true);
+        setResendCooldown(RESEND_COOLDOWN_SECONDS);
       } else {
         setError(authErrorMessage(err, BAD_CREDENTIALS_MESSAGE));
       }
@@ -203,28 +247,17 @@ export default function LoginClient() {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={async () => {
-                      setLoading(true);
-                      setError(null);
-                      setResendDone(false);
-                      try {
-                        await ensureCsrf();
-                        await authResendVerifyEmail();
-                        setResendDone(true);
-                      } catch (e: unknown) {
-                        setError(authErrorMessage(e));
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    disabled={loading}
+                    onClick={onResend}
+                    disabled={loading || resendCooldown > 0}
                   >
-                    Renvoyer l’email
+                    {resendCooldown > 0
+                      ? `Renvoyer l’email (${resendCooldown} s)`
+                      : "Renvoyer l’email"}
                   </Button>
                 </div>
                 {resendDone ? (
                   <div className="pt-2 text-muted-foreground">
-                    Email renvoyé. Pense à vérifier tes spams.
+                    Email envoyé. Pense à vérifier tes spams.
                   </div>
                 ) : null}
               </div>

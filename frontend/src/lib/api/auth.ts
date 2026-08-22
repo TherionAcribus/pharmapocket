@@ -94,9 +94,10 @@ export async function authVerifyEmail(key: string): Promise<unknown> {
   return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/email/verify`, jsonBody("POST", { key }));
 }
 
-export async function authResendVerifyEmail(): Promise<unknown> {
-  return apiJson(`/auth/${ALLAUTH_CLIENT}/v1/auth/email/verify/resend`, { method: "POST" });
-}
+// Pas d'helper de renvoi d'email ici : `auth/email/verify/resend` n'existe que
+// pour la vérification par code (`ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED`)
+// et répond 409 sans rien envoyer dans notre configuration par lien. C'est
+// `authLogin` qui déclenche le renvoi — voir `EmailVerificationStage`.
 
 export async function authRequestPasswordReset(email: string): Promise<void> {
   await apiPostOkOr401(`/auth/${ALLAUTH_CLIENT}/v1/auth/password/request`, {
