@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema
@@ -26,17 +27,15 @@ except Exception:  # pragma: no cover
 
 def _get_display_email(user) -> str:
     if EmailAddress is not None:
-        primary = (
-            EmailAddress.objects.filter(user=user, primary=True)
-            .order_by("-verified", "-id")
+        # Une seule requete : l'adresse principale d'abord, sinon la plus recente verifiee.
+        address = (
+            EmailAddress.objects.filter(user=user)
+            .filter(Q(primary=True) | Q(verified=True))
+            .order_by("-primary", "-verified", "-id")
             .first()
         )
-        if primary and primary.email:
-            return primary.email
-
-        verified = EmailAddress.objects.filter(user=user, verified=True).order_by("-id").first()
-        if verified and verified.email:
-            return verified.email
+        if address and address.email:
+            return address.email
 
     return getattr(user, "email", "") or ""
 
@@ -55,10 +54,7 @@ class MeView(APIView):
 
     @extend_schema(operation_id="auth_me", responses=CurrentUserSerializer)
     def get(self, request):
-        user_model = get_user_model()
-        user = user_model.objects.filter(id=request.user.id).first()
-        if user is None:
-            return Response({"detail": "Not authenticated"}, status=401)
+        user = request.user
 
         return Response(
             {
