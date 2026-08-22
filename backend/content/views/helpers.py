@@ -7,6 +7,7 @@ d'accès et filtres taxonomiques réutilisés par plusieurs modules du package.
 from datetime import date, datetime
 
 from django.db import IntegrityError, transaction
+from django.db.models import Subquery
 from wagtail.documents.models import Document
 from wagtail.images import get_image_model
 
@@ -107,12 +108,6 @@ def _subject_payload(subject: Subject | None) -> dict | None:
     }
 
 
-def _get_subject_for_card(page: MicroArticlePage) -> Subject | None:
-    """Retourne le sujet auquel la carte appartient (si existant)."""
-    link = SubjectCard.objects.filter(microarticle=page).select_related("subject").first()
-    return link.subject if link else None
-
-
 def _subject_card_summary(page: MicroArticlePage) -> dict:
     """Retourne un résumé minimal de la carte pour les listes récap."""
     return {
@@ -123,39 +118,63 @@ def _subject_card_summary(page: MicroArticlePage) -> dict:
     }
 
 
-def _subject_detail_cards(subject: Subject) -> list[dict]:
-    """Retourne les cartes détails d'un sujet avec leur label."""
-    links = (
-        subject.subject_cards.filter(microarticle__card_type=CardType.DETAIL)
-        .select_related("microarticle")
-        .order_by("sort_order")
-    )
-    return [
-        {
-            "id": link.microarticle.id,
-            "slug": link.microarticle.slug,
-            "title": link.microarticle.title,
-            "label": link.label or link.microarticle.title,
-            "sort_order": link.sort_order,
-        }
-        for link in links
-    ]
+def _split_subject_links(links: list[SubjectCard]) -> tuple[list[dict], dict | None]:
+    """Répartit des liens sujet↔carte déjà chargés en cartes détail + carte récap.
+
+    Le tri est celui de la requête appelante (`sort_order`, `id`) : la première
+    carte récap rencontrée est donc la même que celle qu'un `.first()` filtré
+    aurait retournée.
+    """
+    detail_cards: list[dict] = []
+    recap_card: dict | None = None
+
+    for link in links:
+        card = link.microarticle
+        if card.card_type == CardType.DETAIL:
+            detail_cards.append(
+                {
+                    "id": card.id,
+                    "slug": card.slug,
+                    "title": card.title,
+                    "label": link.label or card.title,
+                    "sort_order": link.sort_order,
+                }
+            )
+        elif card.card_type == CardType.RECAP and recap_card is None:
+            recap_card = {"id": card.id, "slug": card.slug, "title": card.title}
+
+    return detail_cards, recap_card
 
 
-def _subject_recap_card(subject: Subject) -> dict | None:
-    """Retourne la carte récap d'un sujet (si existante)."""
-    link = (
-        subject.subject_cards.filter(microarticle__card_type=CardType.RECAP)
-        .select_related("microarticle")
-        .first()
+def _subject_cards_payload(subject: Subject) -> tuple[list[dict], dict | None]:
+    """Retourne (cartes détail, carte récap) d'un sujet en une seule requête."""
+    links = subject.subject_cards.select_related("microarticle").order_by("sort_order", "id")
+    return _split_subject_links(list(links))
+
+
+def _subject_context_for_card(
+    page: MicroArticlePage,
+) -> tuple[Subject | None, list[dict], dict | None]:
+    """Retourne (sujet, cartes détail, carte récap) du sujet auquel la carte appartient.
+
+    Une seule requête : la sous-requête résout le sujet de la carte, la requête
+    principale charge d'un coup tous ses liens (dont celui de `page`), le tri
+    par type se faisant ensuite en Python.
+    """
+    links = list(
+        SubjectCard.objects.filter(
+            subject_id=Subquery(
+                SubjectCard.objects.filter(microarticle=page).values("subject_id")[:1]
+            )
+        )
+        .select_related("subject", "microarticle")
+        .order_by("sort_order", "id")
     )
-    if link is None:
-        return None
-    return {
-        "id": link.microarticle.id,
-        "slug": link.microarticle.slug,
-        "title": link.microarticle.title,
-    }
+    if not links:
+        return None, [], None
+
+    detail_cards, recap_card = _split_subject_links(links)
+    return links[0].subject, detail_cards, recap_card
 
 
 def _taxonomy_model(taxonomy: str):

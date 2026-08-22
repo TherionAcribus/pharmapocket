@@ -23,7 +23,7 @@ from ..serializers.inputs import (
     SubjectCreateSerializer,
     SubjectPatchSerializer,
 )
-from .helpers import _subject_detail_cards, _subject_recap_card
+from .helpers import _subject_cards_payload
 
 # Le contrôle d'unicité du serializer (SELECT) et l'écriture (INSERT/UPDATE) ne
 # sont pas atomiques : entre les deux, une requête concurrente peut poser le même
@@ -123,8 +123,7 @@ class SubjectDetailView(APIView):
         if subject is None:
             return Response(status=404)
 
-        detail_cards = _subject_detail_cards(subject)
-        recap_card = _subject_recap_card(subject)
+        detail_cards, recap_card = _subject_cards_payload(subject)
 
         return Response(
             {

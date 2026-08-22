@@ -1775,3 +1775,70 @@ class InputSerializerValidationTests(APITestCase):
             "/api/v1/content/admin/images/upload/", {}, format="multipart", secure=True
         )
         self.assertFieldError(resp, "file", "file is required")
+
+
+class MicroArticleDetailSubjectQueryTests(APITestCase):
+    """Le bloc sujet du détail (sujet + cartes détail + récap) tient en une requête."""
+
+    def setUp(self):
+        super().setUp()
+        root = Page.get_first_root_node()
+        if not Site.objects.exists():
+            Site.objects.create(hostname="localhost", root_page=root, is_default_site=True)
+
+        self.index = MicroArticleIndexPage(title="Micro sujet detail", slug="micro-sujet-detail")
+        root.add_child(instance=self.index)
+        self.index.save_revision().publish()
+
+        self.subject = Subject.objects.create(name="Sujet détail", slug="sujet-detail")
+
+    def _add_card(
+        self, slug: str, card_type: str, *, subject=None, label: str = ""
+    ) -> MicroArticlePage:
+        page = MicroArticlePage(
+            title=slug.replace("-", " ").capitalize(),
+            slug=slug,
+            answer_express="Réponse.",
+            card_type=card_type,
+        )
+        self.index.add_child(instance=page)
+        page.save_revision().publish()
+        if subject is not None:
+            SubjectCard.objects.create(subject=subject, microarticle=page, label=label)
+        return page
+
+    def _get_detail(self, page: MicroArticlePage):
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get(f"/api/v1/content/microarticles/{page.slug}/", secure=True)
+        self.assertEqual(resp.status_code, 200)
+        subject_queries = [q for q in ctx.captured_queries if "content_subjectcard" in q["sql"]]
+        return resp, subject_queries
+
+    def test_detail_returns_subject_block_in_a_single_query(self):
+        recap = self._add_card("sujet-recap", CardType.RECAP, subject=self.subject)
+        self._add_card("sujet-detail-1", CardType.DETAIL, subject=self.subject, label="Point 1")
+        page = self._add_card("sujet-detail-2", CardType.DETAIL, subject=self.subject)
+
+        resp, subject_queries = self._get_detail(page)
+
+        self.assertEqual(
+            len(subject_queries),
+            1,
+            f"{len(subject_queries)} requêtes sur subject_cards au lieu d'une",
+        )
+        self.assertEqual(resp.data["subject"]["slug"], "sujet-detail")
+        self.assertEqual(resp.data["recap_card"]["id"], recap.id)
+        self.assertEqual(
+            [(item["slug"], item["label"]) for item in resp.data["detail_cards"]],
+            [("sujet-detail-1", "Point 1"), ("sujet-detail-2", page.title)],
+        )
+
+    def test_detail_without_subject_stays_empty(self):
+        page = self._add_card("carte-orpheline", CardType.DETAIL)
+
+        resp, subject_queries = self._get_detail(page)
+
+        self.assertEqual(len(subject_queries), 1)
+        self.assertIsNone(resp.data["subject"])
+        self.assertIsNone(resp.data["recap_card"])
+        self.assertEqual(resp.data["detail_cards"], [])

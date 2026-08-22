@@ -37,15 +37,13 @@ from .helpers import (
     _apply_tree_filter,
     _get_default_deck,
     _get_or_create_default_deck,
-    _get_subject_for_card,
     _is_card_in_default_deck,
     _parse_int,
     _reference_payload,
     _sanitize_stream_value,
     _stream_items,
-    _subject_detail_cards,
+    _subject_context_for_card,
     _subject_payload,
-    _subject_recap_card,
 )
 
 logger = logging.getLogger(__name__)
@@ -306,10 +304,8 @@ class MicroArticleDetailView(RetrieveAPIView):
                 see_more_blocks = see_more_blocks + [{"type": "references", "value": refs}]
 
         # Get subject info if card belongs to a subject
-        subject = _get_subject_for_card(page)
+        subject, detail_cards, recap_card = _subject_context_for_card(page)
         subject_data = _subject_payload(subject)
-        detail_cards = _subject_detail_cards(subject) if subject else []
-        recap_card = _subject_recap_card(subject) if subject else None
 
         card_payload = MicroArticleCardSerializer(
             page,
