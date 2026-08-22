@@ -3,6 +3,7 @@
 import logging
 
 from django.db.models import Q
+from django.utils.cache import patch_vary_headers
 from django.utils.text import slugify
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -192,6 +193,57 @@ class MicroArticleListView(ListAPIView):
         return self.get_paginated_response(serializer.data)
 
 
+# Le détail lu sans session est identique pour tous les visiteurs : `is_saved`
+# et `is_read` ne sont même pas sérialisés (cf. `retrieve` plus bas). Une minute
+# de fraîcheur suffit à mutualiser ce qui coûte — les rafales de préchargement
+# au swipe, les arrivées répétées sur les fiches populaires — sans faire
+# attendre une correction éditoriale publiée depuis Wagtail. C'est aussi la
+# durée de revalidation du rendu serveur côté Next
+# (`ANONYMOUS_REVALIDATE_SECONDS` dans `frontend/src/app/micro/[slug]/page.tsx`),
+# pour que les deux couches ne se contredisent pas.
+_ANONYMOUS_DETAIL_MAX_AGE = 60
+
+# Passé `max-age`, un cache partagé peut continuer à servir la réponse périmée
+# pendant ce délai le temps de la rafraîchir en tâche de fond : une fiche reste
+# instantanée même quand son entrée vient d'expirer.
+_ANONYMOUS_DETAIL_STALE_WHILE_REVALIDATE = 300
+
+
+def _patch_detail_cache_headers(response: Response, request) -> None:
+    """Rend le détail cacheable tant qu'il ne dit rien de personne.
+
+    Deux réponses très différentes sortent de la même URL : la version publique,
+    et la même enrichie de `is_saved` / `is_read`. Les caches doivent pouvoir les
+    distinguer, d'où le `Vary: Cookie`. `SessionMiddleware` le pose déjà de son
+    côté — l'authentification par session lit `request.session`, ce qui suffit à
+    le déclencher — mais on ne fait pas reposer la confidentialité de l'état
+    d'un compte sur un effet de bord d'une middleware qu'un futur réglage
+    pourrait déplacer ou retirer. `patch_vary_headers` est idempotent, le dire
+    deux fois ne coûte rien.
+
+    Contrepartie assumée de ce `Vary`, à ne pas se cacher : un cache partagé
+    fragmente alors ses entrées sur *n'importe quel* cookie, pas seulement
+    `sessionid`. Le gain réel est donc surtout côté cache navigateur et côté
+    cache de données de Next (qui, lui, ignore ces en-têtes et se cadence sur sa
+    propre constante) ; un CDN n'en tirera parti que pour les visiteurs qui
+    n'ont encore aucun cookie — c'est-à-dire précisément le premier contact
+    depuis un moteur de recherche.
+    """
+    patch_vary_headers(response, ("Cookie",))
+
+    if request.user.is_authenticated:
+        # `no-store` et pas seulement `private` : l'état « sauvegardée » ou
+        # « lue » d'une fiche n'a rien à faire sur le disque d'une machine
+        # partagée, ni à ressurgir d'un cache après une déconnexion.
+        response["Cache-Control"] = "private, no-store"
+        return
+
+    response["Cache-Control"] = (
+        f"public, max-age={_ANONYMOUS_DETAIL_MAX_AGE}, "
+        f"stale-while-revalidate={_ANONYMOUS_DETAIL_STALE_WHILE_REVALIDATE}"
+    )
+
+
 class MicroArticleDetailView(RetrieveAPIView):
     permission_classes = [AllowAny]
     serializer_class = MicroArticleDetailSerializer
@@ -300,7 +352,9 @@ class MicroArticleDetailView(RetrieveAPIView):
             ).exists()
 
         serializer = self.get_serializer(data)
-        return Response(serializer.data)
+        response = Response(serializer.data)
+        _patch_detail_cache_headers(response, request)
+        return response
 
 
 class SavedMicroArticleListView(APIView):

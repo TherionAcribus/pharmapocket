@@ -179,6 +179,35 @@ class PublicApiSmokeTests(APITestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIs(resp.data["is_read"], True)
 
+    def test_content_detail_is_cacheable_without_session(self):
+        resp = self.client.get("/api/v1/content/microarticles/metformine/", secure=True)
+
+        self.assertEqual(resp.status_code, 200)
+        cache_control = resp.headers["Cache-Control"]
+        self.assertIn("public", cache_control)
+        self.assertIn("max-age=60", cache_control)
+        self.assertIn("stale-while-revalidate=300", cache_control)
+        # Sans `Vary: Cookie`, un cache partagé pourrait servir cette réponse
+        # publique à un utilisateur connecté — ou l'inverse, bien pire.
+        self.assertIn("Cookie", resp.headers["Vary"])
+        # La réponse cacheable ne doit rien contenir de personnel.
+        self.assertNotIn("is_saved", resp.data)
+        self.assertNotIn("is_read", resp.data)
+
+    def test_content_detail_is_never_cached_for_a_session(self):
+        user = get_user_model().objects.create_user(
+            username="detail-cache-headers",
+            password="pharmapocket-test-pwd",
+        )
+        self.client.force_authenticate(user)
+
+        resp = self.client.get("/api/v1/content/microarticles/metformine/", secure=True)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers["Cache-Control"], "private, no-store")
+        self.assertIn("Cookie", resp.headers["Vary"])
+        self.assertIn("is_saved", resp.data)
+
     def test_card_payload_is_shared_by_content_and_wagtail_v2(self):
         page = MicroArticlePage.objects.get(slug="metformine")
         expected = MicroArticleCardSerializer(page).data

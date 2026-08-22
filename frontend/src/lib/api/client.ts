@@ -83,16 +83,23 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
     }
   }
 
+  // `no-store` par défaut : la quasi-totalité des lectures dépendent de la
+  // session (`is_saved`, `is_read`, decks…) et ne doivent jamais être servies
+  // au visiteur suivant. Un appelant peut demander explicitement une autre
+  // politique pour une ressource publique et partageable — préchargement
+  // serveur des overrides de vignettes, détail de fiche lu sans session.
+  //
+  // On regarde `next` autant que `cache` : demander seulement
+  // `next: { revalidate: n }` est la façon idiomatique de cadencer le cache de
+  // données de Next, et un `cache: "no-store"` ajouté ici par-dessus la
+  // réduirait à néant — Next arbitre en faveur du plus restrictif des deux.
+  const hasExplicitPolicy = init?.cache !== undefined || init?.next !== undefined;
+
   return fetch(url, {
     ...init,
     headers,
     credentials: "include",
-    // `no-store` par défaut : la quasi-totalité des lectures dépendent de la
-    // session (`is_saved`, `is_read`, decks…) et ne doivent jamais être servies
-    // au visiteur suivant. Un appelant peut demander explicitement une autre
-    // politique pour une ressource publique et partageable — c'est le cas du
-    // préchargement serveur des overrides de vignettes.
-    cache: init?.cache ?? "no-store",
+    ...(hasExplicitPolicy ? {} : { cache: "no-store" as const }),
   });
 }
 
