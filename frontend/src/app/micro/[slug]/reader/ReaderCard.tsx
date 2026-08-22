@@ -44,7 +44,7 @@ function CreditLine({
     <div className="mt-1 text-[11px] text-muted-foreground">
       {creditText ? (
         sourceUrl ? (
-          <Link href={sourceUrl} target="_blank" className="underline">
+          <Link href={sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
             {creditText}
           </Link>
         ) : (
@@ -55,7 +55,7 @@ function CreditLine({
         <>
           {creditText ? " " : ""}
           {licenseUrl ? (
-            <Link href={licenseUrl} target="_blank" className="underline">
+            <Link href={licenseUrl} target="_blank" rel="noopener noreferrer" className="underline">
               ({license})
             </Link>
           ) : (

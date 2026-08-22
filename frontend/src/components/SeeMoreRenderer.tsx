@@ -169,7 +169,7 @@ export function SeeMoreRenderer({
                           <div className="min-w-0 flex-1 space-y-1">
                             <div className="text-sm font-semibold leading-tight">
                               {url ? (
-                                <Link href={url} target="_blank" className="underline">
+                                <Link href={url} target="_blank" rel="noopener noreferrer" className="underline">
                                   {title}
                                 </Link>
                               ) : (
@@ -182,7 +182,7 @@ export function SeeMoreRenderer({
                             {documentTitle || documentUrl ? (
                               <div className="text-xs">
                                 {documentUrl ? (
-                                  <Link href={documentUrl} target="_blank" className="underline">
+                                  <Link href={documentUrl} target="_blank" rel="noopener noreferrer" className="underline">
                                     {documentTitle || documentUrl}
                                   </Link>
                                 ) : (
@@ -276,7 +276,7 @@ export function SeeMoreRenderer({
               {creditText ? (
                 <div className="mt-1 text-[11px] text-muted-foreground">
                   {creditSourceUrl ? (
-                    <Link href={creditSourceUrl} target="_blank" className="underline">
+                    <Link href={creditSourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
                       {creditText}
                     </Link>
                   ) : (
@@ -286,7 +286,7 @@ export function SeeMoreRenderer({
                     <>
                       {" "}
                       {licenseUrl ? (
-                        <Link href={licenseUrl} target="_blank" className="underline">
+                        <Link href={licenseUrl} target="_blank" rel="noopener noreferrer" className="underline">
                           ({license})
                         </Link>
                       ) : (
@@ -330,7 +330,7 @@ export function SeeMoreRenderer({
                   <div key={idx} className="flex items-center gap-2 text-sm">
                     <div className="min-w-0 flex-1">
                       {url ? (
-                        <Link href={url} target="_blank" className="underline">
+                        <Link href={url} target="_blank" rel="noopener noreferrer" className="underline">
                           {typeof v.title === "string" ? v.title : url}
                         </Link>
                       ) : (
