@@ -41,6 +41,17 @@ function isEmailVerificationPending(e: unknown): boolean {
 // le bouton d'autant pour ne pas promettre un email que personne n'enverra.
 const RESEND_COOLDOWN_SECONDS = 180;
 
+/**
+ * Étapes du formulaire.
+ *
+ * « redirecting » est terminal côté écran : `router.push` rend la main
+ * immédiatement, mais Next.js peut mettre du temps à charger et monter la page
+ * de destination. Repasser à « idle » pendant cet intervalle laisserait un
+ * formulaire réarmé alors que la session est déjà ouverte — et un second envoi
+ * relancerait tout le flux pour rien.
+ */
+type Status = "idle" | "submitting" | "redirecting";
+
 export default function LoginClient() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -63,11 +74,14 @@ export default function LoginClient() {
 
   const [identifier, setIdentifier] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [loading, setLoading] = React.useState(false);
+  const [status, setStatus] = React.useState<Status>("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [emailVerificationPending, setEmailVerificationPending] = React.useState(false);
   const [resendDone, setResendDone] = React.useState(false);
   const [resendCooldown, setResendCooldown] = React.useState(0);
+
+  // Un envoi en cours ou une navigation lancée verrouillent tout le formulaire.
+  const busy = status !== "idle";
 
   // Décompte du réarmement du bouton de renvoi.
   React.useEffect(() => {
@@ -87,17 +101,23 @@ export default function LoginClient() {
     await resetSessionCache(queryClient);
     const loggedIn = await fetchMe();
     queryClient.setQueryData(queryKeys.me, loggedIn);
+    setStatus("redirecting");
     router.push(destinationFor(loggedIn));
   }, [destinationFor, queryClient, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    // Filet en plus de `disabled` : une soumission au clavier peut partir avant
+    // que le rendu désarmant le bouton n'ait eu lieu.
+    if (busy) return;
+    setStatus("submitting");
     setError(null);
     setEmailVerificationPending(false);
     setResendDone(false);
     try {
       await authLogin({ identifier, password });
+      // Pas de retour à « idle » : `enterSession` a lancé la navigation et le
+      // formulaire doit rester verrouillé jusqu'à ce que l'écran change.
       await enterSession();
     } catch (err: unknown) {
       if (isEmailVerificationPending(err)) {
@@ -110,18 +130,19 @@ export default function LoginClient() {
       } else {
         setError(authErrorMessage(err, BAD_CREDENTIALS_MESSAGE));
       }
-    } finally {
-      setLoading(false);
+      setStatus("idle");
     }
   };
 
   const onResend = async () => {
-    setLoading(true);
+    if (busy) return;
+    setStatus("submitting");
     setError(null);
     setResendDone(false);
     try {
       await authLogin({ identifier, password });
-      // Vérifiée entre-temps (autre onglet, lien cliqué) : le login passe.
+      // Vérifiée entre-temps (autre onglet, lien cliqué) : le login passe, et
+      // `enterSession` laisse le statut sur « redirecting ».
       await enterSession();
     } catch (err: unknown) {
       if (isEmailVerificationPending(err)) {
@@ -130,8 +151,7 @@ export default function LoginClient() {
       } else {
         setError(authErrorMessage(err, BAD_CREDENTIALS_MESSAGE));
       }
-    } finally {
-      setLoading(false);
+      setStatus("idle");
     }
   };
 
@@ -142,19 +162,31 @@ export default function LoginClient() {
           type="button"
           variant="outline"
           className="w-full"
+          disabled={busy}
           onClick={async () => {
-            // Seul appel explicite justifié : la redirection OAuth part d'un `<form>`
-            // natif, hors `apiFetch`, et doit porter le jeton elle-même.
-            await ensureCsrf();
-            // Sans `next`, on laisse le callback appliquer la préférence
-            // d'atterrissage du compte, comme la connexion par mot de passe.
-            const callback = new URL("/account/oauth-callback", window.location.origin);
-            if (next) callback.searchParams.set("next", next);
-            authStartProviderRedirect({
-              provider: "google",
-              flow: "login",
-              callbackUrl: callback.toString(),
-            });
+            if (busy) return;
+            // La redirection quitte l'application : on verrouille le temps que le
+            // navigateur parte, sans quoi un second clic relance le flux OAuth.
+            setStatus("redirecting");
+            try {
+              // Seul appel explicite justifié : la redirection OAuth part d'un `<form>`
+              // natif, hors `apiFetch`, et doit porter le jeton elle-même.
+              await ensureCsrf();
+              // Sans `next`, on laisse le callback appliquer la préférence
+              // d'atterrissage du compte, comme la connexion par mot de passe.
+              const callback = new URL("/account/oauth-callback", window.location.origin);
+              if (next) callback.searchParams.set("next", next);
+              authStartProviderRedirect({
+                provider: "google",
+                flow: "login",
+                callbackUrl: callback.toString(),
+              });
+            } catch (err: unknown) {
+              // Le cookie CSRF n'a pas pu être posé : rien n'est parti, on rend
+              // la main plutôt que de laisser l'écran figé sur « Redirection… ».
+              setError(authErrorMessage(err));
+              setStatus("idle");
+            }
           }}
         >
           Continuer avec Google
@@ -201,7 +233,7 @@ export default function LoginClient() {
                     type="button"
                     variant="secondary"
                     onClick={onResend}
-                    disabled={loading || resendCooldown > 0}
+                    disabled={busy || resendCooldown > 0}
                   >
                     {resendCooldown > 0
                       ? `Renvoyer l’email (${resendCooldown} s)`
@@ -216,15 +248,19 @@ export default function LoginClient() {
               </div>
             ) : null}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Connexion…" : "Se connecter"}
+            <Button type="submit" className="w-full" disabled={busy}>
+              {status === "redirecting"
+                ? "Redirection…"
+                : status === "submitting"
+                  ? "Connexion…"
+                  : "Se connecter"}
             </Button>
 
             <button
               type="button"
               className="w-full text-left text-xs text-muted-foreground underline"
               onClick={() => router.push("/account/password/forgot")}
-              disabled={loading}
+              disabled={busy}
             >
               Mot de passe oublié ?
             </button>
