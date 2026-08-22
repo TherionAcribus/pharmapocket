@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { MicroArticleDetail } from "@/lib/types";
 
-import { RichText } from "./RichText";
+import { RichText } from "@/components/RichText";
 import type { SeeMoreSections } from "./seeMoreSections";
 
 type ReaderDetailsSheetProps = {

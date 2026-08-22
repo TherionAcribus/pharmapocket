@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { SeeMoreRenderer } from "@/components/SeeMoreRenderer";
 import { Badge } from "@/components/ui/badge";
-import { sanitizeEditorialHtml } from "@/lib/sanitizeHtml";
+import { sanitizeEditorialHtmlWithDom } from "@/lib/sanitizeHtml";
 import type { StreamBlock } from "@/lib/types";
 
 /** Cibles éditoriales rappelées à l'écran ; l'import ne refuse pas au-delà. */
@@ -23,7 +23,7 @@ function asArray(value: unknown): unknown[] {
 }
 
 function plainLength(html: string): number {
-  return sanitizeEditorialHtml(html)
+  return sanitizeEditorialHtmlWithDom(html)
     .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/g, " ")
     .trim().length;
@@ -42,7 +42,7 @@ function Html({ html, className }: { html: string; className?: string }) {
   return (
     <div
       className={className}
-      dangerouslySetInnerHTML={{ __html: sanitizeEditorialHtml(html) }}
+      dangerouslySetInnerHTML={{ __html: sanitizeEditorialHtmlWithDom(html) }}
     />
   );
 }
@@ -56,7 +56,7 @@ function buildSeeMore(card: RawCard): StreamBlock[] {
   const blocks: StreamBlock[] = [];
 
   const detail = asString(card.answer_detail);
-  if (detail.trim()) blocks.push({ type: "detail", value: sanitizeEditorialHtml(detail) });
+  if (detail.trim()) blocks.push({ type: "detail", value: sanitizeEditorialHtmlWithDom(detail) });
 
   for (const block of asArray(card.see_more)) {
     if (!block || typeof block !== "object") continue;
@@ -64,7 +64,7 @@ function buildSeeMore(card: RawCard): StreamBlock[] {
     if (typeof type !== "string") continue;
     blocks.push({
       type,
-      value: type === "detail" ? sanitizeEditorialHtml(asString(value)) : value,
+      value: type === "detail" ? sanitizeEditorialHtmlWithDom(asString(value)) : value,
     });
   }
 

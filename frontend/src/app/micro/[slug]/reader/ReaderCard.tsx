@@ -13,7 +13,7 @@ import { useThumbOverrides } from "@/lib/thumbOverrides";
 import { cn } from "@/lib/utils";
 import type { MicroArticleDetail } from "@/lib/types";
 
-import { RichText } from "./RichText";
+import { RichText } from "@/components/RichText";
 import type { SeeMoreSections } from "./seeMoreSections";
 
 const LONG_PREVIEW_MAX_HEIGHT = 120;

@@ -6,6 +6,8 @@
  * remonte complètement le lecteur.
  */
 
+import { sanitizeNextPath } from "@/lib/authRedirect";
+
 const DECK_STORAGE_KEY = "pharmapocket:lastDeck";
 const SLIDE_TRANSITION_PENDING_DIR_SESSION_KEY = "pp_reader_slide_dir";
 const RETURN_TO_STORAGE_KEY = "pp_reader:returnTo";
@@ -82,13 +84,19 @@ export function readSlideTransitionPreferenceFromStorage() {
   }
 }
 
+/**
+ * Destination de sortie du lecteur, ou `null` si elle n'est pas interne.
+ *
+ * `sessionStorage` est lisible et modifiable par n'importe quel script de la
+ * page : la valeur relue est donc une entrée non fiable, et passe par le même
+ * filtre que `?next=`. Exiger un `/` en tête ne suffit pas, `//hote` et
+ * `/\hote` en portent un et sont pourtant relus comme une autorité réseau —
+ * le `router.push()` qui suit quitterait alors le site.
+ */
 export function readReturnToFromSession(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(RETURN_TO_STORAGE_KEY);
-    if (!raw) return null;
-    if (!raw.startsWith("/")) return null;
-    return raw;
+    return sanitizeNextPath(window.sessionStorage.getItem(RETURN_TO_STORAGE_KEY));
   } catch {
     return null;
   }

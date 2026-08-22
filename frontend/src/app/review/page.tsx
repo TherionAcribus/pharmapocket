@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown as ChevronDownIcon, SlidersHorizontal as SlidersIcon } from "lucide-react";
 
 import { LoginCta } from "@/components/LoginCta";
+import { RichText } from "@/components/RichText";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,11 +20,6 @@ import {
 } from "@/lib/review";
 import type { SrsNextQuery, SrsScope } from "@/lib/api/srs";
 import type { SrsNext, SrsRating } from "@/lib/types";
-
-function RichText({ html, className }: { html?: string; className?: string }) {
-  if (!html) return null;
-  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
-}
 
 /**
  * Réglages d'une session. Regroupés en un seul état parce qu'ils changent

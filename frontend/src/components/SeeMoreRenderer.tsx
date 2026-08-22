@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Copy as CopyIcon } from "lucide-react";
 
+import { RichText } from "@/components/RichText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -62,10 +63,10 @@ export function SeeMoreRenderer({
         if (b.type === "detail") {
           if (typeof b.value === "string") {
             return (
-              <div
+              <RichText
                 key={idx}
                 className="prose prose-zinc max-w-none dark:prose-invert"
-                dangerouslySetInnerHTML={{ __html: b.value }}
+                html={b.value}
               />
             );
           }

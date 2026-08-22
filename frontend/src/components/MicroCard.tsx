@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { GeneratedThumb } from "@/components/GeneratedThumb";
+import { RichText } from "@/components/RichText";
 import { CardTypeBadge } from "@/components/SubjectNavigation";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -80,9 +81,9 @@ export function MicroCard({
         ) : null}
 
         <div className="mt-1 text-sm text-muted-foreground">
-          <div
+          <RichText
             className="prose prose-zinc max-w-none line-clamp-2 dark:prose-invert"
-            dangerouslySetInnerHTML={{ __html: item.answer_express }}
+            html={item.answer_express}
           />
         </div>
 
