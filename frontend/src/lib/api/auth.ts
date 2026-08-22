@@ -17,7 +17,13 @@ import type {
 export type { AccountSummary, CurrentUser, UserPreferences } from "@/lib/types";
 export type LandingRedirectTarget = LandingRedirectTargetEnum;
 
-/** À appeler avant un formulaire d'auth : les vues allauth exigent le cookie CSRF. */
+/**
+ * Pose le cookie CSRF s'il manque.
+ *
+ * Inutile avant un appel passant par `apiFetch` : le transport l'appelle déjà
+ * pour toute méthode mutante. À réserver aux envois qui en sortent — le POST
+ * de formulaire natif de la redirection OAuth, notamment.
+ */
 export async function ensureCsrf(): Promise<void> {
   await ensureCsrfCookie();
 }

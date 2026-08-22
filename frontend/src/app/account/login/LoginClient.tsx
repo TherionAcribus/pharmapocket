@@ -69,10 +69,6 @@ export default function LoginClient() {
   const [resendDone, setResendDone] = React.useState(false);
   const [resendCooldown, setResendCooldown] = React.useState(0);
 
-  React.useEffect(() => {
-    void ensureCsrf();
-  }, []);
-
   // Décompte du réarmement du bouton de renvoi.
   React.useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -101,7 +97,6 @@ export default function LoginClient() {
     setEmailVerificationPending(false);
     setResendDone(false);
     try {
-      await ensureCsrf();
       await authLogin({ identifier, password });
       await enterSession();
     } catch (err: unknown) {
@@ -125,7 +120,6 @@ export default function LoginClient() {
     setError(null);
     setResendDone(false);
     try {
-      await ensureCsrf();
       await authLogin({ identifier, password });
       // Vérifiée entre-temps (autre onglet, lien cliqué) : le login passe.
       await enterSession();
@@ -149,6 +143,8 @@ export default function LoginClient() {
           variant="outline"
           className="w-full"
           onClick={async () => {
+            // Seul appel explicite justifié : la redirection OAuth part d'un `<form>`
+            // natif, hors `apiFetch`, et doit porter le jeton elle-même.
             await ensureCsrf();
             // Sans `next`, on laisse le callback appliquer la préférence
             // d'atterrissage du compte, comme la connexion par mot de passe.
