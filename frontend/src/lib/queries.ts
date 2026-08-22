@@ -176,6 +176,14 @@ export function useMe() {
       }
     },
     staleTime: 5 * 60_000,
+    // Seule query à réactiver ce refetch, désarmé globalement dans
+    // `makeQueryClient` : une session peut être fermée ailleurs (autre onglet,
+    // expiration, déconnexion serveur) sans que cet onglet en soit informé, et
+    // il continuerait alors d'afficher un utilisateur connecté. Revenir sur
+    // l'onglet est justement le moment où l'écart devient visible. Le refetch
+    // reste soumis au `staleTime` ci-dessus : un aller-retour rapide entre
+    // onglets ne déclenche rien.
+    refetchOnWindowFocus: true,
   });
 }
 

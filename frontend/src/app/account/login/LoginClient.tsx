@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { authLogin, authStartProviderRedirect, ensureCsrf, fetchMe } from "@/lib/api/auth";
@@ -207,10 +208,9 @@ export default function LoginClient() {
 
             <div className="space-y-1">
               <div className="text-sm font-medium">Mot de passe</div>
-              <Input
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                type="password"
                 autoComplete="current-password"
                 required
               />
@@ -275,7 +275,7 @@ export default function LoginClient() {
         </div>
 
         <div className="text-xs text-muted-foreground">
-          En cas de problème, vérifie que le backend tourne et que les cookies sont autorisés.
+          La connexion nécessite l’acceptation des cookies de ce site.
         </div>
       </div>
     </MobileScaffold>
