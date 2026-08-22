@@ -9,50 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { authLogin, ensureCsrf, fetchMe } from "@/lib/api/auth";
+import { authLogin, authStartProviderRedirect, ensureCsrf, fetchMe } from "@/lib/api/auth";
 import { isApiError } from "@/lib/api/client";
 import { BAD_CREDENTIALS_MESSAGE, authErrorMessage } from "@/lib/authErrors";
-import { sanitizeNextPath, signupHref } from "@/lib/authRedirect";
+import { landingTargetToPath, sanitizeNextPath, signupHref } from "@/lib/authRedirect";
 import { queryKeys, resetSessionCache, useMe } from "@/lib/queries";
-
-function getBackendBaseUrlClient(): string {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  const fallback = "http://localhost:8000";
-  const raw = (base && base.trim()) || fallback;
-  return raw.replace(/\/$/, "");
-}
-
-function startProviderRedirect(provider: string, process: "login" | "connect", callbackUrl: string) {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = `${getBackendBaseUrlClient()}/auth/browser/v1/auth/provider/redirect`;
-
-  const csrf = (() => {
-    const parts = document.cookie.split(";");
-    for (const part of parts) {
-      const [k, ...rest] = part.trim().split("=");
-      if (k === "csrftoken") return decodeURIComponent(rest.join("="));
-    }
-    return null;
-  })();
-
-  const add = (name: string, value: string) => {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
-  };
-
-  if (csrf) add("csrfmiddlewaretoken", csrf);
-
-  add("provider", provider);
-  add("process", process);
-  add("callback_url", callbackUrl);
-
-  document.body.appendChild(form);
-  form.submit();
-}
 
 function parseAllauthAuthenticationResponseFromError(e: unknown):
   | { flows: Array<{ id: string; is_pending?: boolean }> }
@@ -79,14 +40,6 @@ function isEmailVerificationPending(e: unknown): boolean {
 // tranche de `ACCOUNT_RATE_LIMITS["confirm_email"]` (1/180s/key) : on désarme
 // le bouton d'autant pour ne pas promettre un email que personne n'enverra.
 const RESEND_COOLDOWN_SECONDS = 180;
-
-function landingTargetToPath(target: string | null | undefined): string {
-  if (target === "discover") return "/discover";
-  if (target === "cards") return "/cards";
-  if (target === "review") return "/review";
-  if (target === "quiz") return "/quiz";
-  return "/start";
-}
 
 export default function LoginClient() {
   const router = useRouter();
@@ -201,7 +154,11 @@ export default function LoginClient() {
             // d'atterrissage du compte, comme la connexion par mot de passe.
             const callback = new URL("/account/oauth-callback", window.location.origin);
             if (next) callback.searchParams.set("next", next);
-            startProviderRedirect("google", "login", callback.toString());
+            authStartProviderRedirect({
+              provider: "google",
+              flow: "login",
+              callbackUrl: callback.toString(),
+            });
           }}
         >
           Continuer avec Google

@@ -6,15 +6,8 @@ import { useRouter } from "next/navigation";
 
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
+import { landingTargetToPath } from "@/lib/authRedirect";
 import { useLanding, useMe } from "@/lib/queries";
-
-function landingTargetToPath(target: string | null | undefined): string {
-  if (target === "discover") return "/discover";
-  if (target === "cards") return "/cards";
-  if (target === "review") return "/review";
-  if (target === "quiz") return "/quiz";
-  return "/start";
-}
 
 export default function Home() {
   const router = useRouter();

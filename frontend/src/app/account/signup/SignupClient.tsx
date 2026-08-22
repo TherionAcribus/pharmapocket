@@ -7,47 +7,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { MobileScaffold } from "@/components/MobileScaffold";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authSignup, ensureCsrf } from "@/lib/api/auth";
+import { authSignup, authStartProviderRedirect, ensureCsrf } from "@/lib/api/auth";
 import { loginHref, sanitizeNextPath } from "@/lib/authRedirect";
-
-function getBackendBaseUrlClient(): string {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  const fallback = "http://localhost:8000";
-  const raw = (base && base.trim()) || fallback;
-  return raw.replace(/\/$/, "");
-}
-
-function startProviderRedirect(provider: string, process: "login" | "connect", callbackUrl: string) {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = `${getBackendBaseUrlClient()}/auth/browser/v1/auth/provider/redirect`;
-
-  const csrf = (() => {
-    const parts = document.cookie.split(";");
-    for (const part of parts) {
-      const [k, ...rest] = part.trim().split("=");
-      if (k === "csrftoken") return decodeURIComponent(rest.join("="));
-    }
-    return null;
-  })();
-
-  const add = (name: string, value: string) => {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
-  };
-
-  if (csrf) add("csrfmiddlewaretoken", csrf);
-
-  add("provider", provider);
-  add("process", process);
-  add("callback_url", callbackUrl);
-
-  document.body.appendChild(form);
-  form.submit();
-}
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -96,7 +57,11 @@ export default function SignupClient() {
             // d'origine, ou sur la préférence d'atterrissage à défaut.
             const callback = new URL("/account/oauth-callback", window.location.origin);
             if (next) callback.searchParams.set("next", next);
-            startProviderRedirect("google", "login", callback.toString());
+            authStartProviderRedirect({
+              provider: "google",
+              flow: "login",
+              callbackUrl: callback.toString(),
+            });
           }}
         >
           Continuer avec Google

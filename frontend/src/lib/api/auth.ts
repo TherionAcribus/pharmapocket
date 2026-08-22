@@ -1,4 +1,12 @@
-import { apiGet, apiJson, apiPostOkOr401, ensureCsrfCookie, jsonBody } from "@/lib/api/client";
+import {
+  apiGet,
+  apiJson,
+  apiPostOkOr401,
+  ensureCsrfCookie,
+  getApiBaseUrl,
+  getCsrfToken,
+  jsonBody,
+} from "@/lib/api/client";
 import type {
   AccountSummary,
   CurrentUser,
@@ -84,6 +92,46 @@ export async function authSignup(input: {
       password: input.password,
     })
   );
+}
+
+/**
+ * Envoie le navigateur chez un fournisseur OAuth via allauth.
+ *
+ * Seul flux d'auth qui ne passe pas par `apiFetch` : allauth attend ici un POST
+ * de formulaire classique, parce que la réponse est une redirection que le
+ * navigateur doit suivre lui-même (un `fetch` la consommerait). D'où le
+ * `<form>` construit à la main, et le jeton CSRF porté en champ caché —
+ * appeler `ensureCsrf()` avant, sinon le cookie peut manquer.
+ *
+ * `flow` distingue l'ouverture de session (« login ») du rattachement d'un
+ * fournisseur à un compte déjà connecté (« connect »).
+ */
+export function authStartProviderRedirect(input: {
+  provider: string;
+  flow: "login" | "connect";
+  callbackUrl: string;
+}): void {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `${getApiBaseUrl()}/auth/${ALLAUTH_CLIENT}/v1/auth/provider/redirect`;
+
+  const add = (name: string, value: string) => {
+    const field = document.createElement("input");
+    field.type = "hidden";
+    field.name = name;
+    field.value = value;
+    form.appendChild(field);
+  };
+
+  const csrf = getCsrfToken();
+  if (csrf) add("csrfmiddlewaretoken", csrf);
+
+  add("provider", input.provider);
+  add("process", input.flow);
+  add("callback_url", input.callbackUrl);
+
+  document.body.appendChild(form);
+  form.submit();
 }
 
 export async function authLogout(): Promise<void> {

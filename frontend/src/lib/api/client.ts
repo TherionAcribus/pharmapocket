@@ -5,7 +5,14 @@
  * erreurs : les modules de domaine n'écrivent que des chemins et des types.
  */
 
-function getApiBaseUrl(): string {
+/**
+ * Origine de l'API, sans slash final.
+ *
+ * Exportée parce que quelques flux sortent du transport `apiFetch` — le POST
+ * de redirection vers un fournisseur OAuth part d'un `<form>` natif, pas d'un
+ * `fetch` — et doivent viser exactement la même origine.
+ */
+export function getApiBaseUrl(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL;
   const fallback = "http://localhost:8000";
 
@@ -33,6 +40,17 @@ function getCookie(name: string): string | null {
 }
 
 const CSRF_COOKIE_NAME = "csrftoken";
+
+/**
+ * Jeton CSRF courant, ou `null` s'il n'a pas encore été posé.
+ *
+ * Exporté pour les envois qui ne passent pas par `apiFetch` et doivent porter
+ * le jeton eux-mêmes (champ `csrfmiddlewaretoken` d'un `<form>`, par exemple).
+ * Penser à `ensureCsrfCookie()` avant, le cookie n'existant pas d'office.
+ */
+export function getCsrfToken(): string | null {
+  return getCookie(CSRF_COOKIE_NAME);
+}
 
 export async function ensureCsrfCookie(): Promise<void> {
   if (typeof window === "undefined") return;

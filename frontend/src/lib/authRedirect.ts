@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation";
 
+import type { LandingRedirectTarget } from "@/lib/api/auth";
+
 export const LOGIN_PATH = "/account/login";
 export const SIGNUP_PATH = "/account/signup";
 
@@ -75,4 +77,22 @@ export function useLoginHref(): string {
 /** `signupHref()` pointant sur la page courante. */
 export function useSignupHref(): string {
   return signupHref(useNextPath());
+}
+
+/**
+ * L'API nomme les destinations (`landing_redirect_target`, les CTA de la
+ * landing) sans connaître nos routes : la table de correspondance vit ici.
+ * La typer sur l'enum force à traiter toute cible ajoutée côté backend.
+ */
+const LANDING_TARGET_PATHS: Record<LandingRedirectTarget, string> = {
+  start: "/start",
+  discover: "/discover",
+  cards: "/cards",
+  review: "/review",
+  quiz: "/quiz",
+};
+
+/** Chemin d'une cible d'atterrissage ; `/start` pour une cible inconnue. */
+export function landingTargetToPath(target: string | null | undefined): string {
+  return LANDING_TARGET_PATHS[target as LandingRedirectTarget] ?? LANDING_TARGET_PATHS.start;
 }
