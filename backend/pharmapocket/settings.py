@@ -335,9 +335,13 @@ SPECTACULAR_SETTINGS = {
 
 AUTH_USER_MODEL = "users.User"
 
+# Chaque backend de la liste rejoue un hachage de mot de passe sur un login
+# échoué : on n'en garde donc que le strict nécessaire.
+# `ModelBackend` n'est pas listé car le backend allauth en hérite (il fournit
+# donc les permissions et `user_can_authenticate`) et résout le username en
+# `iexact`, ce qui couvre le `get_by_natural_key()` exact de `ModelBackend`.
 AUTHENTICATION_BACKENDS = (
     "users.auth_backends.PseudoAuthenticationBackend",
-    "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 )
 

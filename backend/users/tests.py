@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.test import TestCase
 
 from users.auth_backends import PseudoAuthenticationBackend
@@ -35,6 +35,15 @@ class PseudoAuthenticationBackendTests(TestCase):
         self.addCleanup(lambda: get_user_model().objects.filter(pk=self.user.pk).update(is_active=True))
         self.assertIsNone(self.backend.authenticate(None, username="Zoe", password="pw"))
 
+    def test_email_identifier_is_skipped_without_hashing(self):
+        """Un identifiant contenant "@" ne peut pas etre un pseudo : pas de hachage."""
+        User = get_user_model()
+        with patch.object(User, "set_password") as set_password:
+            self.assertIsNone(
+                self.backend.authenticate(None, username="u1@example.com", password="pw")
+            )
+        set_password.assert_not_called()
+
     def test_missing_credentials_return_none(self):
         self.assertIsNone(self.backend.authenticate(None, username="", password="pw"))
         self.assertIsNone(self.backend.authenticate(None, username="Zoe", password=None))
@@ -56,3 +65,46 @@ class PseudoAuthenticationBackendTests(TestCase):
         ) as check_password:
             self.assertIsNone(self.backend.authenticate(None, username="Zoe", password="pw"))
         check_password.assert_called_once_with("pw")
+
+
+class AuthenticationBackendChainTests(TestCase):
+    """La chaine complete de `AUTHENTICATION_BACKENDS` (sans `ModelBackend`)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        User = get_user_model()
+        cls.user = User.objects.create_user(
+            username="Alice", email="alice@example.com", password="pw", pseudo="Zoe"
+        )
+
+    def test_authenticates_by_username(self):
+        self.assertEqual(authenticate(None, username="Alice", password="pw"), self.user)
+
+    def test_authenticates_by_username_case_insensitively(self):
+        self.assertEqual(authenticate(None, username="alice", password="pw"), self.user)
+
+    def test_authenticates_by_email(self):
+        self.assertEqual(
+            authenticate(None, username="alice@example.com", password="pw"), self.user
+        )
+
+    def test_authenticates_by_pseudo(self):
+        self.assertEqual(authenticate(None, username="zoe", password="pw"), self.user)
+
+    def test_rejects_wrong_password(self):
+        self.assertIsNone(authenticate(None, username="Alice", password="nope"))
+
+    def test_rejects_inactive_user(self):
+        get_user_model().objects.filter(pk=self.user.pk).update(is_active=False)
+        self.assertIsNone(authenticate(None, username="Alice", password="pw"))
+        self.assertIsNone(authenticate(None, username="Zoe", password="pw"))
+
+    def test_permissions_are_still_resolved(self):
+        # `ModelBackend` a ete retire de la liste : c'est le backend allauth, qui
+        # en herite, qui doit desormais fournir les permissions.
+        self.assertFalse(self.user.has_perm("users.change_user"))
+        self.assertTrue(
+            get_user_model()
+            .objects.create_superuser(username="root", email="r@example.com", password="pw")
+            .has_perm("users.change_user")
+        )
