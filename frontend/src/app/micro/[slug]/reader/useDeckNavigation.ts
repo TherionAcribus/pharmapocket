@@ -26,6 +26,25 @@ export type DeckNavigation = {
 };
 
 /**
+ * Force le préchargement du rendu complet des fiches voisines.
+ *
+ * La fiche est une page dynamique — elle lit le cookie de session au rendu —
+ * et le préchargement Next par défaut (« auto ») ne rapporterait alors que
+ * l'enveloppe de route, sans le contenu : le swipe paierait encore l'aller-
+ * retour serveur. `PrefetchKind` n'étant pas exporté publiquement par Next, on
+ * passe la valeur littérale que l'énumération recouvre.
+ */
+const FULL_PREFETCH = { kind: "full" } as unknown as Parameters<
+  ReturnType<typeof useRouter>["prefetch"]
+>[1];
+
+/** Délai maximal accordé au navigateur avant de précharger malgré tout. */
+const PREFETCH_IDLE_TIMEOUT_MS = 2000;
+
+/** Repli quand `requestIdleCallback` manque (Safari < 17). */
+const PREFETCH_FALLBACK_DELAY_MS = 300;
+
+/**
  * Navigation d'une fiche à l'autre dans un deck, animation comprise.
  *
  * Chaque fiche est une page à part entière : l'animation se joue donc en deux
@@ -128,29 +147,72 @@ export function useDeckNavigation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardId, deck?.deckId, isLoggedIn]);
 
-  const positionText = React.useMemo(() => {
-    if (!deck?.slugs?.length) return null;
+  /** Position réelle dans le deck, `-1` hors parcours. */
+  const currentIndex = React.useMemo(() => {
+    if (!deck?.slugs?.length) return -1;
     const idx = deck.slugs.indexOf(slug);
-    const current = idx >= 0 ? idx : deck.index;
-    return `${current + 1}/${deck.slugs.length}`;
+    return idx >= 0 ? idx : deck.index;
   }, [deck, slug]);
+
+  const positionText = React.useMemo(() => {
+    if (!deck?.slugs?.length || currentIndex < 0) return null;
+    return `${currentIndex + 1}/${deck.slugs.length}`;
+  }, [deck, currentIndex]);
+
+  const nextSlug = currentIndex >= 0 ? (deck?.slugs[currentIndex + 1] ?? null) : null;
+  const prevSlug = currentIndex > 0 ? (deck?.slugs[currentIndex - 1] ?? null) : null;
+
+  /**
+   * Précharge les deux fiches voisines.
+   *
+   * Sans ça, chaque swipe déclenche une navigation Next complète : rendu
+   * serveur de la fiche puis remontage du lecteur, soit une attente visible.
+   * Le travail est repoussé au premier temps mort pour ne pas concurrencer
+   * l'affichage de la fiche courante, et les dépendances sont les slugs eux-
+   * mêmes — pas l'objet deck — pour ne pas relancer deux requêtes à chaque
+   * réécriture de l'index en session.
+   */
+  React.useEffect(() => {
+    const targets = [nextSlug, prevSlug].filter((s): s is string => Boolean(s));
+    if (!targets.length) return;
+
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      for (const target of targets) {
+        router.prefetch(`/micro/${encodeURIComponent(target)}`, FULL_PREFETCH);
+      }
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(run, { timeout: PREFETCH_IDLE_TIMEOUT_MS });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(handle);
+      };
+    }
+
+    const timer = window.setTimeout(run, PREFETCH_FALLBACK_DELAY_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [nextSlug, prevSlug, router]);
 
   const goRelative = React.useCallback(
     (delta: number) => {
       if (navLockRef.current) return;
-      if (!deck?.slugs?.length) return;
-      const idx = deck.slugs.indexOf(slug);
-      const current = idx >= 0 ? idx : deck.index;
-      const nextIndex = current + delta;
+      if (!deck?.slugs?.length || currentIndex < 0) return;
+      const nextIndex = currentIndex + delta;
       if (nextIndex < 0 || nextIndex >= deck.slugs.length) return;
-      const nextSlug = deck.slugs[nextIndex];
-      if (!nextSlug) return;
+      const targetSlug = deck.slugs[nextIndex];
+      if (!targetSlug) return;
 
       const doNavigate = () => {
         const nextDeck = { ...deck, index: nextIndex };
         setDeck(nextDeck);
         writeDeckToSession(nextDeck);
-        router.push(`/micro/${encodeURIComponent(nextSlug)}`);
+        router.push(`/micro/${encodeURIComponent(targetSlug)}`);
       };
 
       const shouldAnimate = isLoggedIn ? slideTransitionEnabled : true;
@@ -173,7 +235,7 @@ export function useDeckNavigation({
         setOutgoingSlideDir(null);
       }, 220);
     },
-    [deck, slug, isLoggedIn, router, slideTransitionEnabled]
+    [deck, currentIndex, isLoggedIn, router, slideTransitionEnabled]
   );
 
   const cardMotion = React.useMemo(() => {
