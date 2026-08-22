@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { authLogin, authResendVerifyEmail, ensureCsrf, fetchMe } from "@/lib/api/auth";
 import { isApiError } from "@/lib/api/client";
+import { BAD_CREDENTIALS_MESSAGE, authErrorMessage } from "@/lib/authErrors";
 import { sanitizeNextPath, signupHref } from "@/lib/authRedirect";
 import { queryKeys, resetSessionCache, useMe } from "@/lib/queries";
 
@@ -51,11 +52,6 @@ function startProviderRedirect(provider: string, process: "login" | "connect", c
 
   document.body.appendChild(form);
   form.submit();
-}
-
-function toErrorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  return String(e);
 }
 
 function parseAllauthAuthenticationResponseFromError(e: unknown):
@@ -141,7 +137,7 @@ export default function LoginClient() {
         setEmailVerificationPending(true);
         setError(null);
       } else {
-        setError(toErrorMessage(err));
+        setError(authErrorMessage(err, BAD_CREDENTIALS_MESSAGE));
       }
     } finally {
       setLoading(false);
@@ -216,7 +212,7 @@ export default function LoginClient() {
                         await authResendVerifyEmail();
                         setResendDone(true);
                       } catch (e: unknown) {
-                        setError(toErrorMessage(e));
+                        setError(authErrorMessage(e));
                       } finally {
                         setLoading(false);
                       }
