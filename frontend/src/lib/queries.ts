@@ -479,16 +479,26 @@ export function useSrsCounts(query: SrsCountsQuery, enabled = true) {
   });
 }
 
-/** La réponse de l'API contient déjà la carte suivante : on la pose en cache. */
-export function useRateSrsCard(query: SrsNextQuery) {
+/**
+ * `POST /srs/review/` répond l'état de la carte *qu'on vient de noter*, pas la
+ * suivante — la poser en cache sous `srs-next` resservait donc éternellement la
+ * même carte. Seul le serveur peut désigner la suivante, puisque lui seul sait
+ * quelle échéance la note vient d'écrire : on redemande la file.
+ *
+ * L'invalidation de `srs-next` est attendue (et non lancée en arrière-plan) :
+ * la mutation reste ainsi « en cours » jusqu'à ce que la carte suivante soit
+ * là, ce qui laisse la page sur « Chargement… » au lieu de réafficher un
+ * instant la carte notée.
+ */
+export function useRateSrsCard() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: postSrsReview,
-    onSuccess: (next) => {
-      queryClient.setQueryData(queryKeys.srsNext(query), next);
+    onSuccess: async () => {
       // Une note repousse l'échéance : tous les compteurs, tous scopes
       // confondus, viennent de changer.
       void queryClient.invalidateQueries({ queryKey: ["srs-counts"] });
+      await queryClient.invalidateQueries({ queryKey: ["srs-next"] });
     },
   });
 }

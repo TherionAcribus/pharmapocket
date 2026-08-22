@@ -258,7 +258,11 @@ Staff uniquement (`/api/v1/content/admin/`) :
 - `GET /api/v1/learning/progress/`
 - `PATCH /api/v1/learning/progress/<lesson_id>/`
 - `POST /api/v1/learning/progress/import/`
-- `GET /api/v1/learning/srs/next/?scope=all_decks|deck|decks|all_cards&deck_id=&deck_ids=&only_due=`
+- `GET /api/v1/learning/srs/next/?scope=all_decks|deck|decks|all_cards&deck_id=&deck_ids=&only_due=&exclude_ids=`
+  · `exclude_ids` (ids séparés par des virgules) retire des cartes de la file
+  le temps d'une requête : c'est ce qui fait avancer le bouton « Passer » de
+  `/review`, la file étant sinon servie dans un ordre déterministe. Rien
+  n'est écrit côté serveur.
 - `GET /api/v1/learning/srs/counts/?scope=all_decks|deck|decks|all_cards&deck_id=&deck_ids=`
   · `{due, new, later, total}` — `due + new` = ce que la file sert aujourd'hui
   (badge de l'onglet « À revoir » et écran de démarrage de `/review`)

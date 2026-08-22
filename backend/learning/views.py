@@ -327,6 +327,15 @@ class SRSNextView(APIView):
             deck_ids=_parse_int_list(request.query_params.get("deck_ids")),
         )
 
+        # Retiré du vivier plutôt que de chaque branche : la file est servie
+        # dans un ordre déterministe (échéance, puis id), donc sans cette
+        # soustraction « Passer » redemanderait exactement la même carte.
+        # L'exclusion ne vaut que pour la requête : rien n'est écrit, la carte
+        # revient à la session suivante.
+        exclude_ids = _parse_int_list(request.query_params.get("exclude_ids"))
+        if exclude_ids:
+            candidates = candidates.exclude(id__in=exclude_ids)
+
         candidate_ids_qs = candidates.values_list("id", flat=True)
         now = timezone.now()
 

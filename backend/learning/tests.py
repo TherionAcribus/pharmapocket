@@ -92,6 +92,63 @@ class SrsApiTests(APITestCase):
         self.assertEqual(resp3.status_code, 200)
         self.assertIsNotNone(resp3.data.get("card"))
 
+    def _add_card(self, *, title: str, slug: str) -> MicroArticlePage:
+        index = MicroArticleIndexPage.objects.first()
+        assert index is not None
+        page = MicroArticlePage(
+            title=title,
+            slug=slug,
+            answer_express="Réponse express.",
+            takeaway="À retenir.",
+        )
+        index.add_child(instance=page)
+        page.save_revision().publish()
+        DeckCard.objects.get_or_create(deck=self.deck, microarticle_id=page.id)
+        return page
+
+    def test_srs_next_skips_excluded_cards(self):
+        """« Passer » : sans exclusion, la file redonnerait la même carte."""
+        other = self._add_card(title="Aspirine", slug="aspirine")
+        url = f"/api/v1/learning/srs/next/?scope=deck&deck_id={self.deck.id}"
+
+        first = self.client.get(url, secure=True)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data["card"]["id"], self.card.id)
+
+        second = self.client.get(f"{url}&exclude_ids={self.card.id}", secure=True)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.data["card"]["id"], other.id)
+
+        # L'exclusion ne vaut que pour la requête : rien n'a été noté ni écrit,
+        # la carte passée revient à la session suivante.
+        third = self.client.get(url, secure=True)
+        self.assertEqual(third.data["card"]["id"], self.card.id)
+
+        empty = self.client.get(
+            f"{url}&exclude_ids={self.card.id},{other.id}", secure=True
+        )
+        self.assertEqual(empty.status_code, 200)
+        self.assertIsNone(empty.data.get("card"))
+
+    def test_srs_next_excludes_apply_to_future_due_cards(self):
+        """Même en mode « tout », la carte passée ne doit pas revenir."""
+        other = self._add_card(title="Ibuprofene", slug="ibuprofene")
+        for card_id in (self.card.id, other.id):
+            self.client.post(
+                "/api/v1/learning/srs/review/",
+                {"card_id": card_id, "rating": "know"},
+                format="json",
+                secure=True,
+            )
+
+        url = (
+            f"/api/v1/learning/srs/next/?scope=deck&deck_id={self.deck.id}"
+            "&only_due=false"
+        )
+        resp = self.client.get(f"{url}&exclude_ids={self.card.id}", secure=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["card"]["id"], other.id)
+
     def _counts(self, query: str = ""):
         resp = self.client.get(f"/api/v1/learning/srs/counts/{query}", secure=True)
         self.assertEqual(resp.status_code, 200)

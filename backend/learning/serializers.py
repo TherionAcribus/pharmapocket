@@ -51,6 +51,14 @@ class SRSNextQuerySerializer(serializers.Serializer):
     deck_id = serializers.IntegerField(min_value=1, required=False)
     deck_ids = serializers.CharField(required=False)
     only_due = serializers.BooleanField(required=False, default=True)
+    exclude_ids = serializers.CharField(
+        required=False,
+        help_text=(
+            "Identifiants de fiches à ne pas servir, séparés par des virgules. "
+            "La session courante y met les cartes passées, pour que la file "
+            "avance au lieu de reproposer la même carte."
+        ),
+    )
 
 
 class SRSCountsQuerySerializer(serializers.Serializer):

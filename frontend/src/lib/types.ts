@@ -3374,6 +3374,8 @@ export interface operations {
             query?: {
                 deck_id?: number;
                 deck_ids?: string;
+                /** @description Identifiants de fiches à ne pas servir, séparés par des virgules. La session courante y met les cartes passées, pour que la file avance au lieu de reproposer la même carte. */
+                exclude_ids?: string;
                 only_due?: boolean;
                 /**
                  * @description * `all_decks` - all_decks

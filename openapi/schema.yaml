@@ -1597,6 +1597,14 @@ paths:
           type: string
           minLength: 1
       - in: query
+        name: exclude_ids
+        schema:
+          type: string
+          minLength: 1
+        description: Identifiants de fiches à ne pas servir, séparés par des virgules.
+          La session courante y met les cartes passées, pour que la file avance au
+          lieu de reproposer la même carte.
+      - in: query
         name: only_due
         schema:
           type: boolean
